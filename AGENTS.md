@@ -31,7 +31,7 @@ Before editing files for a substantial task:
 任何会打进 `.output` 产物的代码 —— `createServerFn` 的 handler、路由的 `server.handlers`、middleware —— 最终都跑在 Node 上，必须对 Node 兼容。具体来说：
 
 - **不要**无条件调用 Bun-only API：`Bun.file()`、`Bun.serve()`、`Bun.$`、`Bun.password`、`bun:sqlite`、`bun:ffi` 等，这些在 Node 下会直接报错（`Bun is not defined` 或模块找不到）
-- 如果确实需要探测运行时（比如打日志），只能用 `typeof Bun !== "undefined"` 做守卫后再访问，参考 `src/routes/index.tsx` 里 `getServerInfo` 的写法 —— 这是唯一允许出现 `Bun` 全局引用的方式
+- 如果确实需要探测运行时（比如打日志），只能用 `typeof Bun !== "undefined"` 做守卫后再访问，参考 `src/routes/_authenticated/dashboard.tsx` 里 `getServerInfo` 的写法 —— 这是唯一允许出现 `Bun` 全局引用的方式
 - 引入新依赖前，确认它在 Node 上能跑（原生绑定库要留意是否只提供 Bun 的预编译产物）。之前讨论过的 Drizzle、Better Auth 都是 Node 兼容的，可以放心选
 
 开发时用 `bun run dev` 跑，本地会看到 `Server runtime: Bun x.x.x`；生产用 `bun run start` 跑（内部是 `node .output/server/index.mjs`），会看到 `Server runtime: Node x.x.x`。这两个值不一致是预期行为，不是 bug。
@@ -57,7 +57,7 @@ SSR 是**有意关闭**的。`beforeLoad`、`loader` 和路由组件全部**只�
 
 ## 客户端与服务端的边界
 
-没有独立的 API 层。服务端逻辑写在 `createServerFn` 的 handler 里（示例见 `src/routes/index.tsx`），或者写在路由的 `server.handlers` 中作为原始 HTTP 端点。**不要擅自引入 tRPC 或 oRPC，先问过再说。**
+没有独立的 API 层。服务端逻辑写在 `createServerFn` 的 handler 里（示例见 `src/routes/_authenticated/dashboard.tsx`、`src/lib/auth-functions.ts`），或者写在路由的 `server.handlers` 中作为原始 HTTP 端点（示例见 `src/routes/api/auth/$.ts`）。**不要擅自引入 tRPC 或 oRPC，先问过再说。**
 
 本模板不含数据库，也不含认证。
 

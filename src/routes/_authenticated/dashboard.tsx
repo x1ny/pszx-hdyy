@@ -1,0 +1,51 @@
+import { useQuery } from "@tanstack/react-query";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createServerFn } from "@tanstack/react-start";
+import { authClient } from "#/lib/auth-client";
+
+const getServerInfo = createServerFn({ method: "GET" }).handler(async () => ({
+  runtime:
+    typeof Bun !== "undefined"
+      ? `Bun ${Bun.version}`
+      : `Node ${process.version}`,
+  time: new Date().toISOString(),
+}));
+
+export const Route = createFileRoute("/_authenticated/dashboard")({
+  component: Dashboard,
+});
+
+function Dashboard() {
+  const { user } = Route.useRouteContext();
+  const navigate = useNavigate();
+  const { data } = useQuery({
+    queryKey: ["server-info"],
+    queryFn: () => getServerInfo(),
+  });
+
+  return (
+    <div className="p-8">
+      <h1 className="text-2xl font-bold">Dashboard</h1>
+      <p className="mt-4 text-sm text-gray-500">
+        Server runtime: {data?.runtime ?? "…"} · {data?.time ?? "…"}
+      </p>
+
+      <div className="mt-6 flex items-center gap-3 rounded border p-4">
+        <span>
+          已登录: {user.name} ({user.email})
+        </span>
+        <button
+          type="button"
+          className="rounded bg-black px-3 py-1 text-sm text-white"
+          onClick={() =>
+            authClient.signOut({
+              fetchOptions: { onSuccess: () => navigate({ to: "/login" }) },
+            })
+          }
+        >
+          登出
+        </button>
+      </div>
+    </div>
+  );
+}

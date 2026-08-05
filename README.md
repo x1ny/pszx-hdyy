@@ -4,7 +4,7 @@ Welcome to your new TanStack Start app!
 
 Development tooling (dev server, build, tests, lint) runs on **Bun**. The built production server runs on plain **Node** (`node .output/server/index.mjs`, wired up as `bun run start`) — no Bun runtime required in production.
 
-Because of this, server-side code (`createServerFn` handlers, `server.handlers`, middleware — anything that ends up in `.output/`) must be Node-compatible. Don't call Bun-only APIs (`Bun.file`, `Bun.serve`, `Bun.$`, `bun:sqlite`, `bun:ffi`, ...) unconditionally in that code. If you need to detect the runtime, guard it: `typeof Bun !== "undefined" ? Bun.version : process.version` — see `src/routes/index.tsx` for the pattern in use, which is what proves the split works (it prints `Bun x.x.x` under `bun run dev` and `Node x.x.x` under `bun run start`).
+Because of this, server-side code (`createServerFn` handlers, `server.handlers`, middleware — anything that ends up in `.output/`) must be Node-compatible. Don't call Bun-only APIs (`Bun.file`, `Bun.serve`, `Bun.$`, `bun:sqlite`, `bun:ffi`, ...) unconditionally in that code. If you need to detect the runtime, guard it: `typeof Bun !== "undefined" ? Bun.version : process.version` — see `src/routes/_authenticated/dashboard.tsx` for the pattern in use, which is what proves the split works (it prints `Bun x.x.x` under `bun run dev` and `Node x.x.x` under `bun run start`).
 
 # Getting Started
 
