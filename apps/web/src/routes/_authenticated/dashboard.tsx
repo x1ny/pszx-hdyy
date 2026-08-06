@@ -15,9 +15,10 @@ function Dashboard() {
   const { data } = useQuery({
     queryKey: ["server-info"],
     queryFn: async () => {
-      const res = await api.api["server-info"].$get();
-      if (!res.ok) throw new Error("Failed to load server info");
-      return res.json();
+      const res = await api.api.getServerInfo.$post();
+      const result = await res.json();
+      if (result.code !== "OK") throw new Error(result.message);
+      return result.data;
     },
   });
 

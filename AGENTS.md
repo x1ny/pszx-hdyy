@@ -41,20 +41,48 @@ packages/db    Drizzle schema + 数据库客户端，被 server 和 drizzle-kit 
 
 ## 前后端边界
 
-**前端不直接 fetch，走 Hono RPC。** `apps/server/src/index.ts` 把路由**链式**定义在一个 `const routes` 上并导出 `AppType`，`apps/web/src/lib/api.ts` 用 `hc<AppType>()` 建客户端，请求和响应类型全自动推断。
+**不遵循 REST，业务语义和 HTTP 协议解耦，但不引入 RPC 框架（不上 tRPC/oRPC）——就用 Hono 本身 + 一份共享约定。** 详细讨论和实测数据见 [docs/architecture-decisions.md](docs/architecture-decisions.md#前后端类型安全)，这里只写规则：
 
-- 加接口时必须**接在链上**（`.get(...).post(...)`），单独写 `app.get(...)` 不会进 `AppType`，前端就拿不到类型
+- **路径是动作名，不是资源。** 用 `getServerInfo`、`submitEcho` 这种动词开头的名字，不要建 `/projects/:id` 这种资源路径。**全部用 POST**，HTTP 动词不承载任何业务含义。
+- **HTTP 状态码不表达业务结果，只有 `code` 字段表达。** 见 `apps/server/src/shared/result.ts` 的 `ApiResult<T>` —— `{ code: "OK", data } | { code: "UNAUTHORIZED" | "VALIDATION_ERROR" | ..., message }`。业务失败（未登录、校验不过）也返回 HTTP 200，前端永远靠 `result.code` 分支，不看 `res.status`。真正的非 200 只留给两种非业务场景：请求体不合法（`zValidator` 的 error hook）、handler 里未捕获的异常（`index.ts` 的 `app.onError`）。
+- 输入用 `zValidator("json", Schema, errorHook)`，输出用 `c.json(ok(...))` / `c.json(err(...))`——**两边都过一遍 `shared/result.ts` 的信封**，别有的接口走信封有的不走。
+- 路由必须**接在链上**（`app.post(...).post(...)`），单独写 `app.post(...)` 不会进 `AppType`
 - `apps/web` 只用 `import type` 引 `@repo/server`，**绝不 runtime import** —— 服务端代码不能进浏览器包
-- **不要引入 tRPC 或 oRPC**，先问过再说
+- 客户端用 `apps/server/src/client-type.ts` 导出的 `hcWithType`，不要直接用 `hc`——前者把类型计算挪到编译期，路由多了以后 IDE 不会变卡（[Hono 官方的 known issue](https://hono.dev/docs/guides/rpc#using-rpc-with-larger-applications)）
+- **不要引入 tRPC 或 oRPC**，这是明确讨论过否掉的方向,不要因为"更方便"就重新引入
 
 浏览器只认一个 origin：`apps/web/vite.config.ts` 里的 proxy 把 `/api` 转发到 8787。因此开发环境不需要 CORS，Better Auth 的 cookie 也不涉及跨站问题。**如果要把前后端部署到不同域名**，得同时做三件事：server 加 `hono/cors` 中间件、`auth.ts` 的 `trustedOrigins` 加上 web 域名、web 侧设 `VITE_API_URL`。
 
+## 后端目录结构：按业务功能拆，不按类型拆
+
+```
+apps/server/src/
+├── modules/
+│   ├── auth/            Better Auth 相关的一切
+│   │   ├── auth.ts               betterAuth() 实例
+│   │   ├── context.ts            Variables 类型（user/session 在 Hono context 里的形状）
+│   │   ├── routes.ts             /api/auth/* 的官方挂载写法
+│   │   └── session-middleware.ts 填充 c.get("user")/c.get("session")
+│   └── example/          占位示例，不是真实业务，新功能来了随时可以删掉这个目录
+│       ├── schemas.ts
+│       └── routes.ts
+├── shared/
+│   └── result.ts         ApiResult<T> / ok() / err()，唯一跨模块的公共词汇表
+├── client-type.ts        hcWithType 预编译导出
+└── index.ts               只做组合：挂 authHandler → session 中间件 → 各模块 .route("/", xxxRoutes)
+```
+
+**新增一个业务功能时，在 `modules/` 下新建一个同名目录**（如 `modules/project/{schemas,routes}.ts`），在 `index.ts` 里 `.route("/", projectRoutes)` 接上链条即可。不要把新路由塞进 `modules/example`——那个目录只是范式演示，真实业务上线后可以整个删掉。
+
+`shared/` 只放真正跨模块的东西（目前只有 `result.ts` 这一个文件）。如果某个类型/工具只有一个模块在用，就放回那个模块目录里，不要为了"统一放 shared"而把本该属于某个 feature 的东西挪出去。
+
 ## 认证
 
-- `apps/server/src/lib/auth.ts` — Better Auth 实例（Drizzle adapter + 邮箱密码）
-- `apps/server/src/index.ts` — `app.on(["GET","POST"], "/api/auth/*", ...)` 挂载 handler。**它必须注册在 session 中间件之前**：该 handler 不调用 `next()`，先注册就能让 auth 自己的路由跳过多余的 session 查询
-- session 中间件把 `user`/`session` 放进 Hono context，受保护的接口从 `c.get("user")` 取，为空返回 401（见 `/api/me`）
-- `apps/web/src/lib/session.ts` — 用 react-query 缓存 `authClient.getSession()`
+- `apps/server/src/modules/auth/auth.ts` — Better Auth 实例（Drizzle adapter + 邮箱密码）。`auth:generate` 脚本的 `--config` 指向这个文件
+- `apps/server/src/modules/auth/routes.ts` — `app.on(["GET","POST"], "/api/auth/*", ...)` 挂载 handler，写法照抄官方文档，**不要改动这一行的结构**
+- `apps/server/src/index.ts` 里，`authHandler` 的 `.route()` **必须注册在 session 中间件之前**——这不是官方文档要求的顺序（官方文档把两者当独立示例展示，没给出相对先后），是我们自己的选择：`auth.handler()` 直接处理 raw `Request`/`Response`，从不读 Hono context，所以顺序不影响正确性；排前面纯粹是为了让 Better Auth 自己的路由跳过后面注册的 session 查询（Hono 的中间件按注册顺序生效，前面的路由命中且不调用 `next()` 时，后面注册的 `app.use` 根本不会跑）
+- session 中间件把 `user`/`session` 放进 Hono context，受保护的接口从 `c.get("user")` 取，为空时返回 `err({ code: "UNAUTHORIZED", ... })`（见 `modules/example/routes.ts` 的 `getMe`）——**不是 401**，见上面"前后端边界"一节
+- `apps/web/src/lib/session.ts` — 用 react-query 缓存 `authClient.getSession()`。这条走的是 Better Auth 自己的客户端，跟 `apps/server` 自定义的业务接口是两条独立的路，不要混着改
 - `apps/web/src/routes/_authenticated.tsx` — 登录守卫（pathless layout），未登录跳 `/login?redirect=...`；受保护页面放在 `_authenticated/` 下自动继承
 
 **登录/登出后必须 `queryClient.removeQueries({ queryKey: sessionQueryKey })`。** 守卫用的是 `ensureQueryData`，它**即使数据已过期也会先返回缓存**，所以 `invalidateQueries` 不够 —— 登录成功后守卫会读到旧的 `null` 并把用户弹回登录页。必须把缓存条目删掉，逼守卫重新请求。
@@ -81,7 +109,7 @@ packages/db    Drizzle schema + 数据库客户端，被 server 和 drizzle-kit 
 
 > 拆 monorepo 之前的规则是"开发 Bun、生产 Node"，那是因为 Nitro 会打包出自包含的 Node 服务器。现在没有 Nitro 了。如果仍要在生产用 Node，需要加 `@hono/node-server` 并改 `start` 脚本 —— 这个决定还没做，动之前先问。
 
-`typeof Bun !== "undefined" ? Bun.version : process.version` 这种运行时探测的写法保留在 `/api/server-info` 里，仍然是引用 `Bun` 全局的唯一合法方式。
+`typeof Bun !== "undefined" ? Bun.version : process.version` 这种运行时探测的写法保留在 `modules/example/routes.ts` 的 `getServerInfo` 里，仍然是引用 `Bun` 全局的唯一合法方式。
 
 ## 路径别名
 

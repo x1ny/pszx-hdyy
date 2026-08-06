@@ -35,45 +35,63 @@ server: { proxy: { "/api": { target: "http://localhost:8787" } } }
 
 That means no CORS setup and no cross-site cookie rules in development — Better Auth's session cookie is same-origin as far as the browser is concerned.
 
-Types cross the boundary through **Hono RPC**. The server chains its routes onto a single value and exports its type:
+**No REST, no tRPC/oRPC — plain Hono RPC plus one shared convention.** Full rationale (why not oRPC, why status codes don't carry business meaning, the compiler-perf numbers behind `hcWithType`) is in [docs/architecture-decisions.md](docs/architecture-decisions.md). The rules:
+
+- Routes are named like actions (`getServerInfo`, `submitEcho`), not REST resources, and everything is `POST` — the HTTP verb carries no business meaning.
+- Every response is `{ code: "OK", data } | { code: "SOME_ERROR", message }` (`apps/server/src/shared/result.ts`). Business outcomes — including "not logged in" and "validation failed" — return HTTP **200**; the `code` field is what the client branches on, never `res.status`. Real non-200s are reserved for the two cases that aren't business outcomes: a malformed request body (`zValidator`'s error hook) and an uncaught exception (`app.onError`).
+- The server chains its routes onto a single value and exports its type:
 
 ```ts
 // apps/server/src/index.ts
-const routes = app
-  .get("/api/server-info", (c) => c.json({ ... }))
-  .get("/api/me", (c) => { ... });
+const routes = app.route("/", exampleRoutes); // .route("/", xyzRoutes) per module
 
 export type AppType = typeof routes;
 ```
 
-and the web app builds a fully typed client from it:
+and the web app builds a fully typed client from it via the pre-compiled `hcWithType` (not `hc` directly — see the perf note in the architecture doc):
 
 ```ts
 // apps/web/src/lib/api.ts
-import type { AppType } from "@repo/server";
-import { hc } from "hono/client";
+import { hcWithType } from "@repo/server/client-type";
 
-export const api = hc<AppType>(baseUrl, { init: { credentials: "include" } });
+export const api = hcWithType(baseUrl, { init: { credentials: "include" } });
 ```
 
 ```ts
-const res = await api.api["server-info"].$get();
-if (res.ok) {
-  const { runtime, time } = await res.json(); // inferred, no hand-written types
+const res = await api.api.getServerInfo.$post();
+const result = await res.json(); // { code: "OK"; data: {...} } — inferred, no hand-written types
+if (result.code === "OK") {
+  console.log(result.data.runtime);
 }
 ```
 
-Two rules keep this working: routes must be **chained** (a standalone `app.get(...)` never lands in `AppType`), and the web app must import `@repo/server` **type-only** so no server code reaches the browser bundle.
+Two rules keep this working: routes must be **chained** (a standalone `app.post(...)` never lands in `AppType`), and the web app must import `@repo/server` **type-only** so no server code reaches the browser bundle.
+
+## Backend layout: by feature, not by layer
+
+```
+apps/server/src/
+├── modules/
+│   ├── auth/       Better Auth instance, its official Hono mount, the session middleware
+│   └── example/    worked examples — delete this once real features replace it
+├── shared/
+│   └── result.ts   the only thing that's genuinely cross-module: the ApiResult<T> envelope
+├── client-type.ts  hcWithType
+└── index.ts        composition only: mounts authHandler → session middleware → each module's routes
+```
+
+Add a feature by creating `modules/<name>/{schemas,routes}.ts` and chaining it in `index.ts` — don't add routes to `modules/example`, that folder is a template you replace.
 
 ## Authentication
 
-Better Auth runs entirely on the server and is mounted as a catch-all:
+Better Auth runs entirely on the server and is mounted as a catch-all, following the official Hono integration doc verbatim:
 
 ```ts
+// apps/server/src/modules/auth/routes.ts
 app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 ```
 
-It is registered *before* the session middleware on purpose — the handler never calls `next()`, so Better Auth's own routes skip the redundant session lookup. Everything registered after it gets `c.get("user")` / `c.get("session")` populated; see `/api/me` for the 401 pattern.
+In `index.ts`, this is registered *before* the session middleware — that ordering is a deliberate choice, not something the official docs mandate: the handler never touches Hono's context and never calls `next()`, so mounting it first means Better Auth's own routes skip the session middleware entirely (Hono runs middleware in registration order, and once an earlier route matches and returns without `next()`, anything registered after it never runs for that request).
 
 On the client, the session is a react-query entry (`apps/web/src/lib/session.ts`) and `_authenticated.tsx` is a pathless layout that guards every route beneath it.
 
@@ -108,7 +126,7 @@ Everything runs on Bun today, including the server in production — `apps/serve
 
 Before the monorepo split, production ran on plain Node because Nitro emitted a self-contained Node bundle. Nitro is gone. To go back to Node, add [`@hono/node-server`](https://github.com/honojs/node-server) and point the `start` script at it; the app itself needs no changes.
 
-`typeof Bun !== "undefined" ? Bun.version : process.version` in `/api/server-info` is the runtime probe pattern, and the only sanctioned reference to the `Bun` global.
+`typeof Bun !== "undefined" ? Bun.version : process.version` in `modules/example/routes.ts`'s `getServerInfo` is the runtime probe pattern, and the only sanctioned reference to the `Bun` global.
 
 ## Styling
 

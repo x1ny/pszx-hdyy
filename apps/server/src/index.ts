@@ -1,41 +1,29 @@
 import { Hono } from "hono";
-import { auth } from "./lib/auth";
-
-type Variables = {
-  user: typeof auth.$Infer.Session.user | null;
-  session: typeof auth.$Infer.Session.session | null;
-};
+import { authHandler, sessionMiddleware, type Variables } from "./modules/auth";
+import { exampleRoutes } from "./modules/example/routes";
+import { err } from "./shared/result";
 
 const app = new Hono<{ Variables: Variables }>();
 
-// Registered before the session middleware: this handler returns a Response
-// without calling next(), so Better Auth's own routes skip the lookup below.
-app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+// Order matters — see modules/auth/routes.ts for why Better Auth is mounted
+// before the session middleware.
+app.route("/", authHandler);
 
-// Puts the current user/session on the context for every other route.
-app.use("*", async (c, next) => {
-  const session = await auth.api.getSession({ headers: c.req.raw.headers });
-  c.set("user", session?.user ?? null);
-  c.set("session", session?.session ?? null);
-  await next();
+app.use("*", sessionMiddleware);
+
+// Add new feature modules by chaining another .route("/", xyzRoutes) here —
+// only what's chained onto `routes` is visible to hc<AppType> on the client.
+const routes = app.route("/", exampleRoutes);
+
+// Catches anything a handler didn't turn into a `code`, i.e. a real crash —
+// the one case where the response legitimately isn't a business outcome.
+app.onError((error, c) => {
+  console.error(error);
+  return c.json(
+    err({ code: "INTERNAL_ERROR", message: "服务器内部错误" }),
+    500,
+  );
 });
-
-// Routes must be chained off one another for hc<AppType> to infer them.
-const routes = app
-  .get("/api/server-info", (c) =>
-    c.json({
-      runtime:
-        typeof Bun !== "undefined"
-          ? `Bun ${Bun.version}`
-          : `Node ${process.version}`,
-      time: new Date().toISOString(),
-    }),
-  )
-  .get("/api/me", (c) => {
-    const user = c.get("user");
-    if (!user) return c.json({ error: "Unauthorized" } as const, 401);
-    return c.json({ user });
-  });
 
 export type AppType = typeof routes;
 

@@ -208,26 +208,32 @@ beforeLoad: ({ context }) => {
 
 ### 5.4 安全层：Hono handler 内部校验
 
-**这是唯一真正的边界。** 模板里留一个正确范式，以后照抄不容易漏。注意路由要**接在 `routes` 链上**，否则 `AppType` 推断不到，前端 `hc` 客户端拿不到类型：
+**这是唯一真正的边界。** 模板里留一个正确范式，以后照抄不容易漏。路由放在对应业务模块里（比如 `modules/project/routes.ts`），要**接在 `routes` 链上**否则 `AppType` 推断不到；权限不足属于业务结果，走 `ApiResult` 的 `code` 字段，**不是 HTTP 401/403**（见 [AGENTS.md](../AGENTS.md#前后端边界)）：
 
 ```ts
-// apps/server/src/index.ts
-const routes = app
-  // ...现有路由
-  .delete("/api/projects/:id", async (c) => {
+// apps/server/src/modules/project/routes.ts
+import { err, ok } from "../../shared/result";
+
+export const projectRoutes = new Hono<{ Variables: Variables }>().post(
+  "/api/removeProject",
+  zValidator("json", z.object({ id: z.string() })),
+  async (c) => {
     const user = c.get("user");                    // session 中间件塞进来的
-    if (!user) return c.json({ error: "Unauthorized" } as const, 401);
+    if (!user) return c.json(err({ code: "UNAUTHORIZED", message: "未登录" }));
 
     const allowed = await auth.api.userHasPermission({
       body: { userId: user.id, permissions: { project: ["delete"] } },
     });
-    if (!allowed) return c.json({ error: "Forbidden" } as const, 403);
+    if (!allowed) return c.json(err({ code: "FORBIDDEN", message: "无权限" }));
 
-    const id = c.req.param("id");
+    const { id } = c.req.valid("json");
     // ...真正的业务逻辑
-    return c.json({ ok: true });
-  });
+    return c.json(ok({ id }));
+  },
+);
 ```
+
+`FORBIDDEN` 要先加进 `shared/result.ts` 的 `ApiError` 联合类型里，跟其他业务错误码放在一起——新增错误码只改这一个文件，`switch (result.code)` 分支处的 TS 穷尽性检查会提醒你哪里漏了处理。
 
 ## 6. 数据库变更
 
