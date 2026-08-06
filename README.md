@@ -1,242 +1,165 @@
-Welcome to your new TanStack Start app!
+# fullstack-template
 
-## Runtime split: Bun for dev, Node for production
+A lean Bun-workspaces monorepo: a TanStack Router SPA on the front, a Hono API on the back, Drizzle + Postgres underneath, Better Auth across both.
 
-Development tooling (dev server, build, tests, lint) runs on **Bun**. The built production server runs on plain **Node** (`node .output/server/index.mjs`, wired up as `bun run start`) — no Bun runtime required in production.
+```
+apps/web       Vite + TanStack Router, client-only SPA   → :3000
+apps/server    Hono + Better Auth                        → :8787
+packages/db    Drizzle schema + client (shared)
+```
 
-Because of this, server-side code (`createServerFn` handlers, `server.handlers`, middleware — anything that ends up in `.output/`) must be Node-compatible. Don't call Bun-only APIs (`Bun.file`, `Bun.serve`, `Bun.$`, `bun:sqlite`, `bun:ffi`, ...) unconditionally in that code. If you need to detect the runtime, guard it: `typeof Bun !== "undefined" ? Bun.version : process.version` — see `src/routes/_authenticated/dashboard.tsx` for the pattern in use, which is what proves the split works (it prints `Bun x.x.x` under `bun run dev` and `Node x.x.x` under `bun run start`).
-
-# Getting Started
-
-To run this application:
+## Getting Started
 
 ```bash
 bun install
-bun --bun run dev
+cp .env.example .env   # then edit BETTER_AUTH_SECRET
+bun run dev
 ```
 
-# Building For Production
+`bun run dev` starts Postgres via `docker compose up -d`, then runs both apps. Open http://localhost:3000.
 
-To build this application for production:
+First run needs the tables:
 
 ```bash
-bun --bun run build
+bun run db:push
 ```
 
-## Rendering: SPA mode
+## How the two apps talk
 
-This project runs TanStack Start with SSR turned off:
+The browser only ever sees one origin. Vite proxies `/api` to the Hono server:
 
 ```ts
-// vite.config.ts
-tanstackStart({ spa: { enabled: true } })
+// apps/web/vite.config.ts
+server: { proxy: { "/api": { target: "http://localhost:8787" } } }
 ```
 
-Route `beforeLoad`, `loader`, and components execute client-side only. The build prerenders a single shell to `.output/public/_shell.html`, and the router's pending fallback renders until the client takes over.
+That means no CORS setup and no cross-site cookie rules in development — Better Auth's session cookie is same-origin as far as the browser is concerned.
 
-The server is still there and still needed — `createServerFn` calls and any `/api/*` server routes are served by the Node process at runtime. SPA mode removes server *rendering*, not the server itself.
+Types cross the boundary through **Hono RPC**. The server chains its routes onto a single value and exports its type:
 
-Trade-off: slower time-to-content on first paint, and SEO depends on crawlers executing JavaScript. To turn SSR back on, drop the `spa` option. For per-route control instead of all-or-nothing, see [Selective SSR](https://tanstack.com/start/latest/docs/framework/react/guide/selective-ssr).
+```ts
+// apps/server/src/index.ts
+const routes = app
+  .get("/api/server-info", (c) => c.json({ ... }))
+  .get("/api/me", (c) => { ... });
+
+export type AppType = typeof routes;
+```
+
+and the web app builds a fully typed client from it:
+
+```ts
+// apps/web/src/lib/api.ts
+import type { AppType } from "@repo/server";
+import { hc } from "hono/client";
+
+export const api = hc<AppType>(baseUrl, { init: { credentials: "include" } });
+```
+
+```ts
+const res = await api.api["server-info"].$get();
+if (res.ok) {
+  const { runtime, time } = await res.json(); // inferred, no hand-written types
+}
+```
+
+Two rules keep this working: routes must be **chained** (a standalone `app.get(...)` never lands in `AppType`), and the web app must import `@repo/server` **type-only** so no server code reaches the browser bundle.
+
+## Authentication
+
+Better Auth runs entirely on the server and is mounted as a catch-all:
+
+```ts
+app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+```
+
+It is registered *before* the session middleware on purpose — the handler never calls `next()`, so Better Auth's own routes skip the redundant session lookup. Everything registered after it gets `c.get("user")` / `c.get("session")` populated; see `/api/me` for the 401 pattern.
+
+On the client, the session is a react-query entry (`apps/web/src/lib/session.ts`) and `_authenticated.tsx` is a pathless layout that guards every route beneath it.
+
+**Gotcha worth knowing:** the guard uses `ensureQueryData`, which returns cached data even when it's stale. After signing in or out you must `queryClient.removeQueries({ queryKey: sessionQueryKey })` — `invalidateQueries` alone leaves the stale `null` in place and the guard bounces a freshly logged-in user straight back to `/login`.
+
+The frontend guard is a UX affordance, not a security boundary — the app is a client-only SPA, so anyone can call `/api/*` directly. Every protected endpoint checks the session itself.
+
+## Rendering
+
+`apps/web` is a plain SPA. `index.html` is the only HTML shell, `src/main.tsx` mounts the router, and `beforeLoad` / `loader` / components all run in the browser only. There is no SSR and no server-function mechanism — server logic lives in `apps/server`.
+
+## Database
+
+Drizzle schema lives in `packages/db`, shared by the server and the drizzle-kit CLI.
+
+```bash
+bun run db:push       # push schema to the dev database
+bun run db:generate   # generate a migration
+bun run db:migrate    # apply migrations
+bun run db:studio     # browse data
+```
+
+Regenerate the Better Auth tables after changing auth config or plugins:
+
+```bash
+bun run --filter '@repo/server' auth:generate
+```
+
+## Runtime
+
+Everything runs on Bun today, including the server in production — `apps/server/src/index.ts` default-exports `{ port, fetch }`, which is Bun's server convention and is not understood by Node.
+
+Before the monorepo split, production ran on plain Node because Nitro emitted a self-contained Node bundle. Nitro is gone. To go back to Node, add [`@hono/node-server`](https://github.com/honojs/node-server) and point the `start` script at it; the app itself needs no changes.
+
+`typeof Bun !== "undefined" ? Bun.version : process.version` in `/api/server-info` is the runtime probe pattern, and the only sanctioned reference to the `Bun` global.
 
 ## Styling
 
-This project uses [Tailwind CSS](https://tailwindcss.com/) v4 with [shadcn/ui](https://ui.shadcn.com/).
+[Tailwind CSS](https://tailwindcss.com/) v4 with [shadcn/ui](https://ui.shadcn.com/).
 
-**Dark mode is disabled by design.** `src/styles.css` ships light tokens only. Tailwind v4's `dark:` variant defaults to `prefers-color-scheme`, so the stylesheet rebinds it to a `.dark` class that is never applied — that is what stops shadcn components' built-in `dark:` classes from activating off the visitor's OS setting. To enable dark mode later, add a `.dark { ... }` token block and toggle the class on `<html>`.
+**Dark mode is disabled by design.** `apps/web/src/styles.css` ships light tokens only. Tailwind v4's `dark:` variant defaults to `prefers-color-scheme`, so the stylesheet rebinds it to a `.dark` class that is never applied — that is what stops shadcn components' built-in `dark:` classes from activating off the visitor's OS setting. To enable dark mode later, add a `.dark { ... }` token block and toggle the class on `<html>`.
 
-## Testing
-
-Tests run on [Vitest](https://vitest.dev/) with happy-dom and Testing Library, executed under the Bun runtime.
-
-```bash
-bun run test
-bun run test:watch
-```
-
-Test config lives in `vitest.config.ts` (separate from `vite.config.ts` so the Start/Nitro server plugins stay out of the test pipeline). Test files match `src/**/*.{test,spec}.{ts,tsx}`.
-
-## Linting & Formatting
-
-This project uses [Biome](https://biomejs.dev/) for linting and formatting. The following scripts are available:
-
-
-```bash
-bun --bun run lint
-bun --bun run format
-bun --bun run check
-```
-
-
-## Shadcn
-
-Add components using the latest version of [Shadcn](https://ui.shadcn.com/).
+Add components from inside `apps/web`:
 
 ```bash
 bunx shadcn@latest add button
 ```
 
-
-## Deploy with Nitro (Node preset)
-
-`vite.config.ts` configures Nitro with `preset: 'node-server'`, so `bun run build` (Bun is just the build tool here) emits a self-contained **Node** server under `.output/`.
-
-```bash
-bun run build
-bun run start
-```
-
-`bun run start` runs `node .output/server/index.mjs` under the hood — no Bun runtime needed to serve the app. To deploy, ship the `.output/` directory to any Node-capable host (Railway, Fly.io, your own VPS, a plain `node:20`/`node:22` Docker image, etc.) and run `node .output/server/index.mjs` directly. The server honours the `PORT` environment variable. Required Node range: `^20.19.0 || >=22.12.0` (see `engines` in `package.json`).
-
-To target a different runtime, change the preset in `vite.config.ts` — `bun`, `vercel`, `cloudflare-module`, etc. See https://v3.nitro.build/deploy for the full list. If you switch back to the `bun` preset, also revert `start` in `package.json` to run the output with `bun`.
-
-
-
 ## Routing
 
-This project uses [TanStack Router](https://tanstack.com/router) with file-based routing. Routes are managed as files in `src/routes`.
+[TanStack Router](https://tanstack.com/router) with file-based routing. Routes are files under `apps/web/src/routes`; `routeTree.gen.ts` is generated by `@tanstack/router-plugin` on dev/build (or `bun run --filter '@repo/web' generate-routes`) and must never be edited by hand.
 
-### Adding A Route
+In `vite.config.ts`, `tanstackRouter()` has to come before `viteReact()` so generated routes get transformed.
 
-To add a new route to your application just add a new file in the `./src/routes` directory.
+Layouts live in `src/routes/__root.tsx` — this is a normal `component` rendering an `<Outlet />`, not a Start `shellComponent`. Page `<title>` and meta go in `apps/web/index.html`.
 
-TanStack will automatically generate the content of the route file for you.
+## Testing
 
-Now that you have two routes you can use a `Link` component to navigate between them.
+[Vitest](https://vitest.dev/) with happy-dom and Testing Library, in `apps/web` only.
 
-### Adding Links
-
-To use SPA (Single Page Application) navigation you will need to import the `Link` component from `@tanstack/react-router`.
-
-```tsx
-import { Link } from "@tanstack/react-router";
+```bash
+bun run test
+bun run --filter '@repo/web' test:watch
 ```
 
-Then anywhere in your JSX you can use it like so:
+Test config lives in `apps/web/vitest.config.ts`, deliberately separate from `vite.config.ts`. Test files match `src/**/*.{test,spec}.{ts,tsx}`.
 
-```tsx
-<Link to="/about">About</Link>
+## Linting & Formatting
+
+[Biome](https://biomejs.dev/), configured once at the repo root for all packages.
+
+```bash
+bun run lint
+bun run format
+bun run check
 ```
 
-This will create a link that will navigate to the `/about` route.
+## Path aliases
 
-More information on the `Link` component can be found in the [Link documentation](https://tanstack.com/router/v1/docs/framework/react/api/router/linkComponent).
+`apps/web` uses `#/*` → `apps/web/src/*`, declared in both `package.json#imports` and `tsconfig.json#paths`.
 
-### Using A Layout
+`apps/server` uses **relative imports only**. `paths` applies program-wide, so when the web app pulls server sources in via `import type`, web's `#/*` would be used to resolve `#/` inside server files and resolve to the wrong place.
 
-In the File Based Routing setup the layout is located in `src/routes/__root.tsx`. Anything you add to the root route will appear in all the routes. The route content will appear in the JSX where you render `{children}` in the `shellComponent`.
+## Learn More
 
-Here is an example layout that includes a header:
-
-```tsx
-import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
-
-export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      { charSet: 'utf-8' },
-      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: 'My App' },
-    ],
-  }),
-  shellComponent: ({ children }) => (
-    <html lang="en">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        <header>
-          <nav>
-            <Link to="/">Home</Link>
-            <Link to="/about">About</Link>
-          </nav>
-        </header>
-        {children}
-        <Scripts />
-      </body>
-    </html>
-  ),
-})
-```
-
-More information on layouts can be found in the [Layouts documentation](https://tanstack.com/router/latest/docs/framework/react/guide/routing-concepts#layouts).
-
-## Server Functions
-
-TanStack Start provides server functions that allow you to write server-side code that seamlessly integrates with your client components.
-
-```tsx
-import { createServerFn } from '@tanstack/react-start'
-
-const getServerTime = createServerFn({
-  method: 'GET',
-}).handler(async () => {
-  return new Date().toISOString()
-})
-
-// Use in a component
-function MyComponent() {
-  const [time, setTime] = useState('')
-  
-  useEffect(() => {
-    getServerTime().then(setTime)
-  }, [])
-  
-  return <div>Server time: {time}</div>
-}
-```
-
-## API Routes
-
-You can create API routes by using the `server` property in your route definitions:
-
-```tsx
-import { createFileRoute } from '@tanstack/react-router'
-import { json } from '@tanstack/react-start'
-
-export const Route = createFileRoute('/api/hello')({
-  server: {
-    handlers: {
-      GET: () => json({ message: 'Hello, World!' }),
-    },
-  },
-})
-```
-
-## Data Fetching
-
-There are multiple ways to fetch data in your application. You can use TanStack Query to fetch data from a server. But you can also use the `loader` functionality built into TanStack Router to load the data for a route before it's rendered.
-
-For example:
-
-```tsx
-import { createFileRoute } from '@tanstack/react-router'
-
-export const Route = createFileRoute('/people')({
-  loader: async () => {
-    const response = await fetch('https://swapi.dev/api/people')
-    return response.json()
-  },
-  component: PeopleComponent,
-})
-
-function PeopleComponent() {
-  const data = Route.useLoaderData()
-  return (
-    <ul>
-      {data.results.map((person) => (
-        <li key={person.name}>{person.name}</li>
-      ))}
-    </ul>
-  )
-}
-```
-
-Loaders simplify your data fetching logic dramatically. Check out more information in the [Loader documentation](https://tanstack.com/router/latest/docs/framework/react/guide/data-loading#loader-parameters).
-
-
-
-# Learn More
-
-You can learn more about all of the offerings from TanStack in the [TanStack documentation](https://tanstack.com).
-
-For TanStack Start specific documentation, visit [TanStack Start](https://tanstack.com/start).
+- [TanStack Router](https://tanstack.com/router)
+- [Hono](https://hono.dev) — [RPC guide](https://hono.dev/docs/guides/rpc)
+- [Better Auth](https://www.better-auth.com/docs/integrations/hono)
+- [Drizzle ORM](https://orm.drizzle.team)

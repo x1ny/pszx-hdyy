@@ -2,9 +2,15 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "dev",
+      "name": "server",
       "runtimeExecutable": "bun",
-      "runtimeArgs": ["--bun", "vite", "dev", "--port", "3000"],
+      "runtimeArgs": ["run", "--filter", "@repo/server", "dev"],
+      "port": 8787
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "--filter", "@repo/web", "dev"],
       "port": 3000
     }
   ]

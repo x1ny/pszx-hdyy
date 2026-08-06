@@ -14,6 +14,7 @@
 			"**/vite.config.ts",
 			"**/vitest.config.ts",
 			"**/vitest.setup.ts",
+			"**/drizzle.config.ts",
 			"!**/src/routeTree.gen.ts",
 			"!**/src/styles.css"
 		]

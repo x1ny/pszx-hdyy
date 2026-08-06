@@ -1,11 +1,11 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { authClient } from "#/lib/auth-client";
+import { sessionQueryKey } from "#/lib/session";
 
 export const Route = createFileRoute("/login")({
-  validateSearch: (
-    search: Record<string, unknown>,
-  ): { redirect?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { redirect?: string } => ({
     redirect: typeof search.redirect === "string" ? search.redirect : undefined,
   }),
   component: Login,
@@ -13,6 +13,7 @@ export const Route = createFileRoute("/login")({
 
 function Login() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { redirect } = Route.useSearch();
   const [mode, setMode] = useState<"signIn" | "signUp">("signIn");
   const [name, setName] = useState("");
@@ -38,6 +39,10 @@ function Login() {
       return;
     }
 
+    // The route guard reads the session via ensureQueryData, which returns
+    // cached data even when stale. Remove the logged-out entry so the guard
+    // is forced to refetch instead of seeing the old null.
+    queryClient.removeQueries({ queryKey: sessionQueryKey });
     navigate({ to: redirect || "/" });
   };
 

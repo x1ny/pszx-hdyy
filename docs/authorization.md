@@ -47,17 +47,18 @@
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ 定义层  src/lib/permissions.ts                           │
-│ 唯一的权限事实来源，服务端和客户端共用同一份 ac + roles      │
+│ 定义层  packages/permissions（新建的共享包）               │
+│ 唯一的权限事实来源，apps/server 和 apps/web 共用同一份       │
+│ ac + roles —— 这正是 monorepo 拆分后必须独立成包的原因      │
 └─────────────────────────────────────────────────────────┘
               ↓ 被下面两层引用
 ┌─────────────────────────────────────────────────────────┐
-│ 体验层（UI）  路由守卫 / 菜单过滤 / 按钮显隐                │
+│ 体验层（UI）  apps/web：路由守卫 / 菜单过滤 / 按钮显隐      │
 │ 目的：不让用户看到点不了的东西                              │
 │ ⚠️ 不是安全边界                                          │
 └─────────────────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────────────────┐
-│ 安全层  每个 server function 内部                         │
+│ 安全层  apps/server：每个受保护的 Hono handler 内部        │
 │ 目的：真正的拦截                                          │
 │ ✅ 这才是安全边界                                        │
 └─────────────────────────────────────────────────────────┘
@@ -65,41 +66,48 @@
 
 ### 为什么体验层不算安全边界
 
-本项目是 **SPA 模式**（`vite.config.ts` 里 `spa: { enabled: true }`），路由的 `beforeLoad`、组件渲染**全部在浏览器里执行**。这意味着：
+`apps/web` 是**纯客户端 SPA**，路由的 `beforeLoad`、组件渲染**全部在浏览器里执行**。这意味着：
 
 - 隐藏按钮：用户改改浏览器里的 JS 状态就能让它显示出来
 - 过滤菜单：同理，且用户可以直接在地址栏输 URL
 - 路由守卫 `redirect`：只是让界面跳走，不阻止任何网络请求
 
-**攻击者根本不需要经过你的界面**，直接构造一个请求打到 server function 即可。所以：
+前后端拆开之后这一点更直白了：`apps/server` 是一个独立的 HTTP 服务，**攻击者根本不需要经过你的界面**，`curl` 直接打 `/api/*` 即可。所以：
 
-> 每一个受权限保护的操作，对应的 server function 内部**必须**独立校验一次，不能依赖前端已经拦过。
+> 每一个受权限保护的操作，对应的 Hono handler 内部**必须**独立校验一次，不能依赖前端已经拦过。
 
 体验层和安全层是**互相独立**的两道，不是"双保险"里可以省掉一个的关系——前端那道纯粹为了体验，后端那道才是真的。
 
 ## 4. 文件结构
 
 ```
-src/
+packages/
+├── permissions/
+│   ├── package.json         ← 新增：包名 @repo/permissions
+│   └── src/index.ts         ← 新增：AC 定义（唯一事实来源）
+└── db/src/
+    └── auth-schema.ts       ← 重新生成：user/session 表加字段
+
+apps/server/src/
+├── lib/auth.ts              ← 改：加 admin() 插件
+└── index.ts                 ← 改：加带权限校验的 Hono 路由示例
+
+apps/web/src/
 ├── lib/
-│   ├── permissions.ts       ← 新增：AC 定义（唯一事实来源）
-│   ├── use-permission.ts    ← 新增：useCan() hook，菜单/按钮共用
-│   ├── auth.ts              ← 改：加 admin() 插件
 │   ├── auth-client.ts       ← 改：加 adminClient() 插件
-│   └── auth-functions.ts    ← 改：加带权限校验的 server function 示例
+│   └── use-permission.ts    ← 新增：useCan() hook，菜单/按钮共用
 ├── components/
 │   └── nav.tsx              ← 新增：按权限过滤的导航栏
-├── db/
-│   └── auth-schema.ts       ← 重新生成：user/session 表加字段
-└── routes/
-    └── _authenticated/
-        ├── dashboard.tsx    ← 改：加按钮级权限示例
-        └── admin.tsx        ← 新增：仅 admin 可进的示例页
+└── routes/_authenticated/
+    ├── dashboard.tsx        ← 改：加按钮级权限示例
+    └── admin.tsx            ← 新增：仅 admin 可进的示例页
 ```
+
+`@repo/permissions` 必须是独立的包：`apps/web` 只能 `import type` 引 `apps/server`，权限定义要在运行时被两边同时用到，不能塞进任何一侧的应用代码里。
 
 ## 5. 具体设计
 
-### 5.1 定义层：`src/lib/permissions.ts`
+### 5.1 定义层：`packages/permissions/src/index.ts`
 
 ```ts
 import { createAccessControl } from "better-auth/plugins/access";
@@ -131,23 +139,20 @@ export const roles = { admin, user };
 两边**必须传同一份 `ac` 和 `roles`**，否则客户端算出来的权限和服务端不一致——界面显示能点，一点就被后端拒绝。
 
 ```ts
-// src/lib/auth.ts
+// apps/server/src/lib/auth.ts
 import { admin as adminPlugin } from "better-auth/plugins";
-import { ac, roles } from "#/lib/permissions";
+import { ac, roles } from "@repo/permissions";
 
 export const auth = betterAuth({
   // ...现有配置
-  plugins: [
-    adminPlugin({ ac, roles }),
-    tanstackStartCookies(),                  // 保持在最后
-  ],
+  plugins: [adminPlugin({ ac, roles })],
 });
 ```
 
 ```ts
-// src/lib/auth-client.ts
+// apps/web/src/lib/auth-client.ts
 import { adminClient } from "better-auth/client/plugins";
-import { ac, roles } from "#/lib/permissions";
+import { ac, roles } from "@repo/permissions";
 
 export const authClient = createAuthClient({
   plugins: [adminClient({ ac, roles })],
@@ -159,7 +164,7 @@ export const authClient = createAuthClient({
 `checkRolePermission` 是**纯本地同步检查**（内存里算映射，不发网络请求），所以可以在渲染期随便调，不会造成请求风暴。
 
 ```ts
-// src/lib/use-permission.ts
+// apps/web/src/lib/use-permission.ts
 export function useCan() {
   const { data: session } = authClient.useSession();
   const role = session?.user.role;
@@ -191,7 +196,7 @@ const visible = navItems.filter((i) => !i.permission || can(i.permission));
 **路由级**：在 `beforeLoad` 里判断，不够权限跳走。
 
 ```ts
-// src/routes/_authenticated/admin.tsx
+// apps/web/src/routes/_authenticated/admin.tsx
 beforeLoad: ({ context }) => {
   const ok = authClient.admin.checkRolePermission({
     role: context.user.role,
@@ -201,23 +206,26 @@ beforeLoad: ({ context }) => {
 }
 ```
 
-### 5.4 安全层：server function 内部校验
+### 5.4 安全层：Hono handler 内部校验
 
-**这是唯一真正的边界。** 模板里留一个正确范式，以后照抄不容易漏：
+**这是唯一真正的边界。** 模板里留一个正确范式，以后照抄不容易漏。注意路由要**接在 `routes` 链上**，否则 `AppType` 推断不到，前端 `hc` 客户端拿不到类型：
 
 ```ts
-export const deleteProject = createServerFn({ method: "POST" })
-  .validator((id: string) => id)
-  .handler(async ({ data: id }) => {
-    const session = await auth.api.getSession({ headers: getRequestHeaders() });
-    if (!session) throw new Error("Unauthorized");
+// apps/server/src/index.ts
+const routes = app
+  // ...现有路由
+  .delete("/api/projects/:id", async (c) => {
+    const user = c.get("user");                    // session 中间件塞进来的
+    if (!user) return c.json({ error: "Unauthorized" } as const, 401);
 
     const allowed = await auth.api.userHasPermission({
-      body: { userId: session.user.id, permissions: { project: ["delete"] } },
+      body: { userId: user.id, permissions: { project: ["delete"] } },
     });
-    if (!allowed) throw new Error("Forbidden");
+    if (!allowed) return c.json({ error: "Forbidden" } as const, 403);
 
+    const id = c.req.param("id");
     // ...真正的业务逻辑
+    return c.json({ ok: true });
   });
 ```
 
@@ -237,17 +245,17 @@ export const deleteProject = createServerFn({ method: "POST" })
 
 ## 7. 实施步骤
 
-1. 写 `src/lib/permissions.ts`
-2. 改 `src/lib/auth.ts`、`src/lib/auth-client.ts` 接入插件
+1. 建 `packages/permissions` 包（根 `package.json` 的 `workspaces` 已经覆盖 `packages/*`，不用改），在 `apps/server` 和 `apps/web` 里加 `"@repo/permissions": "workspace:*"` 依赖后 `bun install`
+2. 改 `apps/server/src/lib/auth.ts`、`apps/web/src/lib/auth-client.ts` 接入插件
 3. 重新生成 schema 并推送（注意：**不要**用 `auth migrate`，那个只对内置 Kysely 适配器有效）：
    ```bash
-   bun x better-auth generate --config src/lib/auth.ts --output src/db/auth-schema.ts -y
-   bunx drizzle-kit push
+   bun run --filter '@repo/server' auth:generate
+   bun run db:push
    ```
-4. 写 `use-permission.ts`、`components/nav.tsx`
-5. 写 `routes/_authenticated/admin.tsx` 示例页
-6. 在 `auth-functions.ts` 里加带校验的 server function 示例
-7. `bun run generate-routes && bun run typecheck`
+4. 写 `apps/web/src/lib/use-permission.ts`、`apps/web/src/components/nav.tsx`
+5. 写 `apps/web/src/routes/_authenticated/admin.tsx` 示例页
+6. 在 `apps/server/src/index.ts` 的路由链上加带校验的接口示例
+7. `bun run --filter '@repo/web' generate-routes && bun run typecheck`
 8. 验证：把测试账号提成管理员，对比两种角色的表现
    ```sql
    UPDATE "user" SET role = 'admin' WHERE email = 'testuser@example.com';
@@ -265,9 +273,9 @@ export const deleteProject = createServerFn({ method: "POST" })
 
 本方案依赖已经落地的认证体系：
 
-- `src/lib/auth.ts` — Better Auth 实例（Drizzle adapter + 邮箱密码 + `tanstackStartCookies`）
-- `src/routes/api/auth/$.ts` — API 路由挂载
-- `src/routes/_authenticated.tsx` — 登录守卫（pathless layout），未登录跳 `/login?redirect=...`
-- 受保护页面放在 `src/routes/_authenticated/` 下，自动继承登录守卫
+- `apps/server/src/lib/auth.ts` — Better Auth 实例（Drizzle adapter + 邮箱密码）
+- `apps/server/src/index.ts` — `app.on(["GET","POST"], "/api/auth/*", ...)` 挂载 handler，随后的 session 中间件把 `user`/`session` 放进 Hono context
+- `apps/web/src/routes/_authenticated.tsx` — 登录守卫（pathless layout），未登录跳 `/login?redirect=...`
+- 受保护页面放在 `apps/web/src/routes/_authenticated/` 下，自动继承登录守卫
 
 权限方案在此基础上叠加一层：登录守卫解决"有没有登录"，本方案解决"登录之后能做什么"。

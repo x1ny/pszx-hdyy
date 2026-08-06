@@ -7,3 +7,5 @@ export function getContext() {
     queryClient,
   };
 }
+
+export type RouterContext = ReturnType<typeof getContext>;

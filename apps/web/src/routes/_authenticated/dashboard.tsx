@@ -1,15 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { createServerFn } from "@tanstack/react-start";
+import { api } from "#/lib/api";
 import { authClient } from "#/lib/auth-client";
-
-const getServerInfo = createServerFn({ method: "GET" }).handler(async () => ({
-  runtime:
-    typeof Bun !== "undefined"
-      ? `Bun ${Bun.version}`
-      : `Node ${process.version}`,
-  time: new Date().toISOString(),
-}));
+import { sessionQueryKey } from "#/lib/session";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -18,9 +11,14 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 function Dashboard() {
   const { user } = Route.useRouteContext();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data } = useQuery({
     queryKey: ["server-info"],
-    queryFn: () => getServerInfo(),
+    queryFn: async () => {
+      const res = await api.api["server-info"].$get();
+      if (!res.ok) throw new Error("Failed to load server info");
+      return res.json();
+    },
   });
 
   return (
@@ -39,7 +37,12 @@ function Dashboard() {
           className="rounded bg-black px-3 py-1 text-sm text-white"
           onClick={() =>
             authClient.signOut({
-              fetchOptions: { onSuccess: () => navigate({ to: "/login" }) },
+              fetchOptions: {
+                onSuccess: () => {
+                  queryClient.removeQueries({ queryKey: sessionQueryKey });
+                  navigate({ to: "/login" });
+                },
+              },
             })
           }
         >
