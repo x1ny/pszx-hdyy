@@ -82,14 +82,14 @@
 
 ```
 packages/
-├── permissions/
-│   ├── package.json         ← 新增：包名 @repo/permissions
-│   └── src/index.ts         ← 新增：AC 定义（唯一事实来源）
-└── db/src/
-    └── auth-schema.ts       ← 重新生成：user/session 表加字段
+└── permissions/
+    ├── package.json         ← 新增：包名 @repo/permissions
+    └── src/index.ts         ← 新增：AC 定义（唯一事实来源）
 
 apps/server/src/
-├── lib/auth.ts              ← 改：加 admin() 插件
+├── modules/auth/
+│   ├── auth.ts              ← 改：加 admin() 插件
+│   └── schema.ts            ← 重新生成：user/session 表加字段
 └── index.ts                 ← 改：加带权限校验的 Hono 路由示例
 
 apps/web/src/
@@ -139,7 +139,7 @@ export const roles = { admin, user };
 两边**必须传同一份 `ac` 和 `roles`**，否则客户端算出来的权限和服务端不一致——界面显示能点，一点就被后端拒绝。
 
 ```ts
-// apps/server/src/lib/auth.ts
+// apps/server/src/modules/auth/auth.ts
 import { admin as adminPlugin } from "better-auth/plugins";
 import { ac, roles } from "@repo/permissions";
 
@@ -252,7 +252,7 @@ export const projectRoutes = new Hono<{ Variables: Variables }>().post(
 ## 7. 实施步骤
 
 1. 建 `packages/permissions` 包（根 `package.json` 的 `workspaces` 已经覆盖 `packages/*`，不用改），在 `apps/server` 和 `apps/web` 里加 `"@repo/permissions": "workspace:*"` 依赖后 `bun install`
-2. 改 `apps/server/src/lib/auth.ts`、`apps/web/src/lib/auth-client.ts` 接入插件
+2. 改 `apps/server/src/modules/auth/auth.ts`、`apps/web/src/lib/auth-client.ts` 接入插件
 3. 重新生成 schema 并推送（注意：**不要**用 `auth migrate`，那个只对内置 Kysely 适配器有效）：
    ```bash
    bun run --filter '@repo/server' auth:generate
@@ -279,7 +279,7 @@ export const projectRoutes = new Hono<{ Variables: Variables }>().post(
 
 本方案依赖已经落地的认证体系：
 
-- `apps/server/src/lib/auth.ts` — Better Auth 实例（Drizzle adapter + 邮箱密码）
+- `apps/server/src/modules/auth/auth.ts` — Better Auth 实例（Drizzle adapter + 邮箱密码）
 - `apps/server/src/index.ts` — `app.on(["GET","POST"], "/api/auth/*", ...)` 挂载 handler，随后的 session 中间件把 `user`/`session` 放进 Hono context
 - `apps/web/src/routes/_authenticated.tsx` — 登录守卫（pathless layout），未登录跳 `/login?redirect=...`
 - 受保护页面放在 `apps/web/src/routes/_authenticated/` 下，自动继承登录守卫

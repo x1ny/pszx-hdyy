@@ -13,14 +13,17 @@
       "name": "@repo/server",
       "dependencies": {
         "@hono/zod-validator": "^0.9.0",
-        "@repo/db": "workspace:*",
         "better-auth": "^1.6.26",
+        "drizzle-orm": "^0.45.2",
         "hono": "^4.13.0",
+        "pg": "^8.22.0",
         "zod": "^4.4.3",
       },
       "devDependencies": {
         "@better-auth/cli": "^1.4.21",
         "@types/bun": "^1.3.14",
+        "@types/pg": "^8.20.4",
+        "drizzle-kit": "^0.31.10",
       },
     },
     "apps/web": {
@@ -59,18 +62,6 @@
         "happy-dom": "^20.11.1",
         "vite": "^8.0.0",
         "vitest": "^4.1.10",
-      },
-    },
-    "packages/db": {
-      "name": "@repo/db",
-      "dependencies": {
-        "drizzle-orm": "^0.45.2",
-        "pg": "^8.22.0",
-      },
-      "devDependencies": {
-        "@types/node": "^22.10.2",
-        "@types/pg": "^8.20.4",
-        "drizzle-kit": "^0.31.10",
       },
     },
   },
@@ -336,8 +327,6 @@
     "@oxc-project/types": ["@oxc-project/types@0.142.0", "https://registry.npmmirror.com/@oxc-project/types/-/types-0.142.0.tgz", {}, "sha512-7W+2q5AKQVU36fkaryontrHn3YDt1RyUYXatw9i5H8ocYe2sPKSFB6eS8WNPeRKiN1qAWWZUPm7gwFzJGrccqQ=="],
 
     "@prisma/client": ["@prisma/client@5.22.0", "https://registry.npmmirror.com/@prisma/client/-/client-5.22.0.tgz", { "peerDependencies": { "prisma": "*" }, "optionalPeers": ["prisma"] }, "sha512-M0SVXfyHnQREBKxCgyo7sffrKttwE6R8PMq330MIUF0pTwjUhLbW84pFDlf06B27XyCR++VtjugEnIHdr07SVA=="],
-
-    "@repo/db": ["@repo/db@workspace:packages/db"],
 
     "@repo/server": ["@repo/server@workspace:apps/server"],
 

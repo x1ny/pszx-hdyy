@@ -2,7 +2,7 @@ import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { err, ok } from "../../shared/result";
 import type { Variables } from "../auth";
-import { EchoInput } from "./schemas";
+import { EchoInput } from "./validation";
 
 // Everything here is a worked example, not real product surface — action-
 // named routes, POST for everything (the verb carries no business meaning),

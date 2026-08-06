@@ -3,9 +3,8 @@
 A lean Bun-workspaces monorepo: a TanStack Router SPA on the front, a Hono API on the back, Drizzle + Postgres underneath, Better Auth across both.
 
 ```
-apps/web       Vite + TanStack Router, client-only SPA   → :3000
-apps/server    Hono + Better Auth                        → :8787
-packages/db    Drizzle schema + client (shared)
+apps/web       Vite + TanStack Router, client-only SPA        → :3000
+apps/server    Hono + Better Auth + Drizzle (schema included)  → :8787
 ```
 
 ## Getting Started
@@ -67,20 +66,39 @@ if (result.code === "OK") {
 
 Two rules keep this working: routes must be **chained** (a standalone `app.post(...)` never lands in `AppType`), and the web app must import `@repo/server` **type-only** so no server code reaches the browser bundle.
 
-## Backend layout: by feature, not by layer
+## Backend layout: infra / modules / shared
+
+Three buckets, told apart by a dependency rule, not just a name:
 
 ```
-apps/server/src/
-├── modules/
-│   ├── auth/       Better Auth instance, its official Hono mount, the session middleware
-│   └── example/    worked examples — delete this once real features replace it
-├── shared/
-│   └── result.ts   the only thing that's genuinely cross-module: the ApiResult<T> envelope
-├── client-type.ts  hcWithType
-└── index.ts        composition only: mounts authHandler → session middleware → each module's routes
+infra/     knows the outside world (DB, cache, email…), knows no business logic
+shared/    pure logic and types, knows nothing
+modules/   may import infra and shared; infra/shared never import modules
 ```
 
-Add a feature by creating `modules/<name>/{schemas,routes}.ts` and chaining it in `index.ts` — don't add routes to `modules/example`, that folder is a template you replace.
+Rule of thumb: does it hold a connection or do I/O? → `infra`. Pure function or type, no state? → `shared`.
+
+```
+apps/server/
+├── drizzle.config.ts   schema: "./src/modules/**/schema.ts" — a glob, so a new
+│                       modules/<name>/schema.ts is picked up with no config change
+└── src/
+    ├── infra/
+    │   └── db.ts        the Drizzle client — no `schema` argument passed in (see below)
+    ├── modules/
+    │   ├── auth/         Better Auth instance, its own tables, its Hono mount, session middleware
+    │   └── example/      worked examples — delete this once real features replace it
+    ├── shared/
+    │   └── result.ts     the only thing that's genuinely cross-module: the ApiResult<T> envelope
+    ├── client-type.ts     hcWithType
+    └── index.ts            composition only: mounts authHandler → session middleware → each module's routes
+```
+
+**`infra/db.ts` deliberately builds the Drizzle client without a `schema` option.** Passing one would mean `infra/` has to import every module's tables, inverting the dependency rule above. The trade-off is losing the relational query API (`db.query.user.findMany()`); use `db.select().from(table)` instead, importing `table` from the module that owns it. Nothing in this codebase used `db.query` before this change (Better Auth takes its schema explicitly), so it's a free trade for now.
+
+Add a feature by creating `modules/<name>/{schema,validation,routes}.ts` and chaining the routes in `index.ts` — a `schema.ts` there is picked up automatically by the glob above. Don't add routes to `modules/example`, that folder is a template you replace.
+
+There used to be a separate `packages/db` workspace package. It was folded into `apps/server/src/infra` — its only real consumer was the server, so the package boundary bought nothing but a `bun --hot` blind spot (schema edits didn't trigger a reload — Bun only watches the package it's running from) and an env-var detour (`--env-file=../../.env`). Split it back out if a second runtime consumer shows up (a worker, a CLI, a second service) — that's a small, reversible change whenever it actually happens.
 
 ## Authentication
 
@@ -105,7 +123,7 @@ The frontend guard is a UX affordance, not a security boundary — the app is a 
 
 ## Database
 
-Drizzle schema lives in `packages/db`, shared by the server and the drizzle-kit CLI.
+Drizzle schema lives per-module under `apps/server/src/modules/*/schema.ts`, picked up by `drizzle.config.ts`'s glob; the client is `apps/server/src/infra/db.ts`.
 
 ```bash
 bun run db:push       # push schema to the dev database

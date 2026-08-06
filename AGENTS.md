@@ -13,15 +13,16 @@ Before editing files for a substantial task:
 
 ## 仓库结构
 
-Bun workspaces monorepo，三个包：
+Bun workspaces monorepo，两个包：
 
 ```
 apps/web       Vite + TanStack Router，纯 SPA（端口 3000）
-apps/server    Hono + Better Auth（端口 8787）
-packages/db    Drizzle schema + 数据库客户端，被 server 和 drizzle-kit 共用
+apps/server    Hono + Better Auth + Drizzle（端口 8787）
 ```
 
-包名分别是 `@repo/web`、`@repo/server`、`@repo/db`。根 `package.json` 只放 workspaces 声明、Biome、TypeScript 和跨包编排脚本，**不要**往根上加业务依赖。
+包名分别是 `@repo/web`、`@repo/server`。根 `package.json` 只放 workspaces 声明、Biome、TypeScript 和跨包编排脚本，**不要**往根上加业务依赖。
+
+**没有独立的 `packages/db`。** Drizzle 客户端和表定义都在 `apps/server` 内部（见下面"后端目录结构"）——2026-08-06 讨论过，`@repo/db` 当时唯一的消费方就是 `apps/server`，"给 drizzle-kit 和 server 共用"这个理由不成立（drizzle-kit 认的是配置文件里的路径，不是 workspace 包），拆出去反而让 `bun --hot` 监听不到 schema 文件、改了不触发热重载。**只有出现第二个运行时消费方**（后台 worker、CLI 脚本、第二个服务）时才重新拆出来，那时候成本和现在一样低。
 
 **开发工具链一律用 `bun` / `bunx`**，不要用 `npm`、`pnpm`、`yarn`。
 
@@ -53,32 +54,49 @@ packages/db    Drizzle schema + 数据库客户端，被 server 和 drizzle-kit 
 
 浏览器只认一个 origin：`apps/web/vite.config.ts` 里的 proxy 把 `/api` 转发到 8787。因此开发环境不需要 CORS，Better Auth 的 cookie 也不涉及跨站问题。**如果要把前后端部署到不同域名**，得同时做三件事：server 加 `hono/cors` 中间件、`auth.ts` 的 `trustedOrigins` 加上 web 域名、web 侧设 `VITE_API_URL`。
 
-## 后端目录结构：按业务功能拆，不按类型拆
+## 后端目录结构：基础设施 / 业务模块 / 共享逻辑
+
+三个桶，靠**依赖方向**裁决归属，不是靠感觉：
 
 ```
-apps/server/src/
-├── modules/
-│   ├── auth/            Better Auth 相关的一切
-│   │   ├── auth.ts               betterAuth() 实例
-│   │   ├── context.ts            Variables 类型（user/session 在 Hono context 里的形状）
-│   │   ├── routes.ts             /api/auth/* 的官方挂载写法
-│   │   └── session-middleware.ts 填充 c.get("user")/c.get("session")
-│   └── example/          占位示例，不是真实业务，新功能来了随时可以删掉这个目录
-│       ├── schemas.ts
-│       └── routes.ts
-├── shared/
-│   └── result.ts         ApiResult<T> / ok() / err()，唯一跨模块的公共词汇表
-├── client-type.ts        hcWithType 预编译导出
-└── index.ts               只做组合：挂 authHandler → session 中间件 → 各模块 .route("/", xxxRoutes)
+infra/     知道外部世界（DB、缓存、邮件……），不知道任何业务
+shared/    纯逻辑、纯类型，谁都不知道
+modules/   可以用 infra 和 shared；反过来绝对不行 —— infra/shared 永远不 import modules
 ```
 
-**新增一个业务功能时，在 `modules/` 下新建一个同名目录**（如 `modules/project/{schemas,routes}.ts`），在 `index.ts` 里 `.route("/", projectRoutes)` 接上链条即可。不要把新路由塞进 `modules/example`——那个目录只是范式演示，真实业务上线后可以整个删掉。
+判据：**有 I/O、持有连接/句柄 → `infra`；纯函数/纯类型、无状态 → `shared`。** 新文件先问"它连不连外部资源"，不是"看着像哪类"。
 
-`shared/` 只放真正跨模块的东西（目前只有 `result.ts` 这一个文件）。如果某个类型/工具只有一个模块在用，就放回那个模块目录里，不要为了"统一放 shared"而把本该属于某个 feature 的东西挪出去。
+```
+apps/server/
+├── drizzle.config.ts     schema: "./src/modules/**/schema.ts" —— glob，新模块自动纳入迁移
+└── src/
+    ├── infra/
+    │   └── db.ts          drizzle 连接池，不带 schema（见下面的取舍说明）
+    ├── modules/
+    │   ├── auth/           Better Auth 相关的一切，包括它自己的表
+    │   │   ├── auth.ts               betterAuth() 实例
+    │   │   ├── context.ts            Variables 类型（user/session 在 Hono context 里的形状）
+    │   │   ├── routes.ts             /api/auth/* 的官方挂载写法
+    │   │   ├── schema.ts             user/session/account/verification 表定义
+    │   │   └── session-middleware.ts 填充 c.get("user")/c.get("session")
+    │   └── example/         占位示例，不是真实业务，新功能来了随时可以删掉这个目录
+    │       ├── validation.ts
+    │       └── routes.ts
+    ├── shared/
+    │   └── result.ts       ApiResult<T> / ok() / err()，唯一跨模块的公共词汇表
+    ├── client-type.ts       hcWithType 预编译导出
+    └── index.ts              只做组合：挂 authHandler → session 中间件 → 各模块 .route("/", xxxRoutes)
+```
+
+**`infra/db.ts` 故意不传 `schema` 参数给 `drizzle()`。** 传了就得把所有模块的表 import 进 `infra/`，违反上面那条依赖方向。代价是拿不到 `db.query.user.findMany()` 这种关系查询语法，改用 `db.select().from(table)`，`table` 从拥有它的模块 import。现在的代码从没用过 `db.query`（Better Auth 是显式接收 schema 的），零损失；真需要关系查询时再单独决定要不要开个 barrel 聚合 schema。
+
+**新增一个业务功能时，在 `modules/` 下新建一个同名目录**（如 `modules/project/{schema,validation,routes}.ts`），在 `index.ts` 里 `.route("/", projectRoutes)` 接上链条即可。表定义放在该模块目录下的 `schema.ts`，会被 `drizzle.config.ts` 的 glob 自动捡到。不要把新路由塞进 `modules/example`——那个目录只是范式演示，真实业务上线后可以整个删掉。
+
+`shared/` 只放真正跨模块、且不碰外部资源的东西（目前只有 `result.ts`）。如果某个类型/工具只有一个模块在用，就放回那个模块目录里；如果它连接外部资源，归 `infra/`，不归 `shared/`。
 
 ## 认证
 
-- `apps/server/src/modules/auth/auth.ts` — Better Auth 实例（Drizzle adapter + 邮箱密码）。`auth:generate` 脚本的 `--config` 指向这个文件
+- `apps/server/src/modules/auth/auth.ts` — Better Auth 实例（Drizzle adapter + 邮箱密码），用 `infra/db.ts` 的连接池 + 自己的 `schema.ts`。`auth:generate` 脚本的 `--config`/`--output` 都指向 `modules/auth/` 下的这两个文件
 - `apps/server/src/modules/auth/routes.ts` — `app.on(["GET","POST"], "/api/auth/*", ...)` 挂载 handler，写法照抄官方文档，**不要改动这一行的结构**
 - `apps/server/src/index.ts` 里，`authHandler` 的 `.route()` **必须注册在 session 中间件之前**——这不是官方文档要求的顺序（官方文档把两者当独立示例展示，没给出相对先后），是我们自己的选择：`auth.handler()` 直接处理 raw `Request`/`Response`，从不读 Hono context，所以顺序不影响正确性；排前面纯粹是为了让 Better Auth 自己的路由跳过后面注册的 session 查询（Hono 的中间件按注册顺序生效，前面的路由命中且不调用 `next()` 时，后面注册的 `app.use` 根本不会跑）
 - session 中间件把 `user`/`session` 放进 Hono context，受保护的接口从 `c.get("user")` 取，为空时返回 `err({ code: "UNAUTHORIZED", ... })`（见 `modules/example/routes.ts` 的 `getMe`）——**不是 401**，见上面"前后端边界"一节
@@ -99,7 +117,7 @@ apps/server/src/
 - TanStack Query，router context 里带 `queryClient`（见 `integrations/tanstack-query/root-provider.tsx`）
 - Tailwind CSS v4 + shadcn/ui（配置见 `apps/web/components.json`）
 - Hono，运行在 Bun 上（`export default { port, fetch }`）
-- Drizzle ORM + Postgres（docker-compose 起本地库）
+- Drizzle ORM + Postgres（docker-compose 起本地库，客户端在 `apps/server/src/infra/db.ts`）
 - Biome 负责 lint 和格式化（缩进 tab，字符串双引号）—— 收尾前务必跑 `bun run check`
 - Vitest + happy-dom + Testing Library，只在 `apps/web`，配置在 `vitest.config.ts`，**刻意**与 `vite.config.ts` 分开
 
