@@ -1,4 +1,5 @@
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { AppLayout } from "#/components/layout/app-layout.tsx";
 import { sessionQueryOptions } from "#/lib/session";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -10,5 +11,10 @@ export const Route = createFileRoute("/_authenticated")({
     }
     return { user: session.user };
   },
-  component: Outlet,
+  component: AuthenticatedLayout,
 });
+
+function AuthenticatedLayout() {
+  const { user } = Route.useRouteContext();
+  return <AppLayout user={user} />;
+}

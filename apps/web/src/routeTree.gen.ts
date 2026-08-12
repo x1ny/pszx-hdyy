@@ -13,6 +13,9 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedProjectListRouteImport } from './routes/_authenticated/project/list'
+import { Route as AuthenticatedSystemRoleRouteImport } from './routes/_authenticated/system/role'
+import { Route as AuthenticatedSystemUserRouteImport } from './routes/_authenticated/system/user'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -33,16 +36,38 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedProjectListRoute =
+  AuthenticatedProjectListRouteImport.update({
+    id: '/project/list',
+    path: '/project/list',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedSystemRoleRoute = AuthenticatedSystemRoleRouteImport.update({
+  id: '/system/role',
+  path: '/system/role',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedSystemUserRoute = AuthenticatedSystemUserRouteImport.update({
+  id: '/system/user',
+  path: '/system/user',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/project/list': typeof AuthenticatedProjectListRoute
+  '/system/role': typeof AuthenticatedSystemRoleRoute
+  '/system/user': typeof AuthenticatedSystemUserRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/project/list': typeof AuthenticatedProjectListRoute
+  '/system/role': typeof AuthenticatedSystemRoleRoute
+  '/system/user': typeof AuthenticatedSystemUserRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -50,18 +75,36 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/project/list': typeof AuthenticatedProjectListRoute
+  '/_authenticated/system/role': typeof AuthenticatedSystemRoleRoute
+  '/_authenticated/system/user': typeof AuthenticatedSystemUserRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/dashboard'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/dashboard'
+    | '/project/list'
+    | '/system/role'
+    | '/system/user'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/dashboard'
+  to:
+    | '/'
+    | '/login'
+    | '/dashboard'
+    | '/project/list'
+    | '/system/role'
+    | '/system/user'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/login'
     | '/_authenticated/dashboard'
+    | '/_authenticated/project/list'
+    | '/_authenticated/system/role'
+    | '/_authenticated/system/user'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -100,15 +143,42 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/project/list': {
+      id: '/_authenticated/project/list'
+      path: '/project/list'
+      fullPath: '/project/list'
+      preLoaderRoute: typeof AuthenticatedProjectListRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/system/role': {
+      id: '/_authenticated/system/role'
+      path: '/system/role'
+      fullPath: '/system/role'
+      preLoaderRoute: typeof AuthenticatedSystemRoleRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/system/user': {
+      id: '/_authenticated/system/user'
+      path: '/system/user'
+      fullPath: '/system/user'
+      preLoaderRoute: typeof AuthenticatedSystemUserRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
   }
 }
 
 interface AuthenticatedRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedProjectListRoute: typeof AuthenticatedProjectListRoute
+  AuthenticatedSystemRoleRoute: typeof AuthenticatedSystemRoleRoute
+  AuthenticatedSystemUserRoute: typeof AuthenticatedSystemUserRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedProjectListRoute: AuthenticatedProjectListRoute,
+  AuthenticatedSystemRoleRoute: AuthenticatedSystemRoleRoute,
+  AuthenticatedSystemUserRoute: AuthenticatedSystemUserRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

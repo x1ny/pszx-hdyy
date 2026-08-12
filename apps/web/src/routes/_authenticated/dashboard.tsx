@@ -1,8 +1,6 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
 import { api } from "#/lib/api";
-import { authClient } from "#/lib/auth-client";
-import { sessionQueryKey } from "#/lib/session";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -10,8 +8,6 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 
 function Dashboard() {
   const { user } = Route.useRouteContext();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { data } = useQuery({
     queryKey: ["server-info"],
     queryFn: async () => {
@@ -23,33 +19,14 @@ function Dashboard() {
   });
 
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
-      <p className="mt-4 text-sm text-gray-500">
+    <div className="flex flex-col gap-4">
+      <h1 className="text-2xl font-bold">工作台</h1>
+      <p className="text-sm text-muted-foreground">
         Server runtime: {data?.runtime ?? "…"} · {data?.time ?? "…"}
       </p>
-
-      <div className="mt-6 flex items-center gap-3 rounded border p-4">
-        <span>
-          已登录: {user.name} ({user.email})
-        </span>
-        <button
-          type="button"
-          className="rounded bg-black px-3 py-1 text-sm text-white"
-          onClick={() =>
-            authClient.signOut({
-              fetchOptions: {
-                onSuccess: () => {
-                  queryClient.removeQueries({ queryKey: sessionQueryKey });
-                  navigate({ to: "/login" });
-                },
-              },
-            })
-          }
-        >
-          登出
-        </button>
-      </div>
+      <p className="text-sm">
+        已登录: {user.name} ({user.email})
+      </p>
     </div>
   );
 }
