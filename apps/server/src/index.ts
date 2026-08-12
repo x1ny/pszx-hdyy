@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { authHandler, sessionMiddleware, type Variables } from "./modules/auth";
 import { exampleRoutes } from "./modules/example/routes";
+import { memberRoutes } from "./modules/member/routes";
 import { supplierRoutes } from "./modules/supplier/routes";
 import { err } from "./shared/result";
 
@@ -14,7 +15,10 @@ app.use("*", sessionMiddleware);
 
 // Add new feature modules by chaining another .route("/", xyzRoutes) here —
 // only what's chained onto `routes` is visible to hc<AppType> on the client.
-const routes = app.route("/", exampleRoutes).route("/", supplierRoutes);
+const routes = app
+  .route("/", exampleRoutes)
+  .route("/", supplierRoutes)
+  .route("/", memberRoutes);
 
 // Catches anything a handler didn't turn into a `code`, i.e. a real crash —
 // the one case where the response legitimately isn't a business outcome.

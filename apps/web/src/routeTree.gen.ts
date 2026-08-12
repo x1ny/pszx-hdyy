@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedSplatRouteImport } from './routes/_authenticated/$'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedMemberIndexRouteImport } from './routes/_authenticated/member/index'
 import { Route as AuthenticatedProjectListRouteImport } from './routes/_authenticated/project/list'
 import { Route as AuthenticatedSupplierIndexRouteImport } from './routes/_authenticated/supplier/index'
 import { Route as AuthenticatedSystemRoleRouteImport } from './routes/_authenticated/system/role'
@@ -43,6 +44,12 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedMemberIndexRoute =
+  AuthenticatedMemberIndexRouteImport.update({
+    id: '/member/',
+    path: '/member/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedProjectListRoute =
   AuthenticatedProjectListRouteImport.update({
     id: '/project/list',
@@ -74,6 +81,7 @@ export interface FileRoutesByFullPath {
   '/project/list': typeof AuthenticatedProjectListRoute
   '/system/role': typeof AuthenticatedSystemRoleRoute
   '/system/user': typeof AuthenticatedSystemUserRoute
+  '/member/': typeof AuthenticatedMemberIndexRoute
   '/supplier/': typeof AuthenticatedSupplierIndexRoute
 }
 export interface FileRoutesByTo {
@@ -84,6 +92,7 @@ export interface FileRoutesByTo {
   '/project/list': typeof AuthenticatedProjectListRoute
   '/system/role': typeof AuthenticatedSystemRoleRoute
   '/system/user': typeof AuthenticatedSystemUserRoute
+  '/member': typeof AuthenticatedMemberIndexRoute
   '/supplier': typeof AuthenticatedSupplierIndexRoute
 }
 export interface FileRoutesById {
@@ -96,6 +105,7 @@ export interface FileRoutesById {
   '/_authenticated/project/list': typeof AuthenticatedProjectListRoute
   '/_authenticated/system/role': typeof AuthenticatedSystemRoleRoute
   '/_authenticated/system/user': typeof AuthenticatedSystemUserRoute
+  '/_authenticated/member/': typeof AuthenticatedMemberIndexRoute
   '/_authenticated/supplier/': typeof AuthenticatedSupplierIndexRoute
 }
 export interface FileRouteTypes {
@@ -108,6 +118,7 @@ export interface FileRouteTypes {
     | '/project/list'
     | '/system/role'
     | '/system/user'
+    | '/member/'
     | '/supplier/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -118,6 +129,7 @@ export interface FileRouteTypes {
     | '/project/list'
     | '/system/role'
     | '/system/user'
+    | '/member'
     | '/supplier'
   id:
     | '__root__'
@@ -129,6 +141,7 @@ export interface FileRouteTypes {
     | '/_authenticated/project/list'
     | '/_authenticated/system/role'
     | '/_authenticated/system/user'
+    | '/_authenticated/member/'
     | '/_authenticated/supplier/'
   fileRoutesById: FileRoutesById
 }
@@ -175,6 +188,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/member/': {
+      id: '/_authenticated/member/'
+      path: '/member'
+      fullPath: '/member/'
+      preLoaderRoute: typeof AuthenticatedMemberIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/project/list': {
       id: '/_authenticated/project/list'
       path: '/project/list'
@@ -212,6 +232,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedProjectListRoute: typeof AuthenticatedProjectListRoute
   AuthenticatedSystemRoleRoute: typeof AuthenticatedSystemRoleRoute
   AuthenticatedSystemUserRoute: typeof AuthenticatedSystemUserRoute
+  AuthenticatedMemberIndexRoute: typeof AuthenticatedMemberIndexRoute
   AuthenticatedSupplierIndexRoute: typeof AuthenticatedSupplierIndexRoute
 }
 
@@ -221,6 +242,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedProjectListRoute: AuthenticatedProjectListRoute,
   AuthenticatedSystemRoleRoute: AuthenticatedSystemRoleRoute,
   AuthenticatedSystemUserRoute: AuthenticatedSystemUserRoute,
+  AuthenticatedMemberIndexRoute: AuthenticatedMemberIndexRoute,
   AuthenticatedSupplierIndexRoute: AuthenticatedSupplierIndexRoute,
 }
 
