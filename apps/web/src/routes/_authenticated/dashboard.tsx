@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { api } from "#/shared/lib/api";
+import { api, unwrap } from "#/shared/lib/api";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
@@ -10,12 +10,8 @@ function Dashboard() {
   const { user } = Route.useRouteContext();
   const { data } = useQuery({
     queryKey: ["server-info"],
-    queryFn: async () => {
-      const res = await api.api.getServerInfo.$post();
-      const result = await res.json();
-      if (result.code !== "OK") throw new Error(result.message);
-      return result.data;
-    },
+    // 原来这里手写了一遍拆信封，现在统一走 shared/lib/api 的 unwrap。
+    queryFn: () => unwrap(api.api.getServerInfo.$post()),
   });
 
   return (

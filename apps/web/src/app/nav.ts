@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   type LucideIcon,
   Settings,
+  Truck,
 } from "lucide-react";
 
 /** 侧边栏叶子项：一定对应一条真实路由。 */
@@ -31,6 +32,7 @@ export const navMain: NavItem[] = [
     icon: FolderKanban,
     children: [{ title: "项目列表", to: "/project/list" }],
   },
+  { title: "供应商管理", icon: Truck, to: "/supplier" },
   {
     title: "系统管理",
     icon: Settings,

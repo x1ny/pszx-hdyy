@@ -15,6 +15,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedSplatRouteImport } from './routes/_authenticated/$'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedProjectListRouteImport } from './routes/_authenticated/project/list'
+import { Route as AuthenticatedSupplierIndexRouteImport } from './routes/_authenticated/supplier/index'
 import { Route as AuthenticatedSystemRoleRouteImport } from './routes/_authenticated/system/role'
 import { Route as AuthenticatedSystemUserRouteImport } from './routes/_authenticated/system/user'
 
@@ -48,6 +49,12 @@ const AuthenticatedProjectListRoute =
     path: '/project/list',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedSupplierIndexRoute =
+  AuthenticatedSupplierIndexRouteImport.update({
+    id: '/supplier/',
+    path: '/supplier/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedSystemRoleRoute = AuthenticatedSystemRoleRouteImport.update({
   id: '/system/role',
   path: '/system/role',
@@ -67,6 +74,7 @@ export interface FileRoutesByFullPath {
   '/project/list': typeof AuthenticatedProjectListRoute
   '/system/role': typeof AuthenticatedSystemRoleRoute
   '/system/user': typeof AuthenticatedSystemUserRoute
+  '/supplier/': typeof AuthenticatedSupplierIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -76,6 +84,7 @@ export interface FileRoutesByTo {
   '/project/list': typeof AuthenticatedProjectListRoute
   '/system/role': typeof AuthenticatedSystemRoleRoute
   '/system/user': typeof AuthenticatedSystemUserRoute
+  '/supplier': typeof AuthenticatedSupplierIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -87,6 +96,7 @@ export interface FileRoutesById {
   '/_authenticated/project/list': typeof AuthenticatedProjectListRoute
   '/_authenticated/system/role': typeof AuthenticatedSystemRoleRoute
   '/_authenticated/system/user': typeof AuthenticatedSystemUserRoute
+  '/_authenticated/supplier/': typeof AuthenticatedSupplierIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -98,6 +108,7 @@ export interface FileRouteTypes {
     | '/project/list'
     | '/system/role'
     | '/system/user'
+    | '/supplier/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -107,6 +118,7 @@ export interface FileRouteTypes {
     | '/project/list'
     | '/system/role'
     | '/system/user'
+    | '/supplier'
   id:
     | '__root__'
     | '/'
@@ -117,6 +129,7 @@ export interface FileRouteTypes {
     | '/_authenticated/project/list'
     | '/_authenticated/system/role'
     | '/_authenticated/system/user'
+    | '/_authenticated/supplier/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -169,6 +182,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProjectListRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/supplier/': {
+      id: '/_authenticated/supplier/'
+      path: '/supplier'
+      fullPath: '/supplier/'
+      preLoaderRoute: typeof AuthenticatedSupplierIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/system/role': {
       id: '/_authenticated/system/role'
       path: '/system/role'
@@ -192,6 +212,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedProjectListRoute: typeof AuthenticatedProjectListRoute
   AuthenticatedSystemRoleRoute: typeof AuthenticatedSystemRoleRoute
   AuthenticatedSystemUserRoute: typeof AuthenticatedSystemUserRoute
+  AuthenticatedSupplierIndexRoute: typeof AuthenticatedSupplierIndexRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -200,6 +221,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedProjectListRoute: AuthenticatedProjectListRoute,
   AuthenticatedSystemRoleRoute: AuthenticatedSystemRoleRoute,
   AuthenticatedSystemUserRoute: AuthenticatedSystemUserRoute,
+  AuthenticatedSupplierIndexRoute: AuthenticatedSupplierIndexRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

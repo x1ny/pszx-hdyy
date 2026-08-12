@@ -21,6 +21,10 @@ Before editing files for a substantial task:
 前端： ../ruoyi-antdp
 后端： ../fashion_actions_management
 
+## 新建 CRUD 模块
+
+照着 supplier 模块抄（后端 `modules/supplier/`，前端 `routes/_authenticated/supplier/`）。踩过的坑、定下的模式、配色/表格/按钮的视觉规范、一份可以照抄的检查清单，都在 [docs/crud-page-guide.md](docs/crud-page-guide.md)——写新模块之前先看这份，别重新踩一遍已经踩过的坑（比如 `ok()`/`err()` 千万不能加类型标注、列表别按 `updatedAt` 排序）。
+
 ## 仓库结构
 
 Bun workspaces monorepo，两个包：
@@ -56,7 +60,10 @@ apps/server    Hono + Better Auth + Drizzle（端口 8787）
 
 - **路径是动作名，不是资源。** 用 `getServerInfo`、`submitEcho` 这种动词开头的名字，不要建 `/projects/:id` 这种资源路径。**全部用 POST**，HTTP 动词不承载任何业务含义。
 - **HTTP 状态码不表达业务结果，只有 `code` 字段表达。** 见 `apps/server/src/shared/result.ts` 的 `ApiResult<T>` —— `{ code: "OK", data } | { code: "UNAUTHORIZED" | "VALIDATION_ERROR" | ..., message }`。业务失败（未登录、校验不过）也返回 HTTP 200，前端永远靠 `result.code` 分支，不看 `res.status`。真正的非 200 只留给两种非业务场景：请求体不合法（`zValidator` 的 error hook）、handler 里未捕获的异常（`index.ts` 的 `app.onError`）。
-- 输入用 `zValidator("json", Schema, errorHook)`，输出用 `c.json(ok(...))` / `c.json(err(...))`——**两边都过一遍 `shared/result.ts` 的信封**，别有的接口走信封有的不走。
+- 输入用 `shared/validate.ts` 的 `jsonBody(Schema)`（它内部就是 `zValidator("json", …)` 加统一的 error hook），输出用 `c.json(ok(...))` / `c.json(err(...))`——**两边都过一遍 `shared/result.ts` 的信封**，别有的接口走信封有的不走。
+- **绝对不要给 `ok()` / `err()` 补上 `: ApiResult<T>` 返回类型标注。** 它们现在故意让 TS 自然推导，`c.json(ok(row))` 的类型就是 `{code:"OK"; data: Row}` 这一种。补上标注看着更"规范"，代价是每个接口的响应类型都变成「OK ∪ 全部四种错误」，于是：前端 `Extract<响应, {code:"OK"}>` 再也取不回精确的 `data`（只能手抄一份领域类型，然后慢慢跟服务端漂移），错误分支还要处理一堆这个接口根本不会返回的 code。理由写在 `shared/result.ts` 的注释里。
+- 分页接口统一用 `shared/pagination.ts` 的 `PageInput.extend({ …筛选条件 })` 作入参、`{ list, total }` 作出参，别各模块自己定 `pageNo` / `pageNum` / `current`。
+- 需要登录的模块在路由链头上挂 `modules/auth` 的 `requireUser`，然后用 `c.get("authedUser")`（非空），不要每个 handler 里各写一遍 `c.get("user")` 判空。
 - 路由必须**接在链上**（`app.post(...).post(...)`），单独写 `app.post(...)` 不会进 `AppType`
 - `apps/web` 只用 `import type` 引 `@repo/server`，**绝不 runtime import** —— 服务端代码不能进浏览器包
 - 客户端用 `apps/server/src/client-type.ts` 导出的 `hcWithType`，不要直接用 `hc`——前者把类型计算挪到编译期，路由多了以后 IDE 不会变卡（[Hono 官方的 known issue](https://hono.dev/docs/guides/rpc#using-rpc-with-larger-applications)）
@@ -89,11 +96,18 @@ apps/server/
     │   │   ├── routes.ts             /api/auth/* 的官方挂载写法
     │   │   ├── schema.ts             user/session/account/verification 表定义
     │   │   └── session-middleware.ts 填充 c.get("user")/c.get("session")
-    │   └── example/         占位示例，不是真实业务，新功能来了随时可以删掉这个目录
+    │   │   └── require-user.ts       requireUser 中间件 + AuthedVariables
+    │   ├── supplier/        **真实业务模块的范式**，新模块照着它抄
+    │   │   ├── schema.ts             表定义 + 领域枚举（列里能出现什么）
+    │   │   ├── validation.ts         zod 入参契约，从 schema 的枚举拼
+    │   │   └── routes.ts             7 个动作接口 + 显式的字段投影
+    │   └── example/         占位示例，不是真实业务，随时可以删掉这个目录
     │       ├── validation.ts
     │       └── routes.ts
     ├── shared/
-    │   └── result.ts       ApiResult<T> / ok() / err()，唯一跨模块的公共词汇表
+    │   ├── result.ts       ApiResult<T> / ok() / err()，唯一跨模块的公共词汇表
+    │   ├── validate.ts     jsonBody()，统一的请求体校验器
+    │   └── pagination.ts   PageInput / Paged<T> / toLimitOffset()
     ├── client-type.ts       hcWithType 预编译导出
     └── index.ts              只做组合：挂 authHandler → session 中间件 → 各模块 .route("/", xxxRoutes)
 ```
@@ -159,6 +173,11 @@ apps/web/src/
 │       ├── $.tsx
 │       ├── dashboard.tsx
 │       ├── project/list.tsx
+│       ├── supplier/               **业务页面的范式**，新页面照着它抄
+│       │   ├── index.tsx           筛选（走 URL search params）+ 表格 + 分页
+│       │   ├── -queries.ts         queryOptions / 变更函数 / 领域类型
+│       │   ├── -utils.ts           中文标签映射、格式化
+│       │   └── -components/{supplier-form-dialog,supplier-detail-sheet}.tsx
 │       └── system/{user,role}.tsx
 ├── features/                      跨页面的业务逻辑，按域分
 │   └── auth/
@@ -284,7 +303,8 @@ apps/web/src/
 - Tailwind CSS v4 + shadcn/ui（配置见 `apps/web/components.json`）
 - Hono，运行在 Bun 上（`export default { port, fetch }`）
 - Drizzle ORM + Postgres（docker-compose 起本地库，客户端在 `apps/server/src/infra/db.ts`）
-- Biome 负责 lint 和格式化（缩进 tab，字符串双引号）—— 收尾前务必跑 `bun run check`
+- TanStack Form（`@tanstack/react-form`）负责表单，**不用 react-hook-form**。理由：shadcn 的 `base-vega` 注册表根本没有 `form.tsx`（只给 `field.tsx`，跟表单库无关），RHF 那点集成优势在这里拿不到；而本项目的输入组件全是 Base UI **受控**组件，用 RHF 的话每个 Select 都得包一层 `Controller`；TanStack Form 受控优先、原生吃 Standard Schema（zod 4 直接当 validator，不需要 `@hookform/resolvers`）。校验错误是 `StandardSchemaV1Issue[]`，正好喂给 `ui/field.tsx` 的 `<FieldError errors={…} />`
+- Biome 负责 lint 和格式化。**缩进：TS/TSX 是 2 空格，不是 tab** —— `biome.json` 顶层的 `formatter.indentStyle: "tab"` 被 `javascript.formatter.indentStyle: "space"` 覆盖了，只有 json 之类才是 tab。字符串双引号。收尾前务必跑 `bun run check`
 - Vitest + happy-dom + Testing Library，只在 `apps/web`，配置在 `vitest.config.ts`，**刻意**与 `vite.config.ts` 分开
 
 ## 运行时

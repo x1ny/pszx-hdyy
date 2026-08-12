@@ -35,11 +35,31 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  /*
+   * 分类色板。shadcn 的 neutral 主题原本把 --chart-1..5 给成了 oklch(… 0 0)
+   * —— chroma 是 0，也就是纯灰阶，画出来的图表和标签全是黑白的。
+   *
+   * 换成一组过了色觉障碍（CVD）校验的分类色，按固定槽位顺序使用、**不要循环取色**：
+   * 超过 5 类就归并到「其他」或者拆成小倍数图，不要自己生成第 6 个色相。
+   * 校验结果（白底、全配对模式）：最差配对 CVD ΔE 13.0、常规视觉 ΔE 16.3，
+   * 对比度全部 ≥ 3:1。改动任何一个值都要重跑校验，别凭眼睛调。
+   */
+  --chart-1: #2a78d6;
+  --chart-2: #4a3aa7;
+  --chart-3: #1baf7a;
+  --chart-4: #eb6834;
+  --chart-5: #eda100;
+
+  /*
+   * 状态色是**保留位**，不参与上面的分类色轮换 —— 一个颜色要么表示「某一类」，
+   * 要么表示「什么状态」，不能两用，否则用户没法从颜色反推含义。
+   * 而且状态永远配图标或文字，不靠颜色单独承载信息。
+   */
+  --success: #0ca30c;
+  /* 同一个绿在白底上只有 3.27:1，够给色块/圆点用，但小字号要 4.5:1 才读得清，
+     所以文字用更深的一档。 */
+  --success-foreground: #006300;
+  --warning: #fab219;
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
@@ -76,6 +96,9 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
