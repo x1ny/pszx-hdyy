@@ -18,8 +18,9 @@ Before editing files for a substantial task:
 ## 旧项目代码参考
 当用户要求参考旧代码时 再从这两个目录中读取代码研究
 
-前端： ../ruoyi-antdp
-后端： ../fashion_actions_management
+测试环境 http://10.2.1.16:30053/  账号：admin 密码：Sjzt@123
+前端代码： ../ruoyi-antdp
+后端代码： ../fashion_actions_management
 
 ## 新建 CRUD 模块
 
