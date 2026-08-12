@@ -1,5 +1,6 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { AppLayout } from "#/components/layout/app-layout.tsx";
+import { NotFound } from "#/components/not-found.tsx";
 import { sessionQueryOptions } from "#/lib/session";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -12,6 +13,9 @@ export const Route = createFileRoute("/_authenticated")({
     return { user: session.user };
   },
   component: AuthenticatedLayout,
+  // 登录后访问不存在的路径时，走这里而不是 router 的 defaultNotFoundComponent，
+  // 这样 404 渲染在 AppLayout 的 Outlet 里，侧边栏和顶栏还在。
+  notFoundComponent: NotFound,
 });
 
 function AuthenticatedLayout() {
