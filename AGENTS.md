@@ -15,6 +15,12 @@ Before editing files for a substantial task:
 >
 > 唯一的要求是：改动连同**理由**一起写回这里（大的方向性取舍写进 [docs/architecture-decisions.md](docs/architecture-decisions.md)），别绕开规则默默写例外——一个没记录的例外会变成下一个人眼里的"这里本来就没规矩"。
 
+## 旧项目代码参考
+当用户要求参考旧代码时 再从这两个目录中读取代码研究
+
+前端： ../ruoyi-antdp
+后端： ../fashion_actions_management
+
 ## 仓库结构
 
 Bun workspaces monorepo，两个包：
