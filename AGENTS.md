@@ -11,6 +11,10 @@ Before editing files for a substantial task:
 
 # 项目约定
 
+> **这份文档记录的是当前的约定，不是不可动的教条。** 每条规则都是在当时的信息下做的取舍，实际写代码时完全可能发现它别扭、成本高过收益，或者跟一个当初没想到的场景冲突——**发现了就直接提出来改**，带上具体的 case，不用忍着照做。
+>
+> 唯一的要求是：改动连同**理由**一起写回这里（大的方向性取舍写进 [docs/architecture-decisions.md](docs/architecture-decisions.md)），别绕开规则默默写例外——一个没记录的例外会变成下一个人眼里的"这里本来就没规矩"。
+
 ## 仓库结构
 
 Bun workspaces monorepo，两个包：
@@ -94,13 +98,169 @@ apps/server/
 
 `shared/` 只放真正跨模块、且不碰外部资源的东西（目前只有 `result.ts`）。如果某个类型/工具只有一个模块在用，就放回那个模块目录里；如果它连接外部资源，归 `infra/`，不归 `shared/`。
 
+## 前端目录结构：页面本地优先
+
+四个桶，跟后端同一个思路——**靠依赖方向裁决归属，不靠感觉**：
+
+```
+app/       组合根，全应用只有一份的东西
+routes/    路由树，物理结构 = URL 结构
+features/  跨页面复用的业务逻辑，按业务域分
+shared/    通用复用，不认识任何业务
+```
+
+依赖方向单向，**反向绝对不行**：
+
+```
+app/       可以 import 任何东西
+routes/    可 import features / shared；绝不 import 别的路由目录下的东西
+features/  可 import shared、可 import 别的 feature（必须无环）；绝不 import routes / app
+shared/    谁都不 import（除了 shared 内部和三方库）
+```
+
+### 判据：新代码放哪，按顺序问两个问题
+
+| | 问题 | 答案 → 去处 |
+| --- | --- | --- |
+| Q1 | 有几个页面在用它？ | 1 个 → 留在那个页面的 `-components/`、`-hooks/` 里。≥2 个 → 问 Q2 |
+| Q2 | 它认不认识业务？（import 领域类型 / 调 API / 编码业务规则） | 认识 → `features/<域>/`。只认 props 和 DOM → `shared/` |
+
+**提升阈值是不对称的：业务逻辑第 2 个消费方就提，纯 UI 容忍到第 3 个。** 业务逻辑复制一份会静默分叉（两个页面的校验规则慢慢就不一致了，而且没人会发现）；纯 UI 复制一份最多是丑，反倒是只见过两个用例就抽象，容易抽出一个参数一大堆的"万能组件"。
+
+**降级同样是规则**：消费方掉回 1 个时，把它搬回那个页面。只写提升规则不写降级规则，`features/` 三个月后就会变成谁都不敢删的坟场。
+
+**铁律：跨路由 import 别人的 `-` 目录 = 该提升了，不是加个 `../../`。** 这条是让"页面本地优先"不腐烂的唯一保证，破了这条，上面所有规则都失效。
+
+### 目录树
+
+```
+apps/web/src/
+├── main.tsx                       Vite 入口，index.html 指着它——留在根，不进 app/
+├── styles.css
+├── routeTree.gen.ts               生成物，绝不手改
+├── app/                           组合根
+│   ├── router.tsx
+│   ├── providers.tsx              QueryClient / RouterContext
+│   ├── devtools.tsx
+│   ├── nav.ts                     侧边栏菜单配置
+│   └── layout/{app-layout,app-sidebar,nav-main,nav-user}.tsx
+├── routes/                        物理结构 = URL 结构
+│   ├── __root.tsx                 必须留在这里（路由生成器要求）
+│   ├── index.tsx
+│   ├── login.tsx                  暂无本地代码 → 保持单文件
+│   ├── _authenticated.tsx         登录守卫
+│   └── _authenticated/
+│       ├── $.tsx
+│       ├── dashboard.tsx
+│       ├── project/list.tsx
+│       └── system/{user,role}.tsx
+├── features/                      跨页面的业务逻辑，按域分
+│   └── auth/
+│       ├── auth-client.ts
+│       └── queries.ts             sessionQueryOptions / sessionQueryKey
+└── shared/                        不认识任何业务
+    ├── components/
+    │   ├── ui/…                   shadcn registry，原样
+    │   ├── not-found.tsx
+    │   └── page-placeholder.tsx
+    ├── hooks/use-mobile.ts
+    └── lib/{utils.ts, api.ts}
+```
+
+### routes/：页面本地优先
+
+一个页面的组件、hooks 默认先放在它自己的目录里，**别急着往公共目录搬**——放公共目录是要还债的（谁在用、能不能改、能不能删，从此都要查）。
+
+- `-` 前缀是 TanStack Router 的官方机制（`routeFileIgnorePrefix` 默认就是 `-`），带 `-` 的文件和目录不进路由树，不用改配置
+- **单文件也必须带 `-` 前缀。** `project/list/queries.ts` 会变成 `/project/list/queries` 这条路由，`-queries.ts` 才不会。这个坑最容易踩
+- 白名单四个名字：**`-components/`、`-hooks/`、`-queries.ts`、`-utils.ts`**。需要第五个名字可以加，但**要同步更新这份文档**——不许各页面自由发挥，页面文件夹长得都一样，扫一眼就知道里面有什么；想放个不在名单上的东西时，正好被迫先想清楚它是不是该提升了
+- **flat 和 folder 不混用。** 没有本地代码就是单文件（现在所有页面都是这样）；一旦需要本地目录，升级成同名文件夹、页面主体改名 `index.tsx`：
+
+  ```
+  project/list.tsx        →   project/list/
+                                ├── index.tsx                       原来的 list.tsx
+                                ├── -components/project-table.tsx
+                                └── -queries.ts
+  ```
+
+  唯一副作用：生成的 route id 从 `/project/list` 变成 `/project/list/`（URL 不变，`Link to` 的自动补全会跟着变）
+- **测试文件放 `-` 目录里**，或者靠 `tsr.config.json` 的 `routeFileIgnorePattern` 兜住。直接写 `routes/xxx.test.tsx` 会被当成一条路由
+
+`_authenticated` 这层 pathless layout 会进物理路径：业务页面的本地代码实际落在 `routes/_authenticated/project/list/-components/`。**这是页面本地优先的代价，已经接受**——物理路径由路由树决定，不由业务决定；哪天页面换布局，整个目录一起搬走就是了。
+
+顺带一个白拿的好处：`vite.config.ts` 开了 `autoCodeSplitting`，**目录边界天然就是 chunk 边界**，页面本地组件自动进该路由的 chunk；扔在全局 `components/` 里的反而容易被拽进公共包。
+
+### features/：跨页面的业务逻辑
+
+- 按**业务域**分子目录（`features/auth/`），**不按技术类型分**（不要 `features/hooks/`、`features/components/`）
+- feature 内部保持扁平：`queries.ts` / `mutations.ts` / `components/` / `hooks/` / `types.ts`。深度超过 2 层，说明该拆成两个域了
+- **现在不写 barrel `index.ts`。** 收益（封装公共 API）在当前体积拿不到，代价（循环依赖、HMR 变差、`organizeImports` 之后一堆假依赖）立刻就有。等 feature 内部真需要区分公开/内部时再加，那时 Biome 2 的 `noPrivateImports` 正好是配套机制
+- 跨 feature import 直接写深路径，但**不许成环**。两个 feature 互相需要时，把公共部分下沉到 `shared/` 或提成第三个 feature——跟后端 `modules/` 一个道理
+- **`features/` 是"多页面共用的业务逻辑"的家，不是"所有业务逻辑"的家。** 单页面用的业务逻辑留在页面里。放松这一条，`features/` 会吸走一切、`routes/` 只剩空壳，这套东西就退化成了传统的 `pages/ + services/` 分层——那前面所有规则都白定了
+
+`features/auth/` 是目前唯一真实的 feature，可以当范式看（login 页、`_authenticated` 守卫、`nav-user` 登出三处在用），地位相当于后端的 `modules/example`。
+
+### shared/：不认识任何业务
+
+硬线，可以直接 grep 验证：**`shared/**` 里不许 import `@repo/server`。**
+
+唯一例外是 `shared/lib/api.ts`——它是传输层客户端，认识的是整个 `AppType` 契约，不是某个具体业务域，对应后端的 `infra/`（"知道外部世界，不知道任何业务"）。前端就这一个这样的文件，不值得为它单开一层 `infra/` 目录。校验方式：`grep -r "@repo/server" apps/web/src/shared/` **只应命中 `api.ts`**。
+
+子目录固定四个：`components/ui`（shadcn registry）、`components/`（自研通用组件）、`hooks/`、`lib/`。**不要同时有 `lib/` 和 `utils/`**，两个名字一个意思，迟早各放一半。
+
+### app/：组合根，不是杂项抽屉
+
+进 `app/` 的判据：**全应用只有一份，且每个页面都间接依赖它。** 不满足就不进——否则它立刻变成第二个垃圾桶。
+
+- `src/main.tsx` 和 `src/styles.css` **留在 `src/` 根**，不进 `app/`。`main.tsx` 是 Vite 约定入口，`index.html` 的 `<script src="/src/main.tsx">` 指着它，本身就 3 行 bootstrap，搬它纯粹为了好看
+- `routes/__root.tsx` **必须留在 `routes/`**（路由生成器要求）。它只放 `Outlet` + devtools，**真正的布局在 `app/layout/`**
+
+### shadcn 组件分三层，不是都堆在 ui/
+
+新组件优先用 shadcn，但**装完要想一下它是哪一层**，别无脑留在 CLI 放的位置：
+
+| 层 | 例子 | 归属 | 规矩 |
+| --- | --- | --- | --- |
+| registry primitive | `button` `sidebar` `empty` | `shared/components/ui/`，**保持扁平、保持原文件名** | 当成 vendored 三方代码。改了必须留注释说明改了什么，否则下次 `shadcn add` 静默覆盖掉你的改动 |
+| block / 组合件 | `app-sidebar` `nav-user` `nav-main` | 全应用一份 → `app/layout/`；单页专用 → 该页 `-components/` | 这是**你的代码**，shadcn 只给了初稿，随便改 |
+| 业务组件 | `UserTable` | 单页 → 页面本地；多页 → `features/<域>/components/` | 按上面的两个问题裁决 |
+
+**改目录必须同步改 `apps/web/components.json` 的 `aliases`**，否则下次 `bunx shadcn@latest add` 会重新造一个 `src/components/ui/` 出来：
+
+```json
+"aliases": {
+  "components": "#/shared/components",
+  "ui": "#/shared/components/ui",
+  "utils": "#/shared/lib/utils",
+  "lib": "#/shared/lib",
+  "hooks": "#/shared/hooks"
+}
+```
+
+`shared/hooks/use-mobile.ts` 是 shadcn 自己带进来的（`ui/sidebar.tsx` 在用），属于 registry 的一部分，跟着 alias 走。
+
+### 命名
+
+- 文件一律 kebab-case
+- 一个文件一个主导出，文件名 = 导出名的 kebab 形式（`app-layout.tsx` → `AppLayout`）
+- 组件 props 类型就地写 `type XxxProps`，不集中到 `types.ts`
+
+### 明确否掉的
+
+这些是讨论过否掉的方向，不要因为"看着更整齐"重新引入：
+
+- ❌ `components/common` + `components/business` 这种**按通用性分目录**——通用性是连续量，边界天天要吵
+- ❌ 现阶段的 barrel `index.ts`（理由见 `features/` 那节）
+- ❌ 在 `features/*/queries.ts` 之外再叠一层 `services/`
+- ❌ 为了对称给每个 feature 预建空的 `components/hooks/utils/types` 四件套——**用到再建**
+
 ## 认证
 
 - `apps/server/src/modules/auth/auth.ts` — Better Auth 实例（Drizzle adapter + 邮箱密码），用 `infra/db.ts` 的连接池 + 自己的 `schema.ts`。`auth:generate` 脚本的 `--config`/`--output` 都指向 `modules/auth/` 下的这两个文件
 - `apps/server/src/modules/auth/routes.ts` — `app.on(["GET","POST"], "/api/auth/*", ...)` 挂载 handler，写法照抄官方文档，**不要改动这一行的结构**
 - `apps/server/src/index.ts` 里，`authHandler` 的 `.route()` **必须注册在 session 中间件之前**——这不是官方文档要求的顺序（官方文档把两者当独立示例展示，没给出相对先后），是我们自己的选择：`auth.handler()` 直接处理 raw `Request`/`Response`，从不读 Hono context，所以顺序不影响正确性；排前面纯粹是为了让 Better Auth 自己的路由跳过后面注册的 session 查询（Hono 的中间件按注册顺序生效，前面的路由命中且不调用 `next()` 时，后面注册的 `app.use` 根本不会跑）
 - session 中间件把 `user`/`session` 放进 Hono context，受保护的接口从 `c.get("user")` 取，为空时返回 `err({ code: "UNAUTHORIZED", ... })`（见 `modules/example/routes.ts` 的 `getMe`）——**不是 401**，见上面"前后端边界"一节
-- `apps/web/src/lib/session.ts` — 用 react-query 缓存 `authClient.getSession()`。这条走的是 Better Auth 自己的客户端，跟 `apps/server` 自定义的业务接口是两条独立的路，不要混着改
+- `apps/web/src/features/auth/queries.ts` — 用 react-query 缓存 `authClient.getSession()`。这条走的是 Better Auth 自己的客户端，跟 `apps/server` 自定义的业务接口是两条独立的路，不要混着改
 - `apps/web/src/routes/_authenticated.tsx` — 登录守卫（pathless layout），未登录跳 `/login?redirect=...`；受保护页面放在 `_authenticated/` 下自动继承
 
 **登录/登出后必须 `queryClient.removeQueries({ queryKey: sessionQueryKey })`。** 守卫用的是 `ensureQueryData`，它**即使数据已过期也会先返回缓存**，所以 `invalidateQueries` 不够 —— 登录成功后守卫会读到旧的 `null` 并把用户弹回登录页。必须把缓存条目删掉，逼守卫重新请求。
@@ -114,7 +274,7 @@ apps/server/
 ## 技术栈
 
 - TanStack Router 文件式路由 —— 路由文件在 `apps/web/src/routes`，`routeTree.gen.ts` 由 `@tanstack/router-plugin` 自动生成，**绝对不要手改**。`vite.config.ts` 里 `tanstackRouter()` 必须排在 `viteReact()` 前面
-- TanStack Query，router context 里带 `queryClient`（见 `integrations/tanstack-query/root-provider.tsx`）
+- TanStack Query，router context 里带 `queryClient`（见 `apps/web/src/app/providers.tsx`）
 - Tailwind CSS v4 + shadcn/ui（配置见 `apps/web/components.json`）
 - Hono，运行在 Bun 上（`export default { port, fetch }`）
 - Drizzle ORM + Postgres（docker-compose 起本地库，客户端在 `apps/server/src/infra/db.ts`）
@@ -137,7 +297,7 @@ apps/server/
 
 ## 404 与错误处理
 
-`apps/web/src/router.tsx` 把 `defaultNotFoundComponent` 指向 `src/components/not-found.tsx`。单个路由可以用自己的 `notFoundComponent` 覆盖。目前**还没有**配置 `defaultErrorComponent`。
+`apps/web/src/app/router.tsx` 把 `defaultNotFoundComponent` 指向 `src/shared/components/not-found.tsx`。单个路由可以用自己的 `notFoundComponent` 覆盖。目前**还没有**配置 `defaultErrorComponent`。
 
 ## 样式
 

@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { AppLayout } from "#/components/layout/app-layout.tsx";
-import { NotFound } from "#/components/not-found.tsx";
-import { sessionQueryOptions } from "#/lib/session";
+import { AppLayout } from "#/app/layout/app-layout.tsx";
+import { NotFound } from "#/shared/components/not-found.tsx";
+import { sessionQueryOptions } from "#/features/auth/queries";
 
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: async ({ context, location }) => {

@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { LayoutGrid } from "lucide-react";
-import { NavMain } from "#/components/layout/nav-main.tsx";
+import { NavMain } from "#/app/layout/nav-main.tsx";
 import {
   Sidebar,
   SidebarContent,
@@ -9,7 +9,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
-} from "#/components/ui/sidebar.tsx";
+} from "#/shared/components/ui/sidebar.tsx";
 
 export function AppSidebar() {
   return (

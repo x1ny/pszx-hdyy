@@ -5,7 +5,7 @@ import {
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-} from "#/components/ui/empty.tsx";
+} from "#/shared/components/ui/empty.tsx";
 
 /** 占位页，只为验证布局与导航；业务页面写好后逐个替换掉。 */
 export function PagePlaceholder({ title }: { title: string }) {

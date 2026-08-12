@@ -5,7 +5,7 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "#/components/ui/collapsible.tsx";
+} from "#/shared/components/ui/collapsible.tsx";
 import {
   SidebarGroup,
   SidebarMenu,
@@ -14,8 +14,8 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-} from "#/components/ui/sidebar.tsx";
-import { type NavItem, navMain } from "#/config/nav.ts";
+} from "#/shared/components/ui/sidebar.tsx";
+import { type NavItem, navMain } from "#/app/nav.ts";
 
 export function NavMain() {
   const pathname = useRouterState({

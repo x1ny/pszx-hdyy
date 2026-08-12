@@ -23,7 +23,13 @@ const config = defineConfig({
     devtools(),
     tailwindcss(),
     // Must come before viteReact() so generated routes are transformed.
-    tanstackRouter({ target: "react", autoCodeSplitting: true }),
+    // routeFileIgnorePattern 在 tsr.config.json 里也有一份：这里管 dev/build，
+    // 那里管 `tsr generate` CLI。两处都要，否则测试文件会被当成一条路由。
+    tanstackRouter({
+      target: "react",
+      autoCodeSplitting: true,
+      routeFileIgnorePattern: "\\.(test|spec)\\.tsx?$",
+    }),
     viteReact(),
   ],
 });

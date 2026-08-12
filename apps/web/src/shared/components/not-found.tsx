@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { SearchXIcon } from "lucide-react";
-import { buttonVariants } from "#/components/ui/button.tsx";
+import { buttonVariants } from "#/shared/components/ui/button.tsx";
 import {
   Empty,
   EmptyContent,
@@ -8,7 +8,7 @@ import {
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-} from "#/components/ui/empty.tsx";
+} from "#/shared/components/ui/empty.tsx";
 
 /**
  * 同时用作 _authenticated 的 notFoundComponent（渲染在 AppLayout 的 Outlet

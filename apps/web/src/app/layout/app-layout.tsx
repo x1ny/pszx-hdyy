@@ -1,11 +1,11 @@
 import { Outlet } from "@tanstack/react-router";
-import { AppSidebar } from "#/components/layout/app-sidebar.tsx";
-import { NavUser } from "#/components/layout/nav-user.tsx";
+import { AppSidebar } from "#/app/layout/app-sidebar.tsx";
+import { NavUser } from "#/app/layout/nav-user.tsx";
 import {
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
-} from "#/components/ui/sidebar.tsx";
+} from "#/shared/components/ui/sidebar.tsx";
 
 export function AppLayout({ user }: { user: { name: string; email: string } }) {
   return (

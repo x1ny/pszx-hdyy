@@ -1,8 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronDown, LogOut, UserRound } from "lucide-react";
-import { Avatar, AvatarFallback } from "#/components/ui/avatar.tsx";
-import { Button } from "#/components/ui/button.tsx";
+import { Avatar, AvatarFallback } from "#/shared/components/ui/avatar.tsx";
+import { Button } from "#/shared/components/ui/button.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,9 +11,9 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "#/components/ui/dropdown-menu.tsx";
-import { authClient } from "#/lib/auth-client.ts";
-import { sessionQueryKey } from "#/lib/session.ts";
+} from "#/shared/components/ui/dropdown-menu.tsx";
+import { authClient } from "#/features/auth/auth-client.ts";
+import { sessionQueryKey } from "#/features/auth/queries.ts";
 
 export function NavUser({ name, email }: { name: string; email: string }) {
   const navigate = useNavigate();

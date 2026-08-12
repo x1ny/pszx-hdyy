@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import { authClient } from "#/lib/auth-client";
+import { authClient } from "#/features/auth/auth-client";
 
 export const sessionQueryKey = ["session"] as const;
 

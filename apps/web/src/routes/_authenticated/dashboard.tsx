@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { api } from "#/lib/api";
+import { api } from "#/shared/lib/api";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,

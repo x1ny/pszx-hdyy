@@ -1,8 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { authClient } from "#/lib/auth-client";
-import { sessionQueryKey } from "#/lib/session";
+import { authClient } from "#/features/auth/auth-client";
+import { sessionQueryKey } from "#/features/auth/queries";
 
 export const Route = createFileRoute("/login")({
   validateSearch: (search: Record<string, unknown>): { redirect?: string } => ({
