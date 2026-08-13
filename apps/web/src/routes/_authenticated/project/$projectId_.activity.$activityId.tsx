@@ -1,26 +1,16 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   createFileRoute,
   Link,
   Outlet,
   useMatchRoute,
 } from "@tanstack/react-router";
-import { toast } from "sonner";
-import { useState } from "react";
+import { ArrowLeftIcon } from "lucide-react";
 import { Badge } from "#/shared/components/ui/badge.tsx";
-import { Button } from "#/shared/components/ui/button.tsx";
+import { buttonVariants } from "#/shared/components/ui/button.tsx";
 import { Skeleton } from "#/shared/components/ui/skeleton.tsx";
 import { cn } from "#/shared/lib/utils.ts";
-import {
-  ActivityFormDialog,
-  type ActivityFormSubmitValues,
-} from "./-components/activity-form-dialog";
-import {
-  activityDetailQueryOptions,
-  activityKeys,
-  projectDetailQueryOptions,
-  updateActivity,
-} from "./-queries";
+import { activityDetailQueryOptions } from "./-queries";
 import {
   ACTIVITY_TYPE_LABELS,
   formatDateTime,
@@ -32,12 +22,10 @@ export const Route = createFileRoute(
   "/_authenticated/project/$projectId_/activity/$activityId",
 )({
   loader: ({ context, params }) => {
-    const projectId = Number(params.projectId);
     const activityId = Number(params.activityId);
-    return Promise.all([
-      context.queryClient.ensureQueryData(projectDetailQueryOptions(projectId)),
-      context.queryClient.ensureQueryData(activityDetailQueryOptions(activityId)),
-    ]);
+    return context.queryClient.ensureQueryData(
+      activityDetailQueryOptions(activityId),
+    );
   },
   component: ActivityDetailLayout,
 });
@@ -69,29 +57,12 @@ const TABS = [
 function ActivityDetailLayout() {
   const { projectId: projectIdParam, activityId: activityIdParam } =
     Route.useParams();
-  const projectId = Number(projectIdParam);
   const activityId = Number(activityIdParam);
-  const queryClient = useQueryClient();
   const matchRoute = useMatchRoute();
 
-  const [formOpen, setFormOpen] = useState(false);
-
-  const projectQuery = useQuery(projectDetailQueryOptions(projectId));
   const activityQuery = useQuery(activityDetailQueryOptions(activityId));
 
-  const project = projectQuery.data;
   const activity = activityQuery.data;
-
-  const saveMutation = useMutation({
-    mutationFn: (values: ActivityFormSubmitValues) =>
-      updateActivity({ ...values, id: activityId }),
-    onSuccess: () => {
-      toast.success("修改成功");
-      setFormOpen(false);
-      queryClient.invalidateQueries({ queryKey: activityKeys.all });
-    },
-    onError: (error) => toast.error(error.message),
-  });
 
   if (!activity) {
     return <Skeleton className="h-64 w-full" />;
@@ -99,53 +70,47 @@ function ActivityDetailLayout() {
 
   return (
     <div className="flex flex-1 flex-col gap-4">
-      <nav className="flex items-center gap-1.5 text-muted-foreground text-sm">
-        <Link to="/project/list" className="hover:text-foreground hover:underline">
-          项目管理
-        </Link>
-        <span>/</span>
-        <Link
-          to="/project/$projectId"
-          params={{ projectId: projectIdParam }}
-          className="hover:text-foreground hover:underline"
-        >
-          {project?.name ?? "-"}
-        </Link>
-        <span>/</span>
-        <span>活动详情</span>
-      </nav>
+      <Link
+        to="/project/$projectId"
+        params={{ projectId: projectIdParam }}
+        className={cn(
+          buttonVariants({ variant: "ghost", size: "sm" }),
+          "-ml-2 w-fit",
+        )}
+      >
+        <ArrowLeftIcon data-icon="inline-start" />
+        返回项目详情
+      </Link>
 
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start gap-4">
         <div className="flex flex-col gap-1">
-          <h1 className="font-semibold text-xl tracking-tight">
-            活动：{activity.name}
-          </h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="font-semibold text-xl tracking-tight">
+              活动：{activity.name}
+            </h1>
+            <Badge
+              variant="outline"
+              className={cn("border", PUBLISH_STATUS_CHIP[activity.publishStatus])}
+            >
+              {PUBLISH_STATUS_LABELS[activity.publishStatus]}
+            </Badge>
+            <ToggleTag
+              active={activity.displayEnabled}
+              onLabel="H5 展示开启"
+              offLabel="H5 展示关闭"
+            />
+            <ToggleTag
+              active={activity.registrationEnabled}
+              onLabel="报名开启"
+              offLabel="报名关闭"
+            />
+          </div>
           <p className="text-muted-foreground text-sm">
             {ACTIVITY_TYPE_LABELS[activity.activityType]} ·{" "}
             {activity.location || "未填写地点"} ·{" "}
             {formatDateTime(activity.startTime)} 至{" "}
             {formatDateTime(activity.endTime)}
           </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Link
-            to="/project/$projectId"
-            params={{ projectId: projectIdParam }}
-            className="text-primary text-sm hover:underline"
-          >
-            返回项目详情
-          </Link>
-          <Button variant="outline" size="sm" onClick={() => setFormOpen(true)}>
-            编辑活动
-          </Button>
-          <Badge
-            variant="outline"
-            className={cn("border", PUBLISH_STATUS_CHIP[activity.publishStatus])}
-          >
-            {PUBLISH_STATUS_LABELS[activity.publishStatus]}
-          </Badge>
-          <ToggleTag active={activity.displayEnabled} onLabel="H5 展示开启" offLabel="H5 展示关闭" />
-          <ToggleTag active={activity.registrationEnabled} onLabel="报名开启" offLabel="报名关闭" />
         </div>
       </div>
 
@@ -174,14 +139,6 @@ function ActivityDetailLayout() {
       </div>
 
       <Outlet />
-
-      <ActivityFormDialog
-        open={formOpen}
-        activity={activity}
-        submitting={saveMutation.isPending}
-        onOpenChange={setFormOpen}
-        onSubmit={(values) => saveMutation.mutate(values)}
-      />
     </div>
   );
 }
