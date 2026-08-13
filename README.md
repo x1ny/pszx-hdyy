@@ -15,7 +15,13 @@ cp .env.example .env   # then edit BETTER_AUTH_SECRET
 bun run dev
 ```
 
-`bun run dev` starts Postgres via `docker compose up -d`, then runs both apps. Open http://localhost:3000.
+`bun run dev` starts Postgres via `docker compose up -d`, then runs both apps. Open the URL printed by Vite (normally http://localhost:3000).
+
+### Development ports
+
+The root development runner starts the server and web app together. `SERVER_PORT` (default `8787`) and `WEB_PORT` (default `3000`) are preferred starting ports; if either is occupied, the runner finds the next available port. The selected server port is passed to both the Hono server and the Vite `/api` proxy. If the web port changes, `WEB_ORIGIN` and `BETTER_AUTH_URL` are updated for the same run so authentication continues to work.
+
+Use `bun run dev` from the repository root to enable this coordination. Running an individual package script does not perform the cross-process port selection.
 
 First run needs the tables:
 
@@ -29,7 +35,7 @@ The browser only ever sees one origin. Vite proxies `/api` to the Hono server:
 
 ```ts
 // apps/web/vite.config.ts
-server: { proxy: { "/api": { target: "http://localhost:8787" } } }
+server: { proxy: { "/api": { target: `http://localhost:${serverPort}` } } }
 ```
 
 That means no CORS setup and no cross-site cookie rules in development — Better Auth's session cookie is same-origin as far as the browser is concerned.

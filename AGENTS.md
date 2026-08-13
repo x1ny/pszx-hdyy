@@ -53,7 +53,13 @@ apps/server    Hono + Better Auth + Drizzle（端口 8787）
 | 重新生成路由树 | `bun run --filter '@repo/web' generate-routes` |
 | 添加 shadcn 组件 | 在 `apps/web` 下 `bunx shadcn@latest add <name>` |
 
+开发端口约定：根目录的 `bun run dev` 由 `scripts/dev.ts` 统一启动前后端。`SERVER_PORT`（默认 `8787`）和 `WEB_PORT`（默认 `3000`）是首选端口，被占用时向上寻找可用端口；最终的后端端口同时传给 Hono 和 Vite 代理，前端端口变化时同步更新认证 origin。这样做是为了避免端口自动变化后代理或 Better Auth 仍指向旧端口。单独运行某个 workspace 的 `dev` 脚本不经过这层协调。
+
 单独起某个包用 `bun run --filter '@repo/server' dev`。
+
+## 开发调试
+如果需求可自行通过浏览器进行登录、注册，通过真实的页面操作进行调试。
+账号 x1nyhh@163.com 密码xiny1118
 
 ## 前后端边界
 

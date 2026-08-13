@@ -6,6 +6,8 @@
       "name": "fullstack-template",
       "devDependencies": {
         "@biomejs/biome": "2.4.5",
+        "@types/bun": "^1.3.14",
+        "@types/node": "^22.20.1",
         "typescript": "^6.0.2",
       },
     },
