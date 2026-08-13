@@ -1,19 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
 import {
-  ArrowLeftIcon,
-  CalendarClockIcon,
-  ClipboardListIcon,
-  LayoutGridIcon,
-  MailIcon,
-  PackageIcon,
-  type LucideIcon,
-  UsersRoundIcon,
-} from "lucide-react";
-import { useState } from "react";
+  createFileRoute,
+  Link,
+  Outlet,
+  useMatchRoute,
+} from "@tanstack/react-router";
 import { toast } from "sonner";
+import { useState } from "react";
 import { Badge } from "#/shared/components/ui/badge.tsx";
-import { Button, buttonVariants } from "#/shared/components/ui/button.tsx";
+import { Button } from "#/shared/components/ui/button.tsx";
 import { Skeleton } from "#/shared/components/ui/skeleton.tsx";
 import { cn } from "#/shared/lib/utils.ts";
 import {
@@ -28,7 +23,6 @@ import {
 } from "./-queries";
 import {
   ACTIVITY_TYPE_LABELS,
-  formatBudget,
   formatDateTime,
   PUBLISH_STATUS_CHIP,
   PUBLISH_STATUS_LABELS,
@@ -45,66 +39,40 @@ export const Route = createFileRoute(
       context.queryClient.ensureQueryData(activityDetailQueryOptions(activityId)),
     ]);
   },
-  component: ActivityDetailPage,
+  component: ActivityDetailLayout,
 });
 
-/** 六个子模块目前全部只有占位页，见 -components/activity-subpage-placeholder.tsx。 */
-const SUB_MODULES: Array<{
-  to:
-    | "/project/$projectId/activity/$activityId/config"
-    | "/project/$projectId/activity/$activityId/agenda"
-    | "/project/$projectId/activity/$activityId/resources"
-    | "/project/$projectId/activity/$activityId/members"
-    | "/project/$projectId/activity/$activityId/invitations"
-    | "/project/$projectId/activity/$activityId/seating";
-  icon: LucideIcon;
-  label: string;
-  desc: string;
-}> = [
+/**
+ * 十个标签页目前只有"活动概览"是真内容，其余九个都是占位页（见各自
+ * 路由文件里的 PagePlaceholder）——先把信息架构和导航铺出来，内容
+ * 逐个替换即可，标签页的 URL 不会因为内容从占位换成真实现实现而改变。
+ */
+const TABS = [
+  { to: "/project/$projectId/activity/$activityId", label: "活动概览" },
+  { to: "/project/$projectId/activity/$activityId/config", label: "配置总览" },
+  { to: "/project/$projectId/activity/$activityId/agenda", label: "议程 / 环节" },
+  { to: "/project/$projectId/activity/$activityId/venue", label: "场地空间" },
+  { to: "/project/$projectId/activity/$activityId/resources", label: "资源需求" },
   {
-    to: "/project/$projectId/activity/$activityId/config",
-    icon: LayoutGridIcon,
-    label: "配置中心",
-    desc: "配置项完成情况总览",
+    to: "/project/$projectId/activity/$activityId/resource-ledger",
+    label: "资源台账",
   },
+  { to: "/project/$projectId/activity/$activityId/members", label: "活动人员" },
   {
-    to: "/project/$projectId/activity/$activityId/agenda",
-    icon: CalendarClockIcon,
-    label: "议程 / 环节",
-    desc: "按时间自动生成串并行",
+    to: "/project/$projectId/activity/$activityId/registration",
+    label: "报名审核",
   },
-  {
-    to: "/project/$projectId/activity/$activityId/resources",
-    icon: PackageIcon,
-    label: "资源需求",
-    desc: "用车 / 用餐 / 住宿 / 物料",
-  },
-  {
-    to: "/project/$projectId/activity/$activityId/members",
-    icon: UsersRoundIcon,
-    label: "活动人员",
-    desc: "来源 / 分组 / 负责人",
-  },
-  {
-    to: "/project/$projectId/activity/$activityId/invitations",
-    icon: MailIcon,
-    label: "邀请函",
-    desc: "生成、下载、提醒记录",
-  },
-  {
-    to: "/project/$projectId/activity/$activityId/seating",
-    icon: ClipboardListIcon,
-    label: "排位",
-    desc: "场地库 + 排位方案",
-  },
-];
+  { to: "/project/$projectId/activity/$activityId/invitations", label: "邀请函" },
+  { to: "/project/$projectId/activity/$activityId/seating", label: "排位" },
+] as const;
 
-function ActivityDetailPage() {
+function ActivityDetailLayout() {
   const { projectId: projectIdParam, activityId: activityIdParam } =
     Route.useParams();
   const projectId = Number(projectIdParam);
   const activityId = Number(activityIdParam);
   const queryClient = useQueryClient();
+  const matchRoute = useMatchRoute();
 
   const [formOpen, setFormOpen] = useState(false);
 
@@ -130,102 +98,82 @@ function ActivityDetailPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-6">
-      <div>
+    <div className="flex flex-1 flex-col gap-4">
+      <nav className="flex items-center gap-1.5 text-muted-foreground text-sm">
+        <Link to="/project/list" className="hover:text-foreground hover:underline">
+          项目管理
+        </Link>
+        <span>/</span>
         <Link
           to="/project/$projectId"
           params={{ projectId: projectIdParam }}
-          className={cn(
-            buttonVariants({ variant: "ghost", size: "sm" }),
-            "-ml-2 mb-2",
-          )}
+          className="hover:text-foreground hover:underline"
         >
-          <ArrowLeftIcon />
-          返回项目详情
+          {project?.name ?? "-"}
         </Link>
+        <span>/</span>
+        <span>活动详情</span>
+      </nav>
 
-        <div className="flex flex-col gap-4 rounded-lg border bg-card p-5 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="flex flex-col gap-1.5">
-              <p className="text-muted-foreground text-xs">
-                所属项目：{project?.name ?? "-"}
-              </p>
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="font-semibold text-xl tracking-tight">
-                  {activity.name}
-                </h1>
-                <Badge variant="outline">
-                  {ACTIVITY_TYPE_LABELS[activity.activityType]}
-                </Badge>
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "border",
-                    PUBLISH_STATUS_CHIP[activity.publishStatus],
-                  )}
-                >
-                  {PUBLISH_STATUS_LABELS[activity.publishStatus]}
-                </Badge>
-                <Badge variant="outline">
-                  {activity.displayEnabled ? "H5 展示开启" : "H5 展示关闭"}
-                </Badge>
-                <Badge variant="outline">
-                  {activity.registrationEnabled ? "报名开启" : "报名关闭"}
-                </Badge>
-              </div>
-              <p className="text-muted-foreground text-sm">
-                {activity.location || "未填写地点"} ·{" "}
-                {formatDateTime(activity.startTime)} ~{" "}
-                {formatDateTime(activity.endTime)}
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => setFormOpen(true)}>
-              编辑活动信息
-            </Button>
-          </div>
-
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
-            <InfoRow label="主办单位">{activity.hostOrg || "-"}</InfoRow>
-            <InfoRow label="承办单位">{activity.organizerOrg || "-"}</InfoRow>
-            <InfoRow label="支持单位">{activity.supportOrg || "-"}</InfoRow>
-            <InfoRow label="指导单位">{activity.guidingOrg || "-"}</InfoRow>
-            <InfoRow label="总预算">{formatBudget(activity.totalBudget)}</InfoRow>
-          </dl>
-
-          {activity.description && (
-            <p className="whitespace-pre-wrap text-muted-foreground text-sm leading-relaxed">
-              {activity.description}
-            </p>
-          )}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h1 className="font-semibold text-xl tracking-tight">
+            活动：{activity.name}
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            {ACTIVITY_TYPE_LABELS[activity.activityType]} ·{" "}
+            {activity.location || "未填写地点"} ·{" "}
+            {formatDateTime(activity.startTime)} 至{" "}
+            {formatDateTime(activity.endTime)}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            to="/project/$projectId"
+            params={{ projectId: projectIdParam }}
+            className="text-primary text-sm hover:underline"
+          >
+            返回项目详情
+          </Link>
+          <Button variant="outline" size="sm" onClick={() => setFormOpen(true)}>
+            编辑活动
+          </Button>
+          <Badge
+            variant="outline"
+            className={cn("border", PUBLISH_STATUS_CHIP[activity.publishStatus])}
+          >
+            {PUBLISH_STATUS_LABELS[activity.publishStatus]}
+          </Badge>
+          <ToggleTag active={activity.displayEnabled} onLabel="H5 展示开启" offLabel="H5 展示关闭" />
+          <ToggleTag active={activity.registrationEnabled} onLabel="报名开启" offLabel="报名关闭" />
         </div>
       </div>
 
-      <div>
-        <h2 className="mb-3 font-semibold text-lg tracking-tight">子模块</h2>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {SUB_MODULES.map((module) => (
+      <div className="flex gap-1 overflow-x-auto border-b">
+        {TABS.map((tab) => {
+          const isActive = !!matchRoute({
+            to: tab.to,
+            params: { projectId: projectIdParam, activityId: activityIdParam },
+          });
+          return (
             <Link
-              key={module.to}
-              to={module.to}
+              key={tab.to}
+              to={tab.to}
               params={{ projectId: projectIdParam, activityId: activityIdParam }}
-              className="flex items-center gap-3 rounded-lg border bg-card p-4 shadow-sm transition-colors hover:bg-muted/50"
+              className={cn(
+                "shrink-0 whitespace-nowrap border-b-2 px-3 py-2.5 font-medium text-sm transition-colors",
+                isActive
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
             >
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <module.icon className="size-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="font-medium text-sm">{module.label}</div>
-                <p className="truncate text-muted-foreground text-xs">
-                  {module.desc}
-                </p>
-              </div>
-              <span className="shrink-0 text-muted-foreground text-xs">
-                未建设
-              </span>
+              {tab.label}
             </Link>
-          ))}
-        </div>
+          );
+        })}
       </div>
+
+      <Outlet />
 
       <ActivityFormDialog
         open={formOpen}
@@ -238,17 +186,26 @@ function ActivityDetailPage() {
   );
 }
 
-function InfoRow({
-  label,
-  children,
+function ToggleTag({
+  active,
+  onLabel,
+  offLabel,
 }: {
-  label: string;
-  children: React.ReactNode;
+  active: boolean;
+  onLabel: string;
+  offLabel: string;
 }) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <dt className="text-muted-foreground text-xs">{label}</dt>
-      <dd className="truncate">{children}</dd>
-    </div>
+    <Badge
+      variant="outline"
+      className={cn(
+        "border",
+        active
+          ? "border-success/30 bg-success/10 text-success-foreground"
+          : "border-border bg-muted text-muted-foreground",
+      )}
+    >
+      {active ? onLabel : offLabel}
+    </Badge>
   );
 }
