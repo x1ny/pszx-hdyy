@@ -4,6 +4,7 @@ import { exampleRoutes } from "./modules/example/routes";
 import { fileRoutes } from "./modules/file/routes";
 import { invitationRoutes } from "./modules/invitation/routes";
 import { memberRoutes } from "./modules/member/routes";
+import { projectRoutes } from "./modules/project/routes";
 import { supplierRoutes } from "./modules/supplier/routes";
 import { err } from "./shared/result";
 
@@ -22,7 +23,8 @@ const routes = app
   .route("/", supplierRoutes)
   .route("/", memberRoutes)
   .route("/", invitationRoutes)
-  .route("/", fileRoutes);
+  .route("/", fileRoutes)
+  .route("/", projectRoutes);
 
 // Catches anything a handler didn't turn into a `code`, i.e. a real crash —
 // the one case where the response legitimately isn't a business outcome.
