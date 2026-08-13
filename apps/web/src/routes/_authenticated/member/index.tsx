@@ -40,7 +40,7 @@ import {
   TableRow,
 } from "#/shared/components/ui/table.tsx";
 import { cn } from "#/shared/lib/utils.ts";
-import { MemberDetailSheet } from "./-components/member-detail-sheet";
+import { MemberDetailDialog } from "./-components/member-detail-dialog";
 import { MemberFormDialog } from "./-components/member-form-dialog";
 import {
   type Member,
@@ -419,7 +419,7 @@ function MemberPage() {
         onSubmit={(values) => saveMutation.mutate(values)}
       />
 
-      <MemberDetailSheet
+      <MemberDetailDialog
         member={detail}
         onOpenChange={(open) => {
           if (!open) setDetail(undefined);

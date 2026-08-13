@@ -1,11 +1,11 @@
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "#/shared/components/ui/sheet.tsx";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "#/shared/components/ui/dialog.tsx";
 import type { Supplier } from "../-queries";
 import {
   CATEGORY_BADGE_CLASS,
@@ -14,30 +14,30 @@ import {
   formatDateTime,
 } from "../-utils";
 
-type SupplierDetailSheetProps = {
+type SupplierDetailDialogProps = {
   supplier?: Supplier;
   onOpenChange: (open: boolean) => void;
 };
 
-export function SupplierDetailSheet({
+export function SupplierDetailDialog({
   supplier,
   onOpenChange,
-}: SupplierDetailSheetProps) {
+}: SupplierDetailDialogProps) {
   return (
-    <Sheet open={!!supplier} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full gap-0 sm:max-w-md">
+    <Dialog open={!!supplier} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         {supplier && (
           <>
-            <SheetHeader>
-              <SheetTitle>{supplier.name}</SheetTitle>
-              <SheetDescription>
+            <DialogHeader>
+              <DialogTitle>{supplier.name}</DialogTitle>
+              <DialogDescription>
                 {[supplier.city, supplier.contactPerson]
                   .filter(Boolean)
                   .join(" · ") || "暂无联系信息"}
-              </SheetDescription>
-            </SheetHeader>
+              </DialogDescription>
+            </DialogHeader>
 
-            <div className="flex flex-col gap-6 overflow-y-auto px-4 pb-6">
+            <div className="flex flex-col gap-6">
               <Section title="服务类目">
                 <div className="flex flex-wrap gap-1.5">
                   {supplier.serviceCategories.length ? (
@@ -92,8 +92,8 @@ export function SupplierDetailSheet({
             </div>
           </>
         )}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
 

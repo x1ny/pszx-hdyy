@@ -51,7 +51,7 @@ import {
   TableRow,
 } from "#/shared/components/ui/table.tsx";
 import { cn } from "#/shared/lib/utils.ts";
-import { SupplierDetailSheet } from "./-components/supplier-detail-sheet";
+import { SupplierDetailDialog } from "./-components/supplier-detail-dialog";
 import { SupplierFormDialog } from "./-components/supplier-form-dialog";
 import {
   type Supplier,
@@ -517,7 +517,7 @@ function SupplierPage() {
         onSubmit={(values) => saveMutation.mutate(values)}
       />
 
-      <SupplierDetailSheet
+      <SupplierDetailDialog
         supplier={detail}
         onOpenChange={(open) => {
           if (!open) setDetail(undefined);

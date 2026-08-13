@@ -39,7 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from "#/shared/components/ui/table.tsx";
-import { BatchDetailSheet } from "./-components/batch-detail-sheet";
+import { BatchDetailDialog } from "./-components/batch-detail-dialog";
 import {
   type InvitationBatchListItem,
   deleteInvitationBatch,
@@ -328,7 +328,7 @@ function BatchPage() {
         </div>
       </div>
 
-      <BatchDetailSheet
+      <BatchDetailDialog
         batch={detailQuery.data}
         loading={detailId !== undefined && detailQuery.isPending}
         onOpenChange={(open) => {

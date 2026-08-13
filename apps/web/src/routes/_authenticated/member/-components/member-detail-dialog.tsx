@@ -1,38 +1,38 @@
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "#/shared/components/ui/sheet.tsx";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "#/shared/components/ui/dialog.tsx";
 import type { Member } from "../-queries";
 import { MEMBER_STATUS_CHIP, MEMBER_STATUS_LABELS, formatDateTime } from "../-utils";
 
-type MemberDetailSheetProps = {
+type MemberDetailDialogProps = {
   member?: Member;
   onOpenChange: (open: boolean) => void;
 };
 
-export function MemberDetailSheet({
+export function MemberDetailDialog({
   member,
   onOpenChange,
-}: MemberDetailSheetProps) {
+}: MemberDetailDialogProps) {
   return (
-    <Sheet open={!!member} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full gap-0 sm:max-w-lg">
+    <Dialog open={!!member} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         {member && (
           <>
-            <SheetHeader>
+            <DialogHeader>
               <div className="flex items-center gap-3">
                 <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 font-semibold text-primary text-lg">
                   {member.name.slice(0, 1) || "?"}
                 </div>
                 <div className="min-w-0">
-                  <SheetTitle className="truncate">{member.name}</SheetTitle>
-                  <SheetDescription className="truncate">
+                  <DialogTitle className="truncate">{member.name}</DialogTitle>
+                  <DialogDescription className="truncate">
                     {member.companyPosition || "暂无职务信息"}
-                  </SheetDescription>
+                  </DialogDescription>
                 </div>
               </div>
               <div className="flex items-center gap-2 pt-1">
@@ -41,9 +41,9 @@ export function MemberDetailSheet({
                   参与活动 {member.activityCount} 次
                 </span>
               </div>
-            </SheetHeader>
+            </DialogHeader>
 
-            <div className="flex flex-col gap-6 overflow-y-auto px-4 pb-6">
+            <div className="flex flex-col gap-6">
               <Section title="基本信息">
                 <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 text-sm">
                   <Row label="姓名">{member.name || "-"}</Row>
@@ -93,8 +93,8 @@ export function MemberDetailSheet({
             </div>
           </>
         )}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
 

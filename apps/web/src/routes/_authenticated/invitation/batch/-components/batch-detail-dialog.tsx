@@ -3,16 +3,10 @@ import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "#/shared/components/ui/dialog.tsx";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "#/shared/components/ui/sheet.tsx";
 import {
   Table,
   TableBody,
@@ -36,13 +30,13 @@ const RESPONSE_STATUS_LABELS: Record<InvitationBatchItem["responseStatus"], stri
   declined: "已拒绝",
 };
 
-type BatchDetailSheetProps = {
+type BatchDetailDialogProps = {
   batch?: InvitationBatch;
   loading?: boolean;
   onOpenChange: (open: boolean) => void;
 };
 
-export function BatchDetailSheet({ batch, loading, onOpenChange }: BatchDetailSheetProps) {
+export function BatchDetailDialog({ batch, loading, onOpenChange }: BatchDetailDialogProps) {
   const [previewItem, setPreviewItem] = useState<InvitationBatchItem>();
   const [downloadingId, setDownloadingId] = useState<number>();
 
@@ -65,20 +59,20 @@ export function BatchDetailSheet({ batch, loading, onOpenChange }: BatchDetailSh
 
   return (
     <>
-      <Sheet open={!!batch || !!loading} onOpenChange={onOpenChange}>
-        <SheetContent className="w-full gap-0 sm:max-w-2xl">
+      <Dialog open={!!batch || !!loading} onOpenChange={onOpenChange}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
           {loading || !batch ? (
             <div className="p-6 text-center text-muted-foreground">加载中...</div>
           ) : (
             <>
-              <SheetHeader>
-                <SheetTitle>{batch.batchNo}</SheetTitle>
-                <SheetDescription>
+              <DialogHeader>
+                <DialogTitle>{batch.batchNo}</DialogTitle>
+                <DialogDescription>
                   {batch.templateName} · {ISSUER_LABELS[batch.issuer]}
-                </SheetDescription>
-              </SheetHeader>
+                </DialogDescription>
+              </DialogHeader>
 
-              <div className="flex flex-col gap-6 overflow-y-auto px-4 pb-6">
+              <div className="flex flex-col gap-6">
                 <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 text-sm">
                   <dt className="text-muted-foreground">生成数量</dt>
                   <dd className="text-right">{batch.itemCount}</dd>
@@ -137,8 +131,8 @@ export function BatchDetailSheet({ batch, loading, onOpenChange }: BatchDetailSh
               </div>
             </>
           )}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!previewItem} onOpenChange={(open) => !open && setPreviewItem(undefined)}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
