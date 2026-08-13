@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>项目列表</title>
+  <link rel="stylesheet" href="../assets/css/common.css">
+  <link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body>
+  <div class="page-shell">
+    <aside class="side-nav"></aside>
+    <main class="main">
+      <header class="topbar">
+        <div><b>项目管理</b><br><small>项目查询、新增、上架、下架</small></div>
+        <span data-role-label></span>
+      </header>
+      <section class="content">
+        <div class="page-title">
+          <div>
+            <div class="breadcrumb">首页 / 项目管理</div>
+            <h1>项目列表</h1>
+            <p>共 3 个项目 · 已上架 1 个 · 未发布 1 个 · 已下架 1 个</p>
+          </div>
+          <button class="btn primary" onclick="openModal('projectModal')">新增项目</button>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>查询条件</h2>
+            <div class="toolbar"><button class="btn">重置</button><button class="btn primary" data-toast="已按条件查询">查询</button></div>
+          </div>
+          <div class="panel-body filters">
+            <div class="field"><label>关键字</label><input class="input" value="数字服务"></div>
+            <div class="field"><label>项目状态</label><select class="select"><option>全部</option><option>未发布</option><option>已上架</option><option>已下架</option></select></div>
+            <div class="field"><label>开始时间</label><input class="input" type="date"></div>
+            <div class="field"><label>结束时间</label><input class="input" type="date"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>项目数据</h2>
+            <span class="muted">共 3 条，每页 10 条</span>
+          </div>
+          <table class="table">
+            <thead><tr><th>项目名称</th><th>地点</th><th>时间</th><th>预算</th><th>活动数</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody data-project-rows></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="projectModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>新增项目</b><button class="btn ghost" onclick="closeModal('projectModal')">关闭</button></div>
+      <div class="modal-body mini-form">
+        <div class="field"><label>项目名称</label><input class="input" value="2026 合作伙伴交流项目"></div>
+        <div class="field"><label>项目地点</label><input class="input" value="福州"></div>
+        <div class="field"><label>开始时间</label><input class="input" type="date" value="2026-09-18"></div>
+        <div class="field"><label>结束时间</label><input class="input" type="date" value="2026-09-20"></div>
+        <div class="field"><label>总预算</label><input class="input" value="860000"></div>
+        <div class="field"><label>主办单位</label><input class="input" value="品尚征信"></div>
+        <div class="field"><label>承办单位</label><input class="input" value="智能活动运营组"></div>
+        <div class="field"><label>支持单位</label><input class="input" value="福州市数字经济协会"></div>
+        <div class="field"><label>指导单位</label><input class="input" value="福建省数据管理局"></div>
+        <div class="field" style="grid-column:1/-1"><label>项目简介</label><textarea>面向合作伙伴和重点客户的年度项目。</textarea></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" onclick="closeModal('projectModal')">取消</button>
+        <button class="btn" onclick="closeModal('projectModal');toast('项目已保存')">保存</button>
+        <a class="btn primary" href="project-detail.html">保存并进入详情</a>
+      </div>
+    </div>
+  </div>
+  <script src="../assets/js/mock-data.js"></script>
+  <script src="../assets/js/admin.js"></script>
+</body>
+</html>

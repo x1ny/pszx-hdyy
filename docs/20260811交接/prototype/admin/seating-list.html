@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>排位方案列表</title>
+  <link rel="stylesheet" href="../assets/css/common.css">
+  <link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body>
+  <div class="page-shell">
+    <aside class="side-nav"></aside>
+    <main class="main">
+      <header class="topbar">
+        <div><b>排位方案列表</b><br><small>按活动环节管理排位方案</small></div>
+        <span data-role-label></span>
+      </header>
+      <section class="content">
+        <div class="page-title">
+          <div>
+            <div class="breadcrumb">排位管理 / 排位方案</div>
+            <h1>排位方案列表</h1>
+            <p>泉州纺织服装时尚周开幕秀 · 按环节管理排位方案</p>
+          </div>
+          <div class="toolbar">
+            <a class="btn" href="agenda-timeline.html?projectId=1&activityId=101">返回议程/环节</a>
+            <a class="btn" href="activity-space.html?projectId=1&activityId=101">活动空间</a>
+            <a class="btn primary" href="seating-canvas.html?projectId=1&activityId=101">进入当前排位画布</a>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>筛选</h2><div class="toolbar"><button class="btn">待处理</button><button class="btn">全部</button></div></div>
+          <div class="panel-body filters">
+            <div class="field"><label>项目</label><input class="input" value="泉州纺织服装时尚周主项目"></div>
+            <div class="field"><label>活动</label><input class="input" value="泉州纺织服装时尚周开幕秀"></div>
+            <div class="field"><label>环节</label><input class="input" placeholder="环节名称"></div>
+            <div class="field"><label>状态</label><select class="select"><option>全部</option><option>未配置</option><option>待确认</option><option>已确认</option><option>已退回</option><option>已作废</option></select></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>方案数据<span class="hint-dot" title="排位方案按环节独立保存，确认后 H5 才展示本人座位。">?</span></h2><span class="muted">3 条</span></div>
+          <table class="table">
+            <thead><tr><th>活动</th><th>环节</th><th>排位来源</th><th>引用活动区域</th><th>状态</th><th>保存人</th><th>保存时间</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td>泉州纺织服装时尚周开幕秀</td><td>开幕式</td><td>环节开启排位</td><td>主秀场 A 区</td><td><span class="tag green">已确认</span></td><td>运营人员A</td><td>2026-08-06 18:10</td><td><a class="btn" href="seating-canvas.html?projectId=1&activityId=101">查看画布</a></td></tr>
+              <tr><td>泉州纺织服装时尚周开幕秀</td><td>开幕大秀</td><td>环节开启排位</td><td>主秀场 A 区</td><td><span class="tag amber">待确认</span></td><td>运营人员A</td><td>2026-08-07 14:20</td><td><div class="toolbar"><a class="btn primary" href="seating-canvas.html?projectId=1&activityId=101">进入画布</a><a class="btn" href="seating-confirm.html?projectId=1&activityId=101">确认</a></div></td></tr>
+              <tr><td>泉州纺织服装时尚周开幕秀</td><td>设计师品牌展演</td><td>环节开启排位</td><td>6号馆 A 区</td><td><span class="tag gray">未配置</span></td><td>-</td><td>-</td><td><div class="toolbar"><a class="btn" href="activity-space.html?projectId=1&activityId=101">选择区域</a><a class="btn primary" href="seating-canvas.html?projectId=1&activityId=101">进入画布</a></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="../assets/js/mock-data.js"></script>
+  <script src="../assets/js/admin.js"></script>
+</body>
+</html>

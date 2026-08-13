@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>活动资源台账</title>
+  <link rel="stylesheet" href="../assets/css/common.css">
+  <link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body>
+  <div class="page-shell">
+    <aside class="side-nav"></aside>
+    <main class="main">
+      <header class="topbar">
+        <div><b>活动资源台账</b><br><small>活动级统一维护具体资源安排</small></div>
+        <span data-role-label></span>
+      </header>
+      <section class="content">
+        <div class="page-title">
+          <div>
+            <div class="breadcrumb">项目管理 / 2026 数字服务生态大会 / 主论坛暨新品发布 / 活动资源台账</div>
+            <h1>活动资源台账：主论坛暨新品发布</h1>
+            <p>所属活动：主论坛暨新品发布 · 用车、用餐、住宿、物料安排</p>
+          </div>
+          <div class="toolbar">
+            <a class="btn" href="activity-detail.html">返回活动详情</a>
+            <a class="btn" href="resource-summary.html">返回资源需求</a>
+            <button class="btn primary" onclick="openModal('resourceModal')">新增资源安排</button>
+          </div>
+        </div>
+
+        <div class="grid cols-4">
+          <div class="stat"><span>用车安排</span><b>2</b><p class="muted">同一需求可拆多车/多班次</p></div>
+          <div class="stat"><span>用餐安排</span><b>1</b><p class="muted">可绑定人员或分组</p></div>
+          <div class="stat"><span>住宿安排</span><b>1</b><p class="muted">房间安排与入住时间</p></div>
+          <div class="stat"><span>物料记录</span><b>1</b><p class="muted">数量、地点、负责人</p></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>查询条件</h2><div class="toolbar"><button class="btn">重置</button><button class="btn primary">查询</button></div></div>
+          <div class="panel-body filters">
+            <div class="field"><label>资源类型</label><select class="select"><option>全部</option><option>用车</option><option>用餐</option><option>住宿</option><option>物料</option></select></div>
+            <div class="field"><label>用车场景</label><select class="select"><option>全部</option><option>活动用车</option><option>到达接送</option><option>离开送站</option></select></div>
+            <div class="field"><label>关联需求</label><input class="input" value="主题演讲"></div>
+            <div class="field"><label>状态</label><select class="select"><option>正常</option><option>作废</option></select></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>资源记录<span class="hint-dot" title="用车、用餐、住宿可绑定活动人员；物料记录数量、地点和负责人。">?</span></h2>
+            <div class="toolbar">
+              <button class="btn" onclick="openModal('resourceModal')">新增用车</button>
+              <button class="btn" onclick="openModal('resourceModal')">新增用餐</button>
+              <button class="btn" onclick="openModal('resourceModal')">新增住宿</button>
+              <button class="btn" onclick="openModal('resourceModal')">新增物料</button>
+            </div>
+          </div>
+          <table class="table">
+            <thead><tr><th>类型/场景</th><th>资源名称/来源</th><th>关联需求</th><th>时间</th><th>地点</th><th>绑定人数</th><th>车辆</th><th>司机</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody data-resource-rows></tbody>
+          </table>
+        </div>
+
+      </section>
+    </main>
+  </div>
+
+  <div id="resourceModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>新增/编辑资源安排</b><button class="btn ghost" onclick="closeModal('resourceModal')">关闭</button></div>
+      <div class="modal-body">
+        <div class="mini-form">
+          <div class="field"><label>资源类型</label><select class="select"><option>用车</option><option>用餐</option><option>住宿</option><option>物料</option></select></div>
+          <div class="field"><label>资源场景</label><select class="select"><option>到达接送</option><option>离开送站</option><option>活动用车</option><option>活动保障</option><option>活动通用</option></select></div>
+          <div class="field"><label>资源名称</label><input class="input" value="机场接送一号车"></div>
+          <div class="field"><label>关联资源需求</label><select class="select"><option>主题演讲 / 嘉宾到达接送</option><option>闭幕交流 / 轻食茶歇</option><option>活动通用</option></select></div>
+          <div class="field"><label>安排批次</label><input class="input" value="第 1 车 / 可继续新增第 2 车"></div>
+          <div class="field"><label>使用时间</label><input class="input" value="2026-09-17 20:30"></div>
+          <div class="field"><label>地点/集合点</label><input class="input" value="长乐机场 T2 到达口"></div>
+          <div class="field"><label>供应商/服务方</label><input class="input" value="福州顺达会务用车"></div>
+          <div class="field"><label>负责人</label><input class="input" value="运营人员A"></div>
+          <div class="field"><label>车辆信息</label><input class="input" value="闽A D2638"></div>
+          <div class="field"><label>司机信息</label><input class="input" value="许师傅 13900008621"></div>
+          <div class="field" style="grid-column:1/-1"><label>备注</label><textarea>可记录接送路线、候车点、车辆容量、特殊说明。车辆和司机非必填，有则展示给 H5 用户。</textarea></div>
+        </div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('resourceModal')">取消</button><button class="btn primary" onclick="closeModal('resourceModal');toast('资源安排已保存，可继续绑定人员')">保存安排</button><button class="btn" onclick="closeModal('resourceModal');openModal('bindModal')">保存并绑定人员</button><a class="btn" href="resource-summary.html">返回资源需求</a></div>
+    </div>
+  </div>
+
+  <div id="bindModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>绑定活动人员 <span class="hint-dot" title="选择人员后自动带出已有到离行程，用于核对用车时间和地点。">?</span></b><button class="btn ghost" onclick="closeModal('bindModal')">关闭</button></div>
+      <div class="modal-body">
+        <table class="table">
+          <thead><tr><th>人员</th><th>联系方式</th><th>活动关系</th><th>自动带出的到离行程</th><th>选择</th></tr></thead>
+          <tbody>
+            <tr><td>陈明远</td><td>138****1234</td><td>嘉宾 / 主题演讲</td><td>来程 09-17 20:30 长乐机场 T2</td><td><input type="checkbox" checked></td></tr>
+            <tr><td>林若溪</td><td>138****1234</td><td>嘉宾 / 主题演讲</td><td>来程 09-17 20:45 长乐机场 T2</td><td><input type="checkbox" checked></td></tr>
+            <tr><td>Michael Tan</td><td>139****5678</td><td>演讲嘉宾 / 分论坛 A</td><td>返程 09-20 11:20 长乐机场 T2</td><td><input type="checkbox"></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('bindModal')">取消</button><button class="btn primary" onclick="closeModal('bindModal');toast('已绑定人员，H5 将展示本人服务安排')">确认绑定</button></div>
+    </div>
+  </div>
+  <script src="../assets/js/mock-data.js"></script>
+  <script src="../assets/js/admin.js"></script>
+</body>
+</html>

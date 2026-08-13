@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>活动详情</title>
+  <link rel="stylesheet" href="../assets/css/common.css">
+  <link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body>
+  <div class="page-shell">
+    <aside class="side-nav"></aside>
+    <main class="main">
+      <header class="topbar">
+        <div><b>活动详情</b><br><small>所属项目：泉州纺织服装时尚周主项目</small></div>
+        <span data-role-label></span>
+      </header>
+      <section class="content">
+        <div class="page-title">
+          <div>
+            <div class="breadcrumb">项目管理 / 泉州纺织服装时尚周主项目 / 活动详情</div>
+            <h1>活动：泉州纺织服装时尚周开幕秀</h1>
+            <p>自主策划 · 海丝艺术公园主秀场 · 2026-11-18 19:30 至 2026-11-18 21:30</p>
+          </div>
+          <div class="toolbar">
+            <a class="btn" href="project-detail.html?projectId=1">返回项目详情</a>
+            <button class="btn" onclick="openModal('activityEditModal')">编辑活动</button>
+            <span class="tag green">已上架</span>
+            <span class="tag green">H5 展示开启</span>
+            <span class="tag green">报名开启</span>
+          </div>
+        </div>
+
+        <div class="grid cols-3">
+          <a class="stat" href="activity-config.html?projectId=1&activityId=101"><span>配置中心</span><b>6/8 项</b><p class="muted">已配置项 / 总项</p></a>
+          <a class="stat" href="agenda-timeline.html?projectId=1&activityId=101"><span>议程/环节</span><b>5</b><p class="muted">主线 + 并行线</p></a>
+          <a class="stat" href="resource-summary.html?projectId=1&activityId=101"><span>资源需求</span><b>3</b><p class="muted">处理方式与落实状态</p></a>
+          <a class="stat" href="activity-members.html?projectId=1&activityId=101"><span>活动人员</span><b>126</b><p class="muted">来源、分组、负责人</p></a>
+          <a class="stat" href="invitation-records.html?projectId=1&activityId=101"><span>邀请函</span><b>82</b><p class="muted">待提醒 1 批</p></a>
+          <a class="stat" href="seating-confirm.html?projectId=1&activityId=101"><span>排位</span><b>1</b><p class="muted">待确认</p></a>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>活动基础信息<span class="hint-dot" title="活动创建字段和媒体配置需在详情页完整展示。">?</span></h2>
+            <span class="tag green">已配置</span>
+          </div>
+          <div class="panel-body grid cols-4">
+            <div><b>活动类型</b><p>自主策划</p></div>
+            <div><b>活动名称</b><p>泉州纺织服装时尚周开幕秀</p></div>
+            <div><b>活动地点</b><p>海丝艺术公园主秀场</p></div>
+            <div><b>总预算</b><p>￥520,000</p></div>
+            <div><b>开始时间</b><p>2026-11-18 19:30</p></div>
+            <div><b>结束时间</b><p>2026-11-18 21:30</p></div>
+            <div><b>主办单位</b><p>泉州时尚周组委会</p></div>
+            <div><b>承办单位</b><p>时尚周活动运营中心</p></div>
+            <div><b>支持单位</b><p>泉州市服装设计协会</p></div>
+            <div><b>指导单位</b><p>泉州市商务局</p></div>
+            <div><b>发布状态</b><p>已上架</p></div>
+            <div><b>H5 展示</b><p>开启</p></div>
+            <div><b>报名开关</b><p>开启</p></div>
+            <div style="grid-column:1/-1"><b>活动简介</b><p>时尚周开幕发布、嘉宾观秀和品牌亮相活动。活动上架且展示开启后，H5 展示活动详情；报名开启后展示报名入口。</p></div>
+          </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-head">
+              <h2>活动图片/视频</h2>
+              <button class="btn" onclick="openModal('activityEditModal')">编辑媒体</button>
+            </div>
+            <div class="panel-body">
+              <div class="media-preview">
+                <div class="media-cover">开幕秀舞台封面图</div>
+                <div class="media-list">
+                  <div class="file-card"><div><b>封面图</b><p class="muted">用于 H5 活动列表和详情头图</p></div><span class="tag green">已配置</span></div>
+                  <div class="file-card"><div><b>活动展示图</b><p class="muted">3 张，H5 详情轮播展示</p></div><span class="tag green">已配置</span></div>
+                  <div class="file-card"><div><b>活动视频</b><p class="muted">1 个，用于 H5 详情展示</p></div><span class="tag green">已配置</span></div>
+                </div>
+              </div>
+            </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div id="activityEditModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>编辑活动信息</b><button class="btn ghost" onclick="closeModal('activityEditModal')">关闭</button></div>
+      <div class="modal-body mini-form">
+        <div class="field"><label>活动类型</label><select class="select"><option>自主策划</option><option>配套活动</option></select></div>
+        <div class="field"><label>活动名称</label><input class="input" value="泉州纺织服装时尚周开幕秀"></div>
+        <div class="field"><label>活动地点</label><input class="input" value="海丝艺术公园主秀场"></div>
+        <div class="field"><label>总预算</label><input class="input" value="520000"></div>
+        <div class="field"><label>开始时间</label><input class="input" value="2026-11-18 19:30"></div>
+        <div class="field"><label>结束时间</label><input class="input" value="2026-11-18 21:30"></div>
+        <div class="field"><label>主办单位</label><input class="input" value="泉州时尚周组委会"></div>
+        <div class="field"><label>承办单位</label><input class="input" value="时尚周活动运营中心"></div>
+        <div class="field"><label>支持单位</label><input class="input" value="泉州市服装设计协会"></div>
+        <div class="field"><label>指导单位</label><input class="input" value="泉州市商务局"></div>
+        <div class="field"><label>发布状态</label><select class="select"><option>已上架</option><option>未发布</option><option>已下架</option></select></div>
+        <div class="field"><label>H5 展示</label><select class="select"><option>开启</option><option>关闭</option></select></div>
+        <div class="field"><label>报名开关</label><select class="select"><option>开启</option><option>关闭</option></select></div>
+        <div class="field"><label>图片/视频</label><button class="btn">上传媒体</button></div>
+        <div class="field" style="grid-column:1/-1"><label>活动简介</label><textarea>时尚周开幕发布、嘉宾观秀和品牌亮相活动。</textarea></div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('activityEditModal')">取消</button><button class="btn primary" onclick="closeModal('activityEditModal');toast('活动信息已保存')">保存活动信息</button></div>
+    </div>
+  </div>
+  <script src="../assets/js/mock-data.js"></script>
+  <script src="../assets/js/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>活动列表</title>
+  <link rel="stylesheet" href="../assets/css/common.css">
+  <link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body>
+  <div class="page-shell">
+    <aside class="side-nav"></aside>
+    <main class="main">
+      <header class="topbar">
+        <div><b>活动列表</b><br><small>项目下活动管理</small></div>
+        <span data-role-label></span>
+      </header>
+      <section class="content">
+        <div class="page-title">
+          <div>
+            <div class="breadcrumb">项目管理 / 项目详情 / 活动列表</div>
+            <h1>活动列表</h1>
+            <p>泉州纺织服装时尚周主项目 · 共 2 个活动</p>
+          </div>
+          <button class="btn primary" onclick="openModal('activityModal')">新增活动</button>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>查询条件</h2><div class="toolbar"><button class="btn">重置</button><button class="btn primary">查询</button></div></div>
+          <div class="panel-body filters">
+            <div class="field"><label>所属项目</label><input class="input" value="泉州纺织服装时尚周主项目"></div>
+            <div class="field"><label>活动名称</label><input class="input" value=""></div>
+            <div class="field"><label>活动类型</label><select class="select"><option>全部</option><option>自主策划</option><option>配套活动</option></select></div>
+            <div class="field"><label>发布状态</label><select class="select"><option>全部</option><option>未发布</option><option>已上架</option><option>已下架</option></select></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>活动数据<span class="hint-dot" title="活动详情、配置、人员、报名和排位均在活动上下文内处理。">?</span></h2><span class="muted">共 2 条，每页 10 条</span></div>
+          <table class="table">
+            <thead><tr><th>活动</th><th>所属项目</th><th>地点</th><th>时间</th><th>预算</th><th>媒体</th><th>发布状态</th><th>配置项</th><th>操作</th></tr></thead>
+            <tbody data-activity-rows></tbody>
+          </table>
+          <div class="panel-body toolbar" style="justify-content:flex-end">
+            <span class="muted">共 2 条，每页 10 条</span>
+            <button class="btn" disabled>上一页</button>
+            <button class="btn primary">1</button>
+            <button class="btn" disabled>下一页</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="activityModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>新增活动</b><button class="btn ghost" onclick="closeModal('activityModal')">关闭</button></div>
+      <div class="modal-body mini-form">
+        <div class="field"><label>所属项目</label><input class="input" value="泉州纺织服装时尚周主项目"></div>
+        <div class="field"><label>活动类型</label><select class="select"><option>自主策划</option><option>配套活动</option></select></div>
+        <div class="field"><label>活动名称</label><input class="input" value="泉州纺织服装时尚周开幕秀"></div>
+        <div class="field"><label>活动地点</label><input class="input" value="海丝艺术公园主秀场"></div>
+        <div class="field"><label>开始时间</label><input class="input" value="2026-11-18 19:30"></div>
+        <div class="field"><label>结束时间</label><input class="input" value="2026-11-18 21:30"></div>
+        <div class="field"><label>总预算</label><input class="input" value="520000"></div>
+        <div class="field"><label>主办单位</label><input class="input" value="泉州时尚周组委会"></div>
+        <div class="field"><label>承办单位</label><input class="input" value="时尚周活动运营中心"></div>
+        <div class="field"><label>支持单位</label><input class="input" value="泉州市服装设计协会"></div>
+        <div class="field"><label>指导单位</label><input class="input" value="泉州市商务局"></div>
+        <div class="field"><label>发布状态</label><select class="select"><option>未发布</option><option>已上架</option><option>已下架</option></select></div>
+        <div class="field"><label>H5 展示</label><select class="select"><option>关闭</option><option>开启</option></select></div>
+        <div class="field"><label>报名开关</label><select class="select"><option>关闭</option><option>开启</option></select></div>
+        <div class="field"><label>图片/视频</label><button class="btn">上传媒体</button></div>
+        <div class="field" style="grid-column:1/-1"><label>活动简介</label><textarea>时尚周开幕发布、嘉宾观秀和品牌亮相活动。</textarea></div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('activityModal')">取消</button><button class="btn" onclick="closeModal('activityModal');toast('活动已保存')">保存</button><a class="btn primary" href="activity-detail.html?projectId=1&activityId=101">保存并进入详情</a></div>
+    </div>
+  </div>
+  <script src="../assets/js/mock-data.js"></script>
+  <script src="../assets/js/admin.js"></script>
+</body>
+</html>

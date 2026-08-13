@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>发函文件模板</title>
+  <link rel="stylesheet" href="../assets/css/common.css">
+  <link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body>
+  <div class="page-shell">
+    <aside class="side-nav"></aside>
+    <main class="main">
+      <header class="topbar"><div><b>发函文件模板</b><br><small>配置、生成、下载邀请函文件</small></div><span data-role-label></span></header>
+      <section class="content">
+        <div class="page-title">
+          <div>
+            <div class="breadcrumb">邀请函管理 / 发函文件模板</div>
+            <h1>发函文件模板</h1>
+            <p>后台以发函文件模板为主生成 PDF/Word 邀请函；H5 展示读取同一批生成记录。</p>
+          </div>
+          <div class="toolbar">
+            <button data-manager-only class="btn primary" onclick="openModal('fileTemplateModal')">新增模板</button>
+            <a class="btn" href="invitation-records.html">查看生成记录</a>
+          </div>
+        </div>
+
+        <div class="grid cols-3">
+          <div class="stat"><span>正常模板</span><b>2</b><p class="muted">可用于生成</p></div>
+          <div class="stat"><span>最近生成</span><b>82</b><p class="muted">主论坛邀请函</p></div>
+          <div class="stat"><span>待提醒</span><b>1 批</b><p class="muted">生成后手动提醒</p></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>发函文件模板列表</h2><span class="muted">固定版式 + 文字变量</span></div>
+          <table class="table">
+            <thead><tr><th>模板名称</th><th>文件格式</th><th>版式</th><th>文字变量</th><th>状态</th><th>最近生成</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>正式邀请函模板</td><td>PDF、Word</td><td>固定版式</td><td>邀请人名称、正文内容、落款信息</td><td><span class="tag green">正常</span></td><td>2026-08-07 15:42</td>
+                <td><div class="toolbar"><button class="btn" onclick="openModal('filePreviewModal')">预览</button><button class="btn" onclick="openModal('fileTemplateModal')">编辑</button><a class="btn primary" href="invitation-generate.html">生成邀请函</a><a class="btn" href="invitation-records.html">记录</a></div></td>
+              </tr>
+              <tr>
+                <td>贵宾邀请函模板</td><td>PDF</td><td>固定版式</td><td>邀请人名称、正文内容、落款信息</td><td><span class="tag green">正常</span></td><td>2026-08-07 16:20</td>
+                <td><div class="toolbar"><button class="btn" onclick="openModal('filePreviewModal')">预览</button><button class="btn" onclick="openModal('fileTemplateModal')">编辑</button><a class="btn" href="invitation-generate.html">生成邀请函</a></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>操作链路</h2></div>
+          <div class="panel-body">
+            <div class="flow-list">
+              <div class="flow-item"><span class="flow-no">1</span><div><b>维护发函文件模板</b><p class="muted">配置邀请人名称、正文内容、落款信息和输出格式。</p></div><button class="btn" onclick="openModal('fileTemplateModal')">配置</button></div>
+              <div class="flow-item"><span class="flow-no">2</span><div><b>生成邀请函</b><p class="muted">选择活动和邀请人员范围，按发函文件模板生成文件与邀请函记录。</p></div><a class="btn primary" href="invitation-generate.html">生成</a></div>
+              <div class="flow-item"><span class="flow-no">3</span><div><b>下载与提醒</b><p class="muted">在生成记录查看人员名单、下载文件，并确认名单后发送提醒。</p></div><a class="btn" href="invitation-records.html">查看记录</a></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="fileTemplateModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>发函文件模板</b><button class="btn ghost" onclick="closeModal('fileTemplateModal')">关闭</button></div>
+      <div class="modal-body mini-form">
+        <div class="field"><label>模板名称</label><input class="input" value="正式邀请函模板"></div>
+        <div class="field"><label>支持格式</label><select class="select"><option>PDF、Word</option><option>PDF</option><option>Word</option></select></div>
+        <div class="field"><label>邀请人名称</label><input class="input" value="{姓名}"></div>
+        <div class="field"><label>落款信息</label><input class="input" value="品尚征信"></div>
+        <div class="field" style="grid-column:1/-1"><label>正文内容</label><textarea>诚邀您参加{活动名称}，期待您的莅临。</textarea></div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('fileTemplateModal')">取消</button><button data-manager-only class="btn primary" onclick="closeModal('fileTemplateModal');toast('发函文件模板已保存')">保存</button></div>
+    </div>
+  </div>
+
+  <div id="filePreviewModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>发函文件预览</b><button class="btn ghost" onclick="closeModal('filePreviewModal')">关闭</button></div>
+      <div class="modal-body"><div class="panel" style="box-shadow:none"><div class="panel-body"><h2>邀请函</h2><p>尊敬的陈明远先生：</p><p>诚邀您参加主论坛暨新品发布，期待您的莅临。</p><p style="text-align:right">品尚征信</p></div></div></div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('filePreviewModal')">关闭</button></div>
+    </div>
+  </div>
+
+  <script src="../assets/js/mock-data.js"></script>
+  <script src="../assets/js/admin.js"></script>
+</body>
+</html>

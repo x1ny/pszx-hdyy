@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>场地画布工作台</title>
+  <link rel="stylesheet" href="../assets/css/common.css">
+  <link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body>
+  <div class="page-shell">
+    <aside class="side-nav"></aside>
+    <main class="main">
+      <header class="topbar">
+        <div><b>场地画布工作台</b><br><small>可复用场地基础布局</small></div>
+        <span data-role-label></span>
+      </header>
+      <section class="content">
+        <div class="page-title">
+          <div>
+            <div class="breadcrumb">排位管理 / 场地库 / 场地画布</div>
+            <h1>福州海峡国际会展中心主会场</h1>
+            <p>区域 4 个 · 座位/点位 260 个</p>
+          </div>
+          <div class="toolbar">
+            <a class="btn" href="venue-library.html">返回场地库</a>
+            <button class="btn primary" data-toast="场地基础布局已保存">保存场地</button>
+          </div>
+        </div>
+
+        <div class="split">
+          <div class="panel">
+            <div class="panel-head"><h2>场地基础画布<span class="hint-dot" title="维护可复用区域、座位/点位和固定设施。">?</span></h2><div class="toolbar"><button class="btn">新增区域</button><button class="btn">新增点位</button><button class="btn">上传底图</button></div></div>
+            <div class="panel-body">
+              <div class="space-map venue-map">
+                <div class="zone" style="left:7%;top:10%;width:54%;height:45%;" onclick="openModal('zoneModal')">主会场 A 区<br><small>座位 120</small></div>
+                <div class="zone" style="left:66%;top:10%;width:27%;height:45%;" onclick="openModal('zoneModal')">主会场 B 区<br><small>座位 80</small></div>
+                <div class="zone" style="left:7%;top:64%;width:38%;height:24%;" onclick="openModal('zoneModal')">洽谈区<br><small>点位 36</small></div>
+                <div class="zone" style="left:52%;top:64%;width:41%;height:24%;" onclick="openModal('zoneModal')">签到/物料区<br><small>点位 24</small></div>
+              </div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>区域与设施</h2></div>
+            <table class="table">
+              <thead><tr><th>区域</th><th>类型</th><th>点位</th><th>固定设施</th><th>状态</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>主会场 A 区</td><td>座席区</td><td>120</td><td>主席台、LED 屏</td><td><span class="tag green">正常</span></td><td><button class="btn" onclick="openModal('zoneModal')">编辑</button></td></tr>
+                <tr><td>主会场 B 区</td><td>座席区</td><td>80</td><td>音响、投影</td><td><span class="tag green">正常</span></td><td><button class="btn" onclick="openModal('zoneModal')">编辑</button></td></tr>
+                <tr><td>洽谈区</td><td>功能区</td><td>36</td><td>洽谈桌</td><td><span class="tag green">正常</span></td><td><button class="btn" onclick="openModal('zoneModal')">编辑</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+    </main>
+  </div>
+
+  <div id="zoneModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>编辑区域</b><button class="btn ghost" onclick="closeModal('zoneModal')">关闭</button></div>
+      <div class="modal-body mini-form">
+        <div class="field"><label>区域名称</label><input class="input" value="主会场 A 区"></div>
+        <div class="field"><label>区域类型</label><select class="select"><option>座席区</option><option>功能区</option><option>签到区</option><option>物料区</option></select></div>
+        <div class="field"><label>座位/点位数量</label><input class="input" value="120"></div>
+        <div class="field"><label>固定设施</label><input class="input" value="主席台、LED 屏"></div>
+        <div class="field" style="grid-column:1/-1"><label>说明</label><textarea>场地库基础说明，可被多个活动引用。</textarea></div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('zoneModal')">取消</button><button class="btn primary" onclick="closeModal('zoneModal');toast('区域已保存')">保存</button></div>
+    </div>
+  </div>
+  <script src="../assets/js/mock-data.js"></script>
+  <script src="../assets/js/admin.js"></script>
+</body>
+</html>

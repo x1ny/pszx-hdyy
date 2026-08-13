@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>邀请函生成记录</title><link rel="stylesheet" href="../assets/css/common.css"><link rel="stylesheet" href="../assets/css/admin.css"></head>
+<body><div class="page-shell"><aside class="side-nav"></aside><main class="main"><header class="topbar"><div><b>邀请函生成记录</b><br><small>生成、下载、提醒发送</small></div><span data-role-label></span></header><section class="content">
+<div class="page-title"><div><div class="breadcrumb">邀请函管理 / 生成记录</div><h1>泉州时尚周邀请函生成记录</h1><p>已生成 82 人 · 失败 4 人 · 待提醒 1 批</p></div><div class="toolbar"><a class="btn" href="invitation-templates.html">发函文件模板</a><a class="btn" href="invitation-h5.html">H5展示</a><a class="btn primary" href="invitation-generate.html">生成邀请函</a></div></div>
+<div class="grid cols-4"><div class="stat"><span>已生成</span><b>82</b><p class="muted">可查看/下载</p></div><div class="stat"><span>生成失败</span><b>4</b><p class="muted">可重新生成</p></div><div class="stat"><span>待提醒</span><b>1</b><p class="muted">手动发送</p></div><div class="stat"><span>已提醒</span><b>36</b><p class="muted">可查发送记录</p></div></div>
+<div class="panel"><div class="panel-head"><h2>查询条件</h2><div class="toolbar"><button class="btn">重置</button><button class="btn primary">查询</button></div></div><div class="panel-body filters"><div class="field"><label>活动</label><input class="input" value="泉州纺织服装时尚周开幕秀"></div><div class="field"><label>发函文件模板</label><input class="input" placeholder="模板名称"></div><div class="field"><label>生成结果</label><select class="select"><option>全部</option><option>生成成功</option><option>生成失败</option></select></div><div class="field"><label>提醒状态</label><select class="select"><option>全部</option><option>未提醒</option><option>已提醒</option></select></div></div></div>
+<div class="panel"><div class="panel-head"><h2>生成批次</h2><a class="btn" href="message-records.html">系统发送记录</a></div><table class="table"><thead><tr><th>批次号</th><th>活动</th><th>发函文件模板</th><th>成功/总数</th><th>H5 展示</th><th>提醒状态</th><th>生成时间</th><th>操作</th></tr></thead><tbody data-invitation-rows></tbody></table></div>
+</section></main></div>
+
+<div id="invitePeopleModal" class="modal-backdrop">
+  <div class="modal">
+    <div class="modal-head"><b>邀请人员名单</b><button class="btn ghost" onclick="closeModal('invitePeopleModal')">关闭</button></div>
+    <div class="modal-body">
+      <div class="grid cols-3"><div class="stat"><span>本批次人员</span><b>82</b></div><div class="stat"><span>已生成文件</span><b>82</b></div><div class="stat"><span>待提醒</span><b>46</b></div></div>
+      <table class="table" style="margin-top:14px">
+        <thead><tr><th>人员</th><th>来源</th><th>分组</th><th>负责人</th><th>PDF/Word</th><th>H5展示</th><th>提醒状态</th></tr></thead>
+        <tbody>
+          <tr><td>陈明远<br><small class="muted">138****1234</small></td><td>特别重要嘉宾</td><td>王总客人</td><td>王运营</td><td><span class="tag green">已生成</span></td><td><span class="tag green">可查看</span></td><td><span class="tag amber">未提醒</span></td></tr>
+          <tr><td>林若溪<br><small class="muted">138****1234</small></td><td>企业嘉宾</td><td>产品线邀约</td><td>李运营</td><td><span class="tag green">已生成</span></td><td><span class="tag green">可查看</span></td><td><span class="tag green">已提醒</span></td></tr>
+          <tr><td>Michael Tan<br><small class="muted">139****5678</small></td><td>企业嘉宾</td><td>王总客人</td><td>王运营</td><td><span class="tag green">已生成</span></td><td><span class="tag green">可查看</span></td><td><span class="tag amber">未提醒</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="modal-foot"><button class="btn" onclick="closeModal('invitePeopleModal')">关闭</button><button class="btn primary" onclick="closeModal('invitePeopleModal');openModal('notifyModal')">发送提醒</button></div>
+  </div>
+</div>
+
+<div id="notifyModal" class="modal-backdrop">
+  <div class="modal">
+    <div class="modal-head"><b>发送邀请函提醒</b><button class="btn ghost" onclick="closeModal('notifyModal')">关闭</button></div>
+    <div class="modal-body">
+      <div class="grid cols-3"><div class="stat"><span>本次发送</span><b>46 人</b></div><div class="stat"><span>渠道</span><b>站内信+短信</b></div><div class="stat"><span>批次号</span><b>B20261118001</b></div></div>
+      <div class="panel" style="box-shadow:none;margin-top:14px">
+        <div class="panel-head"><h2>发送对象确认</h2><span class="muted">只向已生成且未提醒人员发送</span></div>
+        <table class="table">
+          <thead><tr><th>选择</th><th>人员</th><th>手机号</th><th>来源</th><th>负责人</th><th>邀请函</th><th>提醒状态</th></tr></thead>
+          <tbody>
+            <tr><td><input type="checkbox" checked></td><td>陈明远</td><td>138****1234</td><td>特别重要嘉宾</td><td>王运营</td><td><span class="tag green">已生成</span></td><td><span class="tag amber">未提醒</span></td></tr>
+            <tr><td><input type="checkbox" checked></td><td>Michael Tan</td><td>139****5678</td><td>企业嘉宾</td><td>王运营</td><td><span class="tag green">已生成</span></td><td><span class="tag amber">未提醒</span></td></tr>
+            <tr><td><input type="checkbox"></td><td>林若溪</td><td>138****1234</td><td>企业嘉宾</td><td>李运营</td><td><span class="tag green">已生成</span></td><td><span class="tag green">已提醒</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="panel" style="box-shadow:none;margin-top:14px">
+        <div class="panel-head"><h2>提醒内容预览</h2></div>
+        <div class="panel-body"><p>您的【泉州纺织服装时尚周开幕秀】邀请函已生成，请进入 H5 查看邀请函及活动安排。</p></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn" onclick="closeModal('notifyModal')">取消</button><button data-manager-only class="btn primary" onclick="closeModal('notifyModal');toast('已创建 46 人邀请函提醒发送任务')">确认发送</button></div>
+  </div>
+</div>
+<script src="../assets/js/mock-data.js"></script><script src="../assets/js/admin.js"></script></body></html>

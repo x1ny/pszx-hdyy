@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>H5邀请函展示</title>
+  <link rel="stylesheet" href="../assets/css/common.css">
+  <link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body>
+  <div class="page-shell">
+    <aside class="side-nav"></aside>
+    <main class="main">
+      <header class="topbar"><div><b>H5邀请函展示</b><br><small>移动端展示样式配置</small></div><span data-role-label></span></header>
+      <section class="content">
+        <div class="page-title">
+          <div>
+            <div class="breadcrumb">邀请函管理 / H5展示</div>
+            <h1>H5邀请函展示</h1>
+            <p>H5 只展示已生成的邀请函结果，不重新选择邀请人员；同一活动一次只能启用一个展示样式。</p>
+          </div>
+          <button data-manager-only class="btn primary" onclick="openModal('h5StyleModal')">新增展示样式</button>
+        </div>
+
+        <div class="grid cols-3">
+          <div class="stat"><span>已启用样式</span><b>默认移动端样式</b><p class="muted">当前活动生效</p></div>
+          <div class="stat"><span>可展示邀请函</span><b>82</b><p class="muted">来自生成记录</p></div>
+          <div class="stat"><span>展示来源</span><b>生成记录</b><p class="muted">不单独选人</p></div>
+        </div>
+
+        <div class="split">
+          <div class="panel">
+            <div class="panel-head"><h2>展示样式列表</h2><span class="muted">一次只能启用一个</span></div>
+            <table class="table">
+              <thead><tr><th>样式名称</th><th>背景图</th><th>页面版式</th><th>启用状态</th><th>更新时间</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>默认移动端样式</td><td>已上传</td><td>固定布局</td><td><span class="tag green">已启用</span></td><td>2026-08-07 14:10</td><td><div class="toolbar"><button class="btn" onclick="openModal('h5PreviewModal')">预览</button><button class="btn" onclick="openModal('h5StyleModal')">编辑</button></div></td></tr>
+                <tr><td>论坛背景样式</td><td>已上传</td><td>固定布局</td><td><span class="tag gray">未启用</span></td><td>2026-08-06 18:20</td><td><div class="toolbar"><button class="btn" onclick="openModal('h5PreviewModal')">预览</button><button data-manager-only class="btn primary" data-toast="已启用该 H5 展示样式，其他样式自动停用">启用</button></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>当前展示效果</h2><a class="btn" href="invitation-records.html">查看生成记录</a></div>
+            <div class="panel-body"><div class="phone-frame"><div class="h5-invite-card"><b>主论坛暨新品发布</b><p>陈明远先生，诚邀您参加活动。</p><span>查看议程、座位和邀请函</span></div></div></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="h5StyleModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>H5展示样式</b><button class="btn ghost" onclick="closeModal('h5StyleModal')">关闭</button></div>
+      <div class="modal-body mini-form">
+        <div class="field"><label>样式名称</label><input class="input" value="默认移动端样式"></div>
+        <div class="field"><label>背景图</label><input class="input" value="forum-invite-bg.jpg"></div>
+        <div class="field"><label>页面版式</label><input class="input" value="固定移动端邀请函版式" readonly></div>
+        <div class="field"><label>启用状态</label><select class="select"><option>已启用</option><option>未启用</option></select></div>
+        <div class="field" style="grid-column:1/-1"><label>展示内容来源</label><input class="input" value="读取已生成邀请函记录，不在 H5 展示中重新选择邀请人员" readonly></div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('h5StyleModal')">取消</button><button data-manager-only class="btn primary" onclick="closeModal('h5StyleModal');toast('H5展示样式已保存')">保存</button></div>
+    </div>
+  </div>
+
+  <div id="h5PreviewModal" class="modal-backdrop"><div class="modal narrow"><div class="modal-head"><b>H5展示预览</b><button class="btn ghost" onclick="closeModal('h5PreviewModal')">关闭</button></div><div class="modal-body"><div class="phone-frame"><div class="h5-invite-card"><b>主论坛暨新品发布</b><p>陈明远先生，诚邀您参加活动。</p><span>查看议程、座位和邀请函</span></div></div></div><div class="modal-foot"><button class="btn" onclick="closeModal('h5PreviewModal')">关闭</button></div></div></div>
+  <script src="../assets/js/mock-data.js"></script>
+  <script src="../assets/js/admin.js"></script>
+</body>
+</html>

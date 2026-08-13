@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>消息规则</title><link rel="stylesheet" href="../assets/css/common.css"><link rel="stylesheet" href="../assets/css/admin.css"></head>
+<body><div class="page-shell"><aside class="side-nav"></aside><main class="main"><header class="topbar"><div><b>消息规则</b><br><small>系统底层规则，只读查看</small></div><span data-role-label></span></header><section class="content">
+<div class="page-title"><div><div class="breadcrumb">系统管理 / 消息规则</div><h1>消息规则</h1><p>消息内容由业务动作触发或业务人员在对应模块手动发起，本页只展示规则口径，不作为运营配置入口。</p></div><a class="btn" href="message-records.html">查看发送记录</a></div>
+<div class="panel">
+  <div class="panel-head"><h2>触发规则</h2><span class="tag gray">只读</span></div>
+  <table class="table">
+    <thead><tr><th>业务场景</th><th>触发来源</th><th>发送动作所在页面</th><th>渠道</th><th>接收对象</th><th>状态</th></tr></thead>
+    <tbody>
+      <tr><td>报名审核结果</td><td>审核通过/审核不通过后生成消息任务</td><td>报名人员列表与审核</td><td>站内信</td><td>报名人</td><td><span class="tag green">正常</span></td></tr>
+      <tr><td>邀请函提醒</td><td>邀请函生成成功后，由业务人员手动确认发送</td><td>邀请函生成记录</td><td>站内信+短信</td><td>被邀请人</td><td><span class="tag green">正常</span></td></tr>
+      <tr><td>座位通知</td><td>排位确认发布后，由业务人员确认发送</td><td>排位确认</td><td>站内信+短信</td><td>已分配座位人员</td><td><span class="tag green">正常</span></td></tr>
+      <tr><td>活动开始提醒</td><td>活动开始前按系统规则生成待发送任务</td><td>系统任务/发送记录</td><td>站内信+短信</td><td>活动参与人员</td><td><span class="tag green">正常</span></td></tr>
+      <tr><td>行程/服务变更</td><td>用车、用餐、住宿服务安排变更后生成任务</td><td>活动资源台账</td><td>站内信</td><td>服务绑定人员</td><td><span class="tag green">正常</span></td></tr>
+    </tbody>
+  </table>
+</div>
+<div class="panel">
+  <div class="panel-head"><h2>短信模板对接</h2></div>
+  <div class="panel-body grid cols-3">
+    <div><b>供应商模板编号</b><p>由短信服务商审核后回填到系统参数，不在业务页面维护。</p></div>
+    <div><b>短信签名</b><p>由平台统一签名控制，业务发送时不可改写。</p></div>
+    <div><b>失败回执</b><p>进入消息发送记录，支持查看失败原因。</p></div>
+  </div>
+</div>
+</section></main></div><script src="../assets/js/mock-data.js"></script><script src="../assets/js/admin.js"></script></body></html>

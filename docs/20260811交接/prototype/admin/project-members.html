@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>项目人员管理</title>
+  <link rel="stylesheet" href="../assets/css/common.css">
+  <link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body>
+  <div class="page-shell">
+    <aside class="side-nav"></aside>
+    <main class="main">
+      <header class="topbar">
+        <div><b>项目人员管理</b><br><small>当前项目：2026 数字服务生态大会</small></div>
+        <span data-role-label></span>
+      </header>
+      <section class="content">
+        <div class="page-title">
+          <div>
+            <div class="breadcrumb">项目管理 / 项目详情 / 项目人员</div>
+            <h1>2026 数字服务生态大会项目人员</h1>
+            <p>项目范围人员关系，用于后续分配到具体活动。</p>
+          </div>
+          <div class="toolbar">
+            <a class="btn" href="project-detail.html">返回项目详情</a>
+            <button class="btn" onclick="toast('导入后系统生成汇总来源：项目导入')">导入项目人员</button>
+            <button class="btn primary" onclick="openModal('projectMemberModal')">新增项目人员</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>查询条件</h2><div class="toolbar"><button class="btn">重置</button><button class="btn primary">查询</button></div></div>
+          <div class="panel-body filters">
+            <div class="field"><label>姓名/联系方式</label><input class="input" placeholder="姓名、联系方式"></div>
+            <div class="field"><label>汇总来源</label><select class="select"><option>全部</option><option>活动人员归集</option><option>项目导入</option><option>项目手工新增</option></select></div>
+            <div class="field"><label>关联活动</label><select class="select"><option>全部</option><option>主论坛暨新品发布</option><option>政企洽谈会</option><option>未分配活动</option></select></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>项目人员列表</h2><span class="muted">共 126 人，每页 10 人</span></div>
+          <table class="table">
+            <thead><tr><th>人员</th><th>职务/联系方式</th><th>汇总来源</th><th>关联活动数</th><th>最近参与活动</th><th>备注</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td>陈明远</td><td>副总经理<br><small class="muted">13800001234 / 0591-87560001</small></td><td>活动人员归集</td><td>1</td><td>主论坛暨新品发布</td><td>需安排前排与接送</td><td><div class="toolbar"><a class="btn" href="activity-members.html">活动关系</a><button class="btn" onclick="openModal('assignActivityModal')">分配活动</button><button data-manager-only class="btn danger" onclick="openModal('removeProjectMemberModal')">移除</button></div></td></tr>
+              <tr><td>林若溪</td><td>产品负责人<br><small class="muted">13800001234 / 0592-55670002</small></td><td>活动人员归集</td><td>1</td><td>主论坛暨新品发布</td><td>-</td><td><div class="toolbar"><a class="btn" href="activity-members.html">活动关系</a><button class="btn" onclick="openModal('assignActivityModal')">分配活动</button><button data-manager-only class="btn danger" onclick="openModal('removeProjectMemberModal')">移除</button></div></td></tr>
+              <tr><td>Michael Tan</td><td>Partner<br><small class="muted">13900005678 / +65 6123 7788</small></td><td>项目导入</td><td>1</td><td>主论坛暨新品发布</td><td>英文接待</td><td><div class="toolbar"><a class="btn" href="activity-members.html">活动关系</a><button class="btn" onclick="openModal('assignActivityModal')">分配活动</button><button data-manager-only class="btn danger" onclick="openModal('removeProjectMemberModal')">移除</button></div></td></tr>
+            </tbody>
+          </table>
+          <div class="panel-body toolbar" style="justify-content:flex-end">
+            <span class="muted">共 126 人，每页 10 人</span>
+            <button class="btn" disabled>上一页</button>
+            <button class="btn primary">1</button>
+            <button class="btn">下一页</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="projectMemberModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>新增项目人员</b><button class="btn ghost" onclick="closeModal('projectMemberModal')">关闭</button></div>
+      <div class="modal-body">
+        <div class="panel" style="box-shadow:none">
+          <div class="panel-head"><h2>人员主档信息</h2><a class="btn" href="member-master.html">从全量人员库选择</a></div>
+          <div class="panel-body mini-form">
+            <div class="field"><label>姓名</label><input class="input" value="陈明远"></div>
+            <div class="field"><label>性别</label><select class="select"><option>男</option><option>女</option><option>其他</option></select></div>
+            <div class="field"><label>国别/地区</label><input class="input" value="中国大陆"></div>
+            <div class="field"><label>籍贯</label><input class="input" value="福建福州"></div>
+            <div class="field"><label>职务</label><input class="input" value="副总经理"></div>
+            <div class="field"><label>证件类型</label><select class="select"><option>身份证</option><option>护照</option><option>港澳通行证</option><option>其他</option></select></div>
+            <div class="field"><label>证件号码</label><input class="input" value="350102198903120031"></div>
+            <div class="field"><label>联系方式</label><input class="input" value="13800001234 / 0591-87560001"></div>
+            <div class="field"><label>邮箱</label><input class="input" value="chen@example.com"></div>
+            <div class="field"><label>语种</label><select class="select"><option>中文</option><option>英文</option><option>其他</option></select></div>
+          </div>
+        </div>
+        <div class="panel" style="box-shadow:none;margin-top:14px">
+          <div class="panel-head"><h2>项目关系</h2></div>
+          <div class="panel-body grid cols-3"><div><b>所属项目</b><p>2026 数字服务生态大会</p></div><div><b>汇总来源</b><p>项目手工新增</p></div><div><b>状态</b><p>正常</p></div></div>
+        </div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('projectMemberModal')">取消</button><button class="btn" onclick="closeModal('projectMemberModal');toast('已新增项目人员')">保存</button><button class="btn primary" onclick="closeModal('projectMemberModal');openModal('assignActivityModal')">保存并分配活动</button></div>
+    </div>
+  </div>
+
+  <div id="assignActivityModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>分配到活动</b><button class="btn ghost" onclick="closeModal('assignActivityModal')">关闭</button></div>
+      <div class="modal-body mini-form">
+        <div class="field"><label>项目人员</label><input class="input" value="陈明远" readonly></div>
+        <div class="field"><label>目标活动</label><select class="select"><option>主论坛暨新品发布</option><option>政企洽谈会</option></select></div>
+        <div class="field"><label>来源</label><select class="select"><option>特别重要嘉宾</option><option>企业嘉宾</option><option>政府嘉宾</option><option>媒体嘉宾</option><option>工作人员</option><option>其他</option></select></div>
+        <div class="field"><label>分组</label><input class="input" value="王总客人"></div>
+        <div class="field"><label>负责人</label><input class="input" value="王运营"></div>
+        <div class="field"><label>数据来源</label><p>项目人员分配</p></div>
+        <div class="field" style="grid-column:1/-1"><label>备注</label><textarea>分配到活动后，可继续在活动人员页分配环节。</textarea></div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('assignActivityModal')">取消</button><button class="btn" onclick="closeModal('assignActivityModal');toast('已生成活动人员关系')">保存</button><a class="btn primary" href="activity-members.html">保存并进入活动人员</a></div>
+    </div>
+  </div>
+
+  <div id="removeProjectMemberModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>移除项目人员</b><button class="btn ghost" onclick="closeModal('removeProjectMemberModal')">关闭</button></div>
+      <div class="modal-body">
+        <p>移除后将解除该人员在当前项目下的项目关系；人员主档仍保留在全量人员库。</p>
+        <p>如该人员已被活动引用，请先到活动人员页确认是否同步移除活动关系。</p>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('removeProjectMemberModal')">取消</button><button data-manager-only class="btn danger" onclick="closeModal('removeProjectMemberModal');toast('已移除当前项目人员关系')">确认移除</button></div>
+    </div>
+  </div>
+
+  <script src="../assets/js/mock-data.js"></script>
+  <script src="../assets/js/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>报名人员列表与审核</title>
+  <link rel="stylesheet" href="../assets/css/common.css">
+  <link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body>
+  <div class="page-shell">
+    <aside class="side-nav"></aside>
+    <main class="main">
+      <header class="topbar">
+        <div><b>报名人员列表与审核</b><br><small>当前活动报名记录</small></div>
+        <span data-role-label></span>
+      </header>
+      <section class="content">
+        <div class="page-title">
+          <div>
+            <div class="breadcrumb">项目管理 / 项目详情 / 活动详情 / 报名人员</div>
+            <h1>报名人员列表</h1>
+            <p>待审核 1 条 · 已通过 1 条 · 已驳回 1 条</p>
+          </div>
+          <button data-manager-only class="btn primary" onclick="openModal('batchReviewModal')">批量审核</button>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>查询条件</h2>
+            <div class="toolbar"><button class="btn">重置</button><button class="btn primary">查询</button></div>
+          </div>
+          <div class="panel-body filters">
+            <div class="field"><label>姓名/联系方式</label><input class="input" placeholder="姓名、联系方式"></div>
+            <div class="field"><label>审核状态</label><select class="select"><option>全部</option><option>已提交</option><option>审核通过</option><option>审核不通过</option></select></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>报名人员列表</h2><span class="muted">共 3 条，每页 10 条</span></div>
+          <table class="table">
+            <thead><tr><th>报名人</th><th>证件</th><th>职务</th><th>联系方式</th><th>报名时间</th><th>状态</th><th>审核结果</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td>陈明远</td><td>身份证 ****0031</td><td>副总经理</td><td>138****1234</td><td>2026-08-05 10:24</td><td><span class="tag amber">已提交</span></td><td>-</td><td><div class="toolbar"><button class="btn" onclick="openModal('registrationDetailModal')">详情</button><button data-manager-only class="btn primary" onclick="openModal('reviewModal')">审核</button></div></td></tr>
+              <tr><td>林若溪</td><td>身份证 ****2428</td><td>产品负责人</td><td>138****1234</td><td>2026-08-05 11:32</td><td><span class="tag green">审核通过</span></td><td>已进入活动人员</td><td><div class="toolbar"><button class="btn" onclick="openModal('registrationDetailModal')">详情</button><a class="btn" href="activity-members.html">活动人员</a></div></td></tr>
+              <tr><td>赵予安</td><td>身份证 ****7612</td><td>渠道经理</td><td>137****6618</td><td>2026-08-05 13:08</td><td><span class="tag red">审核不通过</span></td><td>信息与邀请范围不符</td><td><button class="btn" onclick="openModal('registrationDetailModal')">详情</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="registrationDetailModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>报名详情</b><button class="btn ghost" onclick="closeModal('registrationDetailModal')">关闭</button></div>
+      <div class="modal-body grid cols-3">
+        <div><b>报名状态</b><p>已提交</p></div>
+        <div><b>姓名</b><p>陈明远</p></div>
+        <div><b>性别</b><p>男</p></div>
+        <div><b>国别/地区</b><p>中国大陆</p></div>
+        <div><b>籍贯</b><p>福建福州</p></div>
+        <div><b>证件类型</b><p>身份证</p></div>
+        <div><b>证件号码</b><p>350102********0031</p></div>
+        <div><b>职务</b><p>副总经理</p></div>
+        <div><b>联系方式</b><p>13800001234 / 0591-87560001</p></div>
+        <div><b>邮箱</b><p>chen@example.com</p></div>
+        <div><b>语种</b><p>中文</p></div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('registrationDetailModal')">关闭</button><button data-manager-only class="btn primary" onclick="closeModal('registrationDetailModal');openModal('reviewModal')">去审核</button></div>
+    </div>
+  </div>
+
+  <div id="reviewModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>报名审核</b><button class="btn ghost" onclick="closeModal('reviewModal')">关闭</button></div>
+      <div class="modal-body mini-form">
+        <div class="field"><label>审核结果</label><select class="select"><option>审核通过</option><option>审核不通过</option></select></div>
+        <div class="field"><label>来源</label><select class="select"><option>企业嘉宾</option><option>特别重要嘉宾</option><option>政府嘉宾</option><option>媒体嘉宾</option><option>工作人员</option><option>其他</option></select></div>
+        <div class="field"><label>分组</label><select class="select"><option>王总客人</option><option>产品线邀约</option><option>会务组</option><option>其他</option></select></div>
+        <div class="field"><label>负责人</label><input class="input" value="王运营"></div>
+        <div class="field"><label>数据来源</label><input class="input" value="报名审核通过" readonly></div>
+        <div class="field" style="grid-column:1/-1"><label>审核意见</label><textarea>资料完整，同意参加。</textarea></div>
+        <div class="field" style="grid-column:1/-1"><label>活动人员备注</label><textarea>由报名审核通过进入活动人员，需安排前排与接送。</textarea></div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('reviewModal')">取消</button><button data-manager-only class="btn primary" onclick="closeModal('reviewModal');toast('审核已保存，活动人员和消息任务已更新')">确认审核</button></div>
+    </div>
+  </div>
+
+  <div id="batchReviewModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>批量审核</b><button class="btn ghost" onclick="closeModal('batchReviewModal')">关闭</button></div>
+      <div class="modal-body">
+        <p>本次选择 1 条待审核报名记录。</p>
+        <div class="mini-form">
+          <div class="field"><label>审核结果</label><select class="select"><option>审核通过</option><option>审核不通过</option></select></div>
+          <div class="field"><label>默认来源</label><select class="select"><option>企业嘉宾</option><option>特别重要嘉宾</option><option>工作人员</option></select></div>
+          <div class="field"><label>默认分组</label><select class="select"><option>王总客人</option><option>产品线邀约</option></select></div>
+          <div class="field"><label>默认负责人</label><input class="input" value="王运营"></div>
+        </div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('batchReviewModal')">取消</button><button data-manager-only class="btn primary" onclick="closeModal('batchReviewModal');toast('批量审核完成')">确认</button></div>
+    </div>
+  </div>
+  <script src="../assets/js/mock-data.js"></script>
+  <script src="../assets/js/admin.js"></script>
+</body>
+</html>

@@ -1,9 +1,11 @@
 {
 	"files.watcherExclude": {
-		"**/routeTree.gen.ts": true
+		"**/routeTree.gen.ts": true,
+		"docs/20260811交接/**": true
 	},
 	"search.exclude": {
-		"**/routeTree.gen.ts": true
+		"**/routeTree.gen.ts": true,
+		"docs/20260811交接/**": true
 	},
 	"files.readonlyInclude": {
 		"**/routeTree.gen.ts": true

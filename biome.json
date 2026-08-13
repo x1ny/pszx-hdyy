@@ -10,7 +10,7 @@
 		"includes": [
 			"**/src/**/*",
 			"**/.vscode/**/*",
-			"**/index.html",
+			"apps/web/index.html",
 			"**/vite.config.ts",
 			"**/vitest.config.ts",
 			"**/vitest.setup.ts",

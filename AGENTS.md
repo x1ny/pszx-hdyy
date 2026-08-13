@@ -15,6 +15,10 @@ Before editing files for a substantial task:
 >
 > 唯一的要求是：改动连同**理由**一起写回这里（大的方向性取舍写进 [docs/architecture-decisions.md](docs/architecture-decisions.md)），别绕开规则默默写例外——一个没记录的例外会变成下一个人眼里的"这里本来就没规矩"。
 
+## 第一版原型参考
+相关文件目录 \docs\20260811交接
+注意H5相关的功能目前都不做！
+
 ## 旧项目代码参考
 当用户要求参考旧代码时 再从这两个目录中读取代码研究
 
@@ -56,6 +60,10 @@ apps/server    Hono + Better Auth + Drizzle（端口 8787）
 开发端口约定：根目录的 `bun run dev` 由 `scripts/dev.ts` 统一启动前后端。`SERVER_PORT`（默认 `8787`）和 `WEB_PORT`（默认 `3000`）是首选端口，被占用时向上寻找可用端口；最终的后端端口同时传给 Hono 和 Vite 代理，前端端口变化时同步更新认证 origin。这样做是为了避免端口自动变化后代理或 Better Auth 仍指向旧端口。单独运行某个 workspace 的 `dev` 脚本不经过这层协调。
 
 单独起某个包用 `bun run --filter '@repo/server' dev`。
+
+### 参考资料目录与 IDE 索引
+
+`docs/20260811交接/` 保存产品需求和静态 HTML 原型，仍需在工作区和 Git 中可见，但不属于应用源码。`.cursorignore` 排除 Cursor 索引，`.vscode/settings.json` 排除 VS Code 搜索和文件监听，`biome.json` 只纳入 `apps/web/index.html`，避免原型目录中的 `prototype/index.html` 被代码检查工具处理。新增同类交接资料时沿用这个原则，不要把目录加入 `.gitignore`。
 
 **在 `.claude/worktrees/` 这类深路径下跑 `bun install`/`bun add` 报 `ENOENT ... (copyfile)`，或者装完页面到处 `Invalid hook call`：** 这是 Windows + 深路径 worktree 的已知环境问题，不是仓库配置或依赖本身的问题，修法见 [docs/windows-worktree-notes.md](docs/windows-worktree-notes.md)——一句话版：带上 `--linker=hoisted`，且不要中途在 isolated/hoisted 之间切换。
 

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>排位确认</title>
+  <link rel="stylesheet" href="../assets/css/common.css">
+  <link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body>
+  <div class="page-shell">
+    <aside class="side-nav"></aside>
+    <main class="main">
+      <header class="topbar">
+        <div><b>排位确认</b><br><small>待确认方案处理</small></div>
+        <span data-role-label></span>
+      </header>
+      <section class="content">
+        <div class="page-title">
+          <div>
+            <div class="breadcrumb">排位管理 / 排位确认</div>
+            <h1>待确认排位方案</h1>
+            <p>待确认 1 条 · 已确认 1 条 · 未配置 1 条</p>
+          </div>
+          <a class="btn" href="seating-list.html">返回方案列表</a>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>确认清单</h2><span class="muted">共 3 条，每页 10 条</span></div>
+          <table class="table">
+            <thead><tr><th>活动</th><th>环节</th><th>引用区域</th><th>保存人</th><th>保存时间</th><th>状态</th><th>H5 展示</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td>主论坛暨新品发布</td><td>主题演讲</td><td>主会场 A 区</td><td>运营人员A</td><td>2026-08-07 14:20</td><td><span class="tag amber">待确认</span></td><td>暂不展示</td><td><div class="toolbar"><a class="btn" href="seating-canvas.html">查看画布</a><button data-manager-only class="btn primary" onclick="openModal('confirmModal')">确认</button><button data-manager-only class="btn" onclick="openModal('returnModal')">退回</button></div></td></tr>
+              <tr><td>主论坛暨新品发布</td><td>开幕式</td><td>主会场 A 区</td><td>运营人员A</td><td>2026-08-06 18:10</td><td><span class="tag green">已确认</span></td><td>已展示</td><td><a class="btn" href="seating-canvas.html">查看画布</a></td></tr>
+              <tr><td>主论坛暨新品发布</td><td>分论坛 A：数据产品</td><td>未选择</td><td>-</td><td>-</td><td><span class="tag gray">未配置</span></td><td>暂不展示</td><td><a class="btn" href="seating-list.html">去配置</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="confirmModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>确认排位</b><button class="btn ghost" onclick="closeModal('confirmModal')">关闭</button></div>
+      <div class="modal-body mini-form">
+        <div class="field"><label>确认结果</label><input class="input" value="确认通过"></div>
+        <div class="field"><label>是否生成通知</label><select class="select"><option>生成座位通知任务</option><option>暂不通知</option></select></div>
+        <div class="field" style="grid-column:1/-1"><label>确认备注</label><textarea>确认后本人座位将在 H5 展示，并生成站内信/短信发送任务。</textarea></div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('confirmModal')">取消</button><button data-manager-only class="btn primary" onclick="closeModal('confirmModal');toast('排位已确认，座位通知任务已生成')">确认发布</button></div>
+    </div>
+  </div>
+
+  <div id="returnModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>退回排位</b><button class="btn ghost" onclick="closeModal('returnModal')">关闭</button></div>
+      <div class="modal-body mini-form">
+        <div class="field"><label>退回原因</label><select class="select"><option>座位安排需调整</option><option>人员名单有变</option><option>场地区域需调整</option><option>其他</option></select></div>
+        <div class="field" style="grid-column:1/-1"><label>原因说明</label><textarea>请调整嘉宾席顺序后重新提交确认。</textarea></div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('returnModal')">取消</button><button data-manager-only class="btn primary" onclick="closeModal('returnModal');toast('排位已退回，运营人员可重新编辑画布')">确认退回</button></div>
+    </div>
+  </div>
+  <script src="../assets/js/mock-data.js"></script>
+  <script src="../assets/js/admin.js"></script>
+</body>
+</html>

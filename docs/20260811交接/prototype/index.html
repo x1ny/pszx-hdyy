@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>活动运营平台 HTML 原型导航</title>
+  <link rel="stylesheet" href="assets/css/common.css">
+  <link rel="stylesheet" href="assets/css/admin.css">
+</head>
+<body>
+  <div class="content" style="max-width:1200px;margin:0 auto;">
+    <div class="page-title">
+      <div>
+        <h1>活动运营平台多端 HTML 原型</h1>
+        <p>后台 Web 与移动公众端 H5 核心链路页面。</p>
+      </div>
+      <div class="toolbar">
+        <a class="btn primary" href="admin/dashboard.html">进入后台首页</a>
+        <a class="btn primary" href="h5/entry.html">H5 报名入口</a>
+        <a class="btn" href="h5/my-activities.html">H5 我的活动</a>
+      </div>
+    </div>
+    <div class="notice">当前原型以开发版项目落地说明文档为准。已确认无业务阻塞项；短信供应商、角色账号、附件预览格式属于后续联调或技术验证。</div>
+    <div class="grid cols-3">
+      <div class="stat"><span>后台页面</span><b>28</b><p class="muted">Web 管理端页面与承接页</p></div>
+      <div class="stat"><span>H5 主入口</span><b>2</b><p class="muted">报名入口、我的活动</p></div>
+      <div class="stat"><span>核心链路</span><b>双端</b><p class="muted">后台配置，H5 查看与参与</p></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>后台 Web 页面</h2><span class="tag green">阶段五</span></div>
+      <div class="panel-body">
+        <table class="table">
+          <thead><tr><th>模块</th><th>页面</th><th>重点</th><th>文件</th></tr></thead>
+          <tbody>
+            <tr><td>工作台</td><td>后台首页</td><td>待办、快捷入口、角色切换</td><td><a class="link" href="admin/dashboard.html">admin/dashboard.html</a></td></tr>
+            <tr><td>项目管理</td><td>项目列表</td><td>查询、新增、上架、下架、删除权限</td><td><a class="link" href="admin/project-list.html">admin/project-list.html</a></td></tr>
+            <tr><td>项目管理</td><td>项目详情</td><td>项目基础信息、活动列表、项目人员入口</td><td><a class="link" href="admin/project-detail.html">admin/project-detail.html</a></td></tr>
+            <tr><td>项目管理</td><td>项目人员</td><td>项目范围人员查询、新增、导入、分配活动</td><td><a class="link" href="admin/project-members.html">admin/project-members.html</a></td></tr>
+            <tr><td>项目管理</td><td>活动列表</td><td>按项目归属查看活动，进入详情/配置</td><td><a class="link" href="admin/activity-list.html">admin/activity-list.html</a></td></tr>
+            <tr><td>项目管理</td><td>活动详情</td><td>活动级总入口，上下文页，不作为一级菜单</td><td><a class="link" href="admin/activity-detail.html">admin/activity-detail.html</a></td></tr>
+            <tr><td>活动下业务页</td><td>配置总览</td><td>配置项完成情况、缺失项和待处理入口</td><td><a class="link" href="admin/activity-config.html">admin/activity-config.html</a></td></tr>
+            <tr><td>活动下业务页</td><td>议程/环节</td><td>时间轴画布、环节列表、详情和编辑统一入口</td><td><a class="link" href="admin/agenda-timeline.html">admin/agenda-timeline.html</a></td></tr>
+            <tr><td>活动下业务页</td><td>场地空间配置</td><td>活动级空间底图</td><td><a class="link" href="admin/activity-space.html">admin/activity-space.html</a></td></tr>
+            <tr><td>活动下业务页</td><td>资源需求汇总</td><td>环节需求与资源台账衔接</td><td><a class="link" href="admin/resource-summary.html">admin/resource-summary.html</a></td></tr>
+            <tr><td>活动下业务页</td><td>资源台账</td><td>用车、用餐、住宿、物料和人员绑定</td><td><a class="link" href="admin/resource-ledger.html">admin/resource-ledger.html</a></td></tr>
+            <tr><td>人员管理</td><td>全量人员库</td><td>联系方式、手机号不唯一</td><td><a class="link" href="admin/member-master.html">admin/member-master.html</a></td></tr>
+            <tr><td>人员管理</td><td>活动人员</td><td>活动关系字段和业务关联结果</td><td><a class="link" href="admin/activity-members.html">admin/activity-members.html</a></td></tr>
+            <tr><td>邀请函管理</td><td>模板/生成/记录</td><td>模板分离、生成、下载、手动提醒</td><td><a class="link" href="admin/invitation-templates.html">admin/invitation-templates.html</a></td></tr>
+            <tr><td>排位管理</td><td>场地库/画布/排位/确认</td><td>场地基础画布、活动空间引用、环节排位确认</td><td><a class="link" href="admin/venue-library.html">admin/venue-library.html</a></td></tr>
+            <tr><td>系统管理</td><td>消息规则/发送记录</td><td>站内信、短信、失败重发记录查询</td><td><a class="link" href="admin/message-records.html">admin/message-records.html</a></td></tr>
+            <tr><td>供应商管理</td><td>供应商/历史报价</td><td>供应商主体和报价附件</td><td><a class="link" href="admin/supplier-list.html">admin/supplier-list.html</a></td></tr>
+            <tr><td>系统管理</td><td>用户角色权限</td><td>按钮权限和数据范围</td><td><a class="link" href="admin/system-permissions.html">admin/system-permissions.html</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>移动公众端 H5 页面</h2><span class="tag green">阶段六</span></div>
+      <div class="panel-body">
+        <table class="table">
+          <thead><tr><th>模块</th><th>页面</th><th>重点</th><th>文件</th></tr></thead>
+          <tbody>
+            <tr><td>报名入口</td><td>项目活动报名入口</td><td>免登录查看已上架项目，进入项目详情后查看活动列表、活动介绍和报名</td><td><a class="link" href="h5/entry.html">h5/entry.html</a></td></tr>
+            <tr><td>我的活动</td><td>我的活动首页</td><td>当前进行中活动切换、历史活动入口、我的信息、消息通知、收到的邀请函</td><td><a class="link" href="h5/my-activities.html">h5/my-activities.html</a></td></tr>
+            <tr><td>承接页面</td><td>详情和结果页</td><td>活动详情、报名、报名结果、历史活动、个人信息、消息、邀请函、议程、座位、行程</td><td><a class="link" href="h5/activity-detail.html">h5/activity-detail.html</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>推荐演示路径</h2></div>
+      <div class="panel-body flow-list">
+        <div class="flow-item"><div class="flow-no">1</div><div><b>项目创建与上架</b><p class="muted">项目列表 -> 项目详情 -> 查看活动列表。</p></div><a class="btn" href="admin/project-list.html">开始</a></div>
+        <div class="flow-item"><div class="flow-no">2</div><div><b>活动配置闭环</b><p class="muted">活动列表 -> 活动详情 -> 配置总览 -> 议程/环节 -> 资源需求。</p></div><a class="btn" href="admin/activity-list.html">开始</a></div>
+        <div class="flow-item"><div class="flow-no">3</div><div><b>邀请函提醒</b><p class="muted">发函文件模板 -> 生成邀请函 -> 生成记录 -> 手动提醒 -> 消息记录。</p></div><a class="btn" href="admin/invitation-templates.html">开始</a></div>
+        <div class="flow-item"><div class="flow-no">4</div><div><b>场地与排位</b><p class="muted">场地库 -> 场地画布 -> 活动空间 -> 排位列表 -> 排位画布 -> 排位确认。</p></div><a class="btn" href="admin/venue-library.html">开始</a></div>
+        <div class="flow-item"><div class="flow-no">5</div><div><b>H5 免登录报名</b><p class="muted">报名入口 -> 查询项目 -> 项目详情活动列表 -> 活动介绍 -> 填写报名 -> 报名结果。</p></div><a class="btn" href="h5/entry.html">开始</a></div>
+        <div class="flow-item"><div class="flow-no">6</div><div><b>H5 我的活动</b><p class="muted">手机号验证 -> 选择身份 -> 我的活动 -> 切换进行中活动/查看历史活动/我的信息。</p></div><a class="btn" href="h5/login.html">开始</a></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

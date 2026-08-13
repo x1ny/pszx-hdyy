@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>场地库</title>
+  <link rel="stylesheet" href="../assets/css/common.css">
+  <link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body>
+  <div class="page-shell">
+    <aside class="side-nav"></aside>
+    <main class="main">
+      <header class="topbar">
+        <div><b>场地库</b><br><small>可复用场地基础数据</small></div>
+        <span data-role-label></span>
+      </header>
+      <section class="content">
+        <div class="page-title">
+          <div>
+            <div class="breadcrumb">排位管理 / 场地库</div>
+            <h1>场地库</h1>
+            <p>可复用场地基础数据</p>
+          </div>
+          <div class="toolbar">
+            <a class="btn primary" href="venue-workbench.html">新增场地画布</a>
+            <a class="btn" href="activity-space.html">活动空间配置</a>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>查询条件</h2><div class="toolbar"><button class="btn">重置</button><button class="btn primary">查询</button></div></div>
+          <div class="panel-body filters">
+            <div class="field"><label>场地名称</label><input class="input" placeholder="请输入场地名称"></div>
+            <div class="field"><label>城市/地址</label><input class="input" placeholder="城市或地址"></div>
+            <div class="field"><label>状态</label><select class="select"><option>全部</option><option>正常</option><option>作废</option></select></div>
+            <div class="field"><label>区域类型</label><select class="select"><option>全部</option><option>座席区</option><option>功能区</option></select></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>场地列表<span class="hint-dot" title="场地库维护基础区域和点位；活动引用后形成活动空间。">?</span></h2><span class="muted">2 条</span></div>
+          <table class="table">
+            <thead><tr><th>场地</th><th>地址</th><th>区域数</th><th>座位/点位</th><th>最近引用活动</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td>福州海峡国际会展中心主会场</td><td>福州滨海新城</td><td>4</td><td>260</td><td>主论坛暨新品发布</td><td><span class="tag green">正常</span></td><td><div class="toolbar"><a class="btn" href="venue-workbench.html">画布</a><a class="btn primary" href="activity-space.html">引用到活动</a></div></td></tr>
+              <tr><td>厦门国际会议中心 3F</td><td>厦门思明区</td><td>3</td><td>180</td><td>金融机构圆桌</td><td><span class="tag green">正常</span></td><td><div class="toolbar"><a class="btn" href="venue-workbench.html">画布</a><a class="btn" href="activity-space.html">引用到活动</a></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="../assets/js/mock-data.js"></script>
+  <script src="../assets/js/admin.js"></script>
+</body>
+</html>

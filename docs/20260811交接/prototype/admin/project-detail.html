@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>项目详情</title>
+  <link rel="stylesheet" href="../assets/css/common.css">
+  <link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body>
+  <div class="page-shell">
+    <aside class="side-nav"></aside>
+    <main class="main">
+      <header class="topbar">
+        <div><b>项目详情</b><br><small>项目级总览、汇总和活动入口</small></div>
+        <span data-role-label></span>
+      </header>
+      <section class="content">
+        <div class="page-title">
+          <div>
+            <div class="breadcrumb">项目管理 / 项目详情</div>
+            <h1>泉州纺织服装时尚周主项目</h1>
+            <p>泉州海丝艺术公园 · 2026-11-18 至 2026-11-24</p>
+          </div>
+          <div class="toolbar">
+            <a class="btn" href="project-list.html">返回项目列表</a>
+            <button class="btn">编辑项目</button>
+            <button class="btn primary">已上架</button>
+            <button data-manager-only class="btn danger">删除</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>项目基础信息</h2>
+            <span class="tag green">已配置</span>
+          </div>
+          <div class="panel-body grid cols-4">
+            <div><b>项目名称</b><p>泉州纺织服装时尚周主项目</p></div>
+            <div><b>项目地点</b><p>泉州海丝艺术公园</p></div>
+            <div><b>开始时间</b><p>2026-11-18</p></div>
+            <div><b>结束时间</b><p>2026-11-24</p></div>
+            <div><b>总预算</b><p>￥860,000</p></div>
+            <div><b>主办单位</b><p>泉州时尚周组委会</p></div>
+            <div><b>承办单位</b><p>时尚周活动运营中心</p></div>
+            <div><b>支持单位</b><p>泉州市服装设计协会</p></div>
+            <div><b>指导单位</b><p>泉州市商务局</p></div>
+            <div style="grid-column:1/-1"><b>项目简介</b><p>覆盖开幕秀、品牌发布、产业洽谈和嘉宾接待的主项目，承载报名、邀请函、议程、人员服务和消息提醒等活动运营工作。</p></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>项目下活动</h2>
+            <div class="toolbar"><button class="btn primary" onclick="openModal('activityModal')">新增活动</button></div>
+          </div>
+          <div class="panel-body filters">
+            <div class="field"><label>活动名称</label><input class="input" placeholder="请输入活动名称"></div>
+            <div class="field"><label>活动类型</label><select class="select"><option>全部</option><option>自主策划</option><option>配套活动</option></select></div>
+            <div class="field"><label>发布状态</label><select class="select"><option>全部</option><option>未发布</option><option>已上架</option><option>已下架</option></select></div>
+            <div class="field"><label>展示状态</label><select class="select"><option>全部</option><option>开启</option><option>关闭</option></select></div>
+          </div>
+          <table class="table">
+            <thead><tr><th>活动</th><th>地点</th><th>时间</th><th>预算</th><th>发布</th><th>展示</th><th>报名</th><th>配置项</th><th>操作</th></tr></thead>
+            <tbody data-activity-rows></tbody>
+          </table>
+          <div class="panel-body toolbar" style="justify-content:flex-end">
+            <span class="muted">共 2 条，每页 10 条</span>
+            <button class="btn" disabled>上一页</button>
+            <button class="btn primary">1</button>
+            <button class="btn" disabled>下一页</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>项目人员</h2>
+            <div class="toolbar"><a class="btn primary" href="project-members.html">进入项目人员管理</a></div>
+          </div>
+          <div class="panel-body grid cols-4">
+            <div><b>项目人员</b><p>126 人</p></div>
+            <div><b>活动归集</b><p>118 人</p></div>
+            <div><b>项目导入</b><p>8 人</p></div>
+            <div><b>最近更新</b><p>2026-08-07 16:20</p></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div id="activityModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>新增活动</b><button class="btn ghost" onclick="closeModal('activityModal')">关闭</button></div>
+      <div class="modal-body mini-form">
+        <div class="field"><label>活动类型</label><select class="select"><option>自主策划</option><option>配套活动</option></select></div>
+        <div class="field"><label>活动名称</label><input class="input" value="泉州纺织服装时尚周开幕秀"></div>
+        <div class="field"><label>活动地点</label><input class="input" value="海丝艺术公园主秀场"></div>
+        <div class="field"><label>总预算</label><input class="input" value="520000"></div>
+        <div class="field"><label>开始时间</label><input class="input" value="2026-11-18 19:30"></div>
+        <div class="field"><label>结束时间</label><input class="input" value="2026-11-18 21:30"></div>
+        <div class="field"><label>主办单位</label><input class="input" value="泉州时尚周组委会"></div>
+        <div class="field"><label>承办单位</label><input class="input" value="时尚周活动运营中心"></div>
+        <div class="field"><label>支持单位</label><input class="input" value="泉州市服装设计协会"></div>
+        <div class="field"><label>指导单位</label><input class="input" value="泉州市商务局"></div>
+        <div class="field"><label>发布状态</label><select class="select"><option>未发布</option><option>已上架</option><option>已下架</option></select></div>
+        <div class="field"><label>H5 展示</label><select class="select"><option>关闭</option><option>开启</option></select></div>
+        <div class="field"><label>报名开关</label><select class="select"><option>关闭</option><option>开启</option></select></div>
+        <div class="field"><label>图片/视频</label><button class="btn">上传媒体</button></div>
+        <div class="field" style="grid-column:1/-1"><label>活动简介</label><textarea>时尚周开幕发布、嘉宾观秀和品牌亮相活动。</textarea></div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('activityModal')">取消</button><button class="btn" onclick="closeModal('activityModal');toast('活动已保存')">保存</button><a class="btn primary" href="activity-detail.html?projectId=1&activityId=101">保存并进入详情</a></div>
+    </div>
+  </div>
+  <script src="../assets/js/mock-data.js"></script>
+  <script src="../assets/js/admin.js"></script>
+</body>
+</html>

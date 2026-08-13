@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>活动配置总览</title>
+  <link rel="stylesheet" href="../assets/css/common.css">
+  <link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body>
+  <div class="page-shell">
+    <aside class="side-nav"></aside>
+    <main class="main">
+      <header class="topbar">
+        <div><b>活动配置总览</b><br><small>只看状态、入口和待处理项</small></div>
+        <span data-role-label></span>
+      </header>
+      <section class="content">
+        <div class="page-title">
+          <div>
+            <div class="breadcrumb">项目管理 / 2026 数字服务生态大会 / 主论坛暨新品发布 / 配置总览</div>
+            <h1>活动配置总览：主论坛暨新品发布</h1>
+            <p>主论坛暨新品发布 · 配置项 6/8 项</p>
+          </div>
+          <div class="toolbar">
+            <a class="btn" href="activity-list.html">返回活动列表</a>
+            <a class="btn" href="activity-detail.html">返回活动详情</a>
+            <button class="btn">导出配置清单</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>配置域总览<span class="hint-dot" title="点击入口进入对应模块维护，完成状态自动汇总。">?</span></h2><span>6/8 项</span></div>
+          <div class="panel-body">
+            <table class="table">
+              <thead><tr><th>配置域</th><th>配置内容</th><th>关联模块</th><th>状态</th><th>入口</th></tr></thead>
+              <tbody>
+                <tr><td>活动基础信息</td><td>字段已完整，含预算、单位、简介、发布状态、展示开关、报名开关</td><td>活动详情</td><td><span class="tag green">已配置</span></td><td><a class="btn" href="activity-detail.html">查看</a></td></tr>
+                <tr><td>活动图片/视频</td><td>封面图、展示图、视频已配置</td><td>活动详情</td><td><span class="tag green">已配置</span></td><td><a class="btn" href="activity-detail.html">查看媒体</a></td></tr>
+                <tr><td>议程/环节</td><td>5 个环节，主线和并行线已配置</td><td>议程/环节</td><td><span class="tag green">已配置</span></td><td><a class="btn" href="agenda-timeline.html">进入</a></td></tr>
+                <tr><td>活动场地空间</td><td>已引用场地库形成活动空间</td><td>活动空间</td><td><span class="tag green">已配置</span></td><td><a class="btn" href="activity-space.html">进入</a></td></tr>
+                <tr><td>资源需求</td><td>环节已定义 3 项：1 项需新建安排、1 项已关联 2 个安排、1 项仅记录</td><td>资源需求</td><td><span class="tag amber">配置中</span></td><td><a class="btn" href="resource-summary.html">查看汇总</a></td></tr>
+                <tr><td>活动资源台账</td><td>用车、用餐、住宿、物料已有记录</td><td>资源台账</td><td><span class="tag amber">配置中</span></td><td><a class="btn" href="resource-ledger.html">落实资源</a></td></tr>
+                <tr><td>活动人员</td><td>126 人，环节参与已维护</td><td>活动人员</td><td><span class="tag green">已配置</span></td><td><a class="btn" href="activity-members.html">进入</a></td></tr>
+                <tr><td>邀请函</td><td>已生成 82 份</td><td>邀请函</td><td><span class="tag amber">待提醒</span></td><td><a class="btn" href="invitation-records.html">进入</a></td></tr>
+                <tr><td>排位方案</td><td>主题演讲待确认</td><td>排位</td><td><span class="tag amber">待确认</span></td><td><a class="btn" href="seating-confirm.html">确认</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="split">
+          <div class="panel">
+            <div class="panel-head"><h2>待处理项</h2><span class="tag amber">3 项</span></div>
+            <table class="table">
+              <thead><tr><th>事项</th><th>原因</th><th>处理页面</th></tr></thead>
+              <tbody>
+                <tr><td>主题演讲排位待确认</td><td>环节已开启排位，方案保存后待业务负责人确认</td><td><a class="btn" href="seating-confirm.html">排位确认</a></td></tr>
+                <tr><td>闭幕交流用餐需求未处理</td><td>尚未创建或关联实际用餐安排</td><td><a class="btn" href="resource-summary.html">资源需求</a></td></tr>
+                <tr><td>邀请函待提醒</td><td>邀请函生成成功不自动通知，需要业务手动确认发送</td><td><a class="btn" href="invitation-records.html">生成记录</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="../assets/js/mock-data.js"></script>
+  <script src="../assets/js/admin.js"></script>
+</body>
+</html>

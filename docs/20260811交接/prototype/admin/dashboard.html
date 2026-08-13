@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>后台首页</title><link rel="stylesheet" href="../assets/css/common.css"><link rel="stylesheet" href="../assets/css/admin.css"></head>
+<body><div class="page-shell">
+<aside class="side-nav"></aside>
+<main class="main"><header class="topbar"><div><b>后台首页</b><br><small>阶段五后台 Web 原型</small></div><div class="role-switch"><span class="muted">当前角色</span><select class="select" style="width:150px" onchange="setRole(this.value)"><option>管理人员</option><option>业务负责人</option><option>运营人员</option></select></div></header>
+<section class="content"><div class="page-title"><div><div class="breadcrumb">首页 / 工作台</div><h1>项目活动运营工作台</h1><p>聚合一版本核心待办：配置缺失、报名审核、排位确认、邀请函提醒和短信失败。</p></div><a class="btn primary" href="project-list.html">进入项目列表</a></div>
+<div class="kpi-row"><div class="stat"><span>已上架项目</span><b>1</b></div><div class="stat"><span>待配置活动</span><b>3</b></div><div class="stat"><span>待审核报名</span><b>18</b></div><div class="stat"><span>待确认排位</span><b>1</b></div><div class="stat"><span>短信失败</span><b>1</b></div></div>
+<div class="grid cols-3"><div class="panel"><div class="panel-head"><h2>快捷入口</h2></div><div class="panel-body flow-list"><a class="btn" href="project-list.html">项目列表</a><a class="btn" href="activity-list.html">活动列表</a><a class="btn" href="activity-detail.html">当前活动详情</a><a class="btn" href="invitation-records.html">邀请函提醒</a><a class="btn" href="seating-confirm.html">排位确认</a></div></div>
+<div class="panel"><div class="panel-head"><h2>待办</h2></div><div class="panel-body flow-list"><div class="file-card"><span>主题演讲排位待确认</span><a class="link" href="seating-confirm.html">处理</a></div><div class="file-card"><span>邀请函批次未发送提醒</span><a class="link" href="invitation-records.html">提醒</a></div><div class="file-card"><span>分论坛 A 资源待配置</span><a class="link" href="resource-summary.html">配置</a></div></div></div>
+<div class="panel"><div class="panel-head"><h2>权限提示</h2></div><div class="panel-body"><p>删除、下架、排位确认、短信发送和批量提醒均作为高风险按钮处理。</p><p class="muted">切换为运营人员后，删除和确认类按钮会禁用。</p><button data-manager-only class="btn danger" data-toast="当前角色可执行高风险操作">高风险按钮示例</button></div></div></div>
+</section></main></div><script src="../assets/js/mock-data.js"></script><script src="../assets/js/admin.js"></script></body></html>

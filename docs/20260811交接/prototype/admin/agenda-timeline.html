@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>议程/环节</title>
+  <link rel="stylesheet" href="../assets/css/common.css">
+  <link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body>
+  <div class="page-shell">
+    <aside class="side-nav"></aside>
+    <main class="main">
+      <header class="topbar">
+        <div><b>议程/环节</b><br><small>主论坛配置维护</small></div>
+        <span data-role-label></span>
+      </header>
+      <section class="content">
+        <div class="page-title">
+          <div>
+            <div class="breadcrumb">项目管理 / 2026 数字服务生态大会 / 主论坛暨新品发布 / 议程/环节</div>
+            <h1>议程与环节：主论坛暨新品发布</h1>
+            <p>所属活动：主论坛暨新品发布 · 2026-09-18 09:00 至 17:00</p>
+          </div>
+          <div class="toolbar">
+            <a class="btn" href="activity-detail.html">返回活动详情</a>
+            <button class="btn primary" onclick="openModal('sessionEditModal')">新增环节</button>
+            <button class="btn" data-toast="已模拟导出议程图">导出议程图</button>
+          </div>
+        </div>
+
+        <div class="grid cols-4">
+          <div class="stat"><span>环节总数</span><b>5</b><p class="muted">正常 5 / 作废 0</p></div>
+          <div class="stat"><span>议程线</span><b>3</b><p class="muted">主线 1 + 并行线 2</p></div>
+          <div class="stat"><span>待排位</span><b>2</b><p class="muted">主题演讲待确认、分论坛 A 未配置</p></div>
+          <div class="stat"><span>已定义资源需求</span><b>3</b><p class="muted">待落实、已关联、仅记录</p></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>视图切换<span class="hint-dot" title="时间轴和列表使用同一批环节数据，保存后同步刷新。">?</span></h2>
+            <div class="toolbar">
+              <a class="btn primary" href="#timeline-view">时间轴画布</a>
+              <a class="btn" href="#list-view">环节列表</a>
+            </div>
+          </div>
+        </div>
+
+        <div id="timeline-view" class="panel">
+          <div class="panel-head">
+            <h2>时间轴画布</h2>
+            <span class="tag green">已根据环节列表生成</span>
+          </div>
+          <div class="panel-body timeline-wrap">
+            <div class="timeline timeline-rich">
+              <div class="time-axis"><div>议程线</div><div>09:00</div><div>10:00</div><div>11:00</div><div>12:00</div><div>13:00</div><div>14:00</div><div>15:00</div><div>16:00</div><div>17:00</div></div>
+              <div class="lane main-lane">
+                <div class="lane-name">主线<br><small>官方主流程</small></div>
+                <div class="lane-canvas">
+                  <button class="event main" style="left:2%;width:9%" onclick="openModal('sessionDetailModal')"><strong>开幕式</strong><span>09:00-09:40 · 主会场</span><em>排位已确认</em></button>
+                  <button class="event main warn" style="left:14%;width:23%" onclick="openModal('sessionDetailModal')"><strong>主题演讲</strong><span>09:50-11:30 · 主会场</span><em>排位待确认 / 用车配置中</em></button>
+                  <button class="event main warn" style="left:78%;width:12%" onclick="openModal('sessionDetailModal')"><strong>闭幕交流</strong><span>16:00-17:00 · 主会场</span><em>用餐待落实</em></button>
+                </div>
+              </div>
+              <div class="lane">
+                <div class="lane-name">分论坛 A<br><small>并行线排序 1</small></div>
+                <div class="lane-canvas">
+                  <button class="event branch warn" style="left:58%;width:17%" onclick="openModal('sessionDetailModal')"><strong>数据产品</strong><span>14:00-15:30 · 6号馆 A区</span><em>物料已处理 / 排位未配置</em></button>
+                </div>
+              </div>
+              <div class="lane">
+                <div class="lane-name">分论坛 B<br><small>并行线排序 2</small></div>
+                <div class="lane-canvas">
+                  <button class="event branch" style="left:58%;width:17%" onclick="openModal('sessionDetailModal')"><strong>场景合作</strong><span>14:00-15:30 · 6号馆 B区</span><em>不排位</em></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="list-view" class="panel">
+          <div class="panel-head">
+            <h2>环节列表</h2>
+            <div class="toolbar"><button class="btn">按时间排序</button><button class="btn">按议程线排序</button><button class="btn" onclick="openModal('sessionEditModal')">新增环节</button></div>
+          </div>
+          <table class="table">
+            <thead><tr><th>环节</th><th>议程线</th><th>顺序</th><th>时间</th><th>地点文本</th><th>状态</th><th>排位</th><th>资源需求定义</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td>开幕式</td><td>主线</td><td>1</td><td>09:00-09:40</td><td>主会场</td><td><span class="tag green">正常</span></td><td><span class="tag green">已确认</span></td><td><span class="tag green">无需求</span></td><td><div class="toolbar"><button class="btn" onclick="openModal('sessionDetailModal')">详情</button><button class="btn" onclick="openModal('sessionPeopleModal')">人员</button><button class="btn" onclick="openModal('resourceNeedModal')">新增需求</button></div></td></tr>
+              <tr><td>主题演讲</td><td>主线</td><td>2</td><td>09:50-11:30</td><td>主会场</td><td><span class="tag green">正常</span></td><td><span class="tag amber">待确认</span></td><td>已定义 1 项<br><span class="tag amber">引用已有资源安排</span></td><td><div class="toolbar"><button class="btn" onclick="openModal('sessionDetailModal')">详情</button><button class="btn" onclick="openModal('sessionPeopleModal')">人员</button><a class="btn" href="resource-summary.html">查看需求</a><button class="btn" onclick="openModal('resourceNeedModal')">新增需求</button><a class="btn" href="seating-confirm.html">确认排位</a></div></td></tr>
+              <tr><td>分论坛 A：数据产品</td><td>分论坛 A</td><td>1-1</td><td>14:00-15:30</td><td>6号馆 A区</td><td><span class="tag green">正常</span></td><td><span class="tag gray">未配置</span></td><td>已定义 1 项<br><span class="tag cyan">仅记录</span></td><td><div class="toolbar"><button class="btn" onclick="openModal('sessionDetailModal')">详情</button><button class="btn" onclick="openModal('sessionPeopleModal')">人员</button><a class="btn" href="resource-summary.html">查看需求</a><button class="btn" onclick="openModal('resourceNeedModal')">新增需求</button><a class="btn" href="seating-list.html">排位</a></div></td></tr>
+              <tr><td>分论坛 B：场景合作</td><td>分论坛 B</td><td>2-1</td><td>14:00-15:30</td><td>6号馆 B区</td><td><span class="tag green">正常</span></td><td><span class="tag gray">未开启</span></td><td><span class="tag green">无需求</span></td><td><div class="toolbar"><button class="btn" onclick="openModal('sessionDetailModal')">详情</button><button class="btn" onclick="openModal('sessionPeopleModal')">人员</button><button class="btn" onclick="openModal('resourceNeedModal')">新增需求</button></div></td></tr>
+              <tr><td>闭幕交流</td><td>主线</td><td>3</td><td>16:00-17:00</td><td>主会场</td><td><span class="tag green">正常</span></td><td><span class="tag gray">未开启</span></td><td>已定义 1 项<br><span class="tag amber">新建资源安排</span></td><td><div class="toolbar"><button class="btn" onclick="openModal('sessionDetailModal')">详情</button><button class="btn" onclick="openModal('sessionPeopleModal')">人员</button><a class="btn" href="resource-summary.html">查看需求</a><button class="btn" onclick="openModal('resourceNeedModal')">新增需求</button></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="split">
+          <div class="panel">
+            <div class="panel-head"><h2>问题提示</h2></div>
+            <table class="table">
+              <thead><tr><th>检查项</th><th>结果</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>线路字段</td><td><span class="tag green">通过</span></td><td>-</td></tr>
+                <tr><td>同一线路时间重叠</td><td><span class="tag green">通过</span></td><td>-</td></tr>
+                <tr><td>排位未配置/待确认</td><td><span class="tag amber">2 项</span></td><td><a class="btn" href="seating-list.html">进入排位</a></td></tr>
+                <tr><td>资源需求待处理</td><td><span class="tag amber">1 项</span></td><td><a class="btn" href="resource-summary.html">处理资源</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="sessionDetailModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>环节详情</b><button class="btn ghost" onclick="closeModal('sessionDetailModal')">关闭</button></div>
+      <div class="modal-body">
+        <div class="grid cols-3">
+          <div><b>环节名称</b><p>主题演讲</p></div>
+          <div><b>议程线</b><p>主线 / 顺序 2</p></div>
+          <div><b>时间</b><p>09:50-11:30</p></div>
+          <div><b>地点文本</b><p>主会场</p></div>
+          <div><b>排位</b><p><span class="tag amber">待确认</span></p></div>
+          <div><b>资源</b><p><span class="tag amber">用车配置中</span></p></div>
+        </div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('sessionDetailModal')">关闭</button><button class="btn primary" onclick="closeModal('sessionDetailModal');openModal('sessionEditModal')">修改环节</button><button class="btn" onclick="closeModal('sessionDetailModal');openModal('sessionPeopleModal')">环节人员</button><a class="btn" href="seating-list.html">排位方案</a><a class="btn" href="resource-summary.html">资源需求</a></div>
+    </div>
+  </div>
+
+  <div id="sessionEditModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>新增/编辑环节</b><button class="btn ghost" onclick="closeModal('sessionEditModal')">关闭</button></div>
+      <div class="modal-body mini-form">
+        <div class="field"><label>环节名称</label><input class="input" value="主题演讲"></div>
+        <div class="field"><label>环节类型</label><select class="select"><option>主题演讲</option><option>分论坛</option><option>洽谈</option><option>接待</option><option>其他</option></select></div>
+        <div class="field"><label>议程线类型</label><select class="select"><option>主线</option><option>并行线</option></select></div>
+        <div class="field"><label>线路名称</label><input class="input" placeholder="主线可为空，并行线必填"></div>
+        <div class="field"><label>线路排序</label><input class="input" placeholder="并行线必填"></div>
+        <div class="field"><label>线路内顺序</label><input class="input" value="2"></div>
+        <div class="field"><label>开始时间</label><input class="input" value="2026-09-18 09:50"></div>
+        <div class="field"><label>结束时间</label><input class="input" value="2026-09-18 11:30"></div>
+        <div class="field"><label>地点文本</label><input class="input" value="主会场"></div>
+        <div class="field"><label>环节状态</label><select class="select"><option>正常</option><option>作废</option></select></div>
+        <div class="field"><label>是否开启排位</label><select class="select"><option>开启</option><option>关闭</option></select></div>
+        <div class="field"><label>环节负责人</label><input class="input" value="王运营"></div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('sessionEditModal')">取消</button><button class="btn primary" onclick="closeModal('sessionEditModal');toast('环节已保存，时间轴和列表已同步刷新')">保存环节</button><a class="btn" href="seating-list.html">保存并去排位</a><button class="btn" onclick="closeModal('sessionEditModal');openModal('resourceNeedModal')">保存并定义资源需求</button></div>
+    </div>
+  </div>
+
+  <div id="resourceNeedModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>新增环节资源需求</b><button class="btn ghost" onclick="closeModal('resourceNeedModal')">关闭</button></div>
+      <div class="modal-body">
+        <div class="mini-form">
+        <div class="field"><label>来源环节</label><select class="select"><option>主题演讲</option><option>分论坛 A：数据产品</option><option>闭幕交流</option></select></div>
+        <div class="field"><label>处理方式</label><select class="select" data-need-mode><option>请选择</option><option>仅记录</option><option>新建资源安排</option><option>引用已有资源安排</option></select></div>
+        <div class="field"><label>需求名称</label><input class="input" placeholder="例如：嘉宾到达接送、闭幕后轻食茶歇"></div>
+        <div class="field"><label>范围/对象</label><input class="input" placeholder="例如：演讲嘉宾 3 人、全体参会人员"></div>
+        <div class="field" style="grid-column:1/-1"><label>需求说明</label><textarea placeholder="填写本环节的业务需求说明"></textarea></div>
+        <div class="field"><label>需求负责人</label><input class="input" value="王运营"></div>
+        <div class="field" data-new-resource-field style="display:none"><label>资源分类</label><select class="select"><option>用车</option><option>用餐</option><option>住宿</option><option>物料</option><option>供应商服务</option><option>其他</option></select></div>
+        <div class="field" data-existing-resource-field style="grid-column:1/-1;display:none"><label>关联已有安排</label><select class="select"><option>用车 / 机场接送一号车</option><option>用车 / 机场接送二号车</option><option>用餐 / 嘉宾午餐</option><option>住宿 / 嘉宾酒店双床房</option></select></div>
+        <div class="field" style="grid-column:1/-1"><label>备注</label><textarea placeholder="填写补充说明"></textarea></div>
+        </div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('resourceNeedModal')">取消</button><button class="btn primary" onclick="closeModal('resourceNeedModal');toast('资源需求项已新增')">保存新增</button><a class="btn" href="resource-summary.html">查看需求汇总</a></div>
+    </div>
+  </div>
+  <div id="sessionPeopleModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>环节人员维护</b><button class="btn ghost" onclick="closeModal('sessionPeopleModal')">关闭</button></div>
+      <div class="modal-body">
+        <div class="mini-form" style="margin-bottom:14px">
+          <div class="field"><label>当前环节</label><select class="select"><option>主题演讲</option><option>开幕式</option><option>分论坛 A：数据产品</option></select></div>
+          <div class="field"><label>处理方式</label><select class="select"><option>从全量人员库选择</option><option>新增人员</option><option>导入环节人员</option><option>引用其他环节人员</option></select></div>
+          <div class="field"><label>引用来源环节</label><select class="select"><option>不引用</option><option>开幕式</option><option>分论坛 A：数据产品</option></select></div>
+          <div class="field"><label>筛选人员</label><input class="input" placeholder="姓名、联系方式、证件号码后四位"></div>
+        </div>
+        <div class="toolbar" style="margin-bottom:12px">
+          <a class="btn" href="member-master.html">从全量库选择</a>
+          <button class="btn" data-toast="新增后将生成全量人员主档，并补齐活动/项目关系">新增人员</button>
+          <button class="btn" data-toast="导入后将补齐全量、项目、活动和环节关系">导入环节人员</button>
+          <button class="btn" data-toast="已引用其他环节人员，可继续调整本环节关系字段">引用环节人员</button>
+        </div>
+        <table class="table">
+          <thead><tr><th>人员</th><th>进入方式</th><th>环节身份</th><th>来源</th><th>分组</th><th>负责人</th><th>备注</th><th>选择</th></tr></thead>
+          <tbody>
+            <tr><td>陈明远<br><small class="muted">13800001234 / 副总经理</small></td><td><span class="tag green">已在活动内</span></td><td><select class="select"><option>演讲嘉宾</option><option>嘉宾</option></select></td><td>特别重要嘉宾</td><td>王总客人</td><td>王运营</td><td><input class="input" value="演讲席"></td><td><input type="checkbox" checked></td></tr>
+            <tr><td>周予安<br><small class="muted">13700006618 / 渠道经理</small></td><td><span class="tag blue">全量库选择</span></td><td><select class="select"><option>参会人员</option><option>工作人员</option></select></td><td>企业嘉宾</td><td>产品线邀约</td><td>李运营</td><td><input class="input" value=""></td><td><input type="checkbox"></td></tr>
+            <tr><td>Michael Tan<br><small class="muted">13900005678 / Partner</small></td><td><span class="tag cyan">引用开幕式</span></td><td><select class="select"><option>演讲嘉宾</option><option>嘉宾</option></select></td><td>企业嘉宾</td><td>王总客人</td><td>王运营</td><td><input class="input" value="英文接待"></td><td><input type="checkbox" checked></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('sessionPeopleModal')">取消</button><button class="btn primary" onclick="closeModal('sessionPeopleModal');toast('环节人员已保存，并已补齐活动/项目关系')">保存环节人员</button></div>
+    </div>
+  </div>
+  <script src="../assets/js/mock-data.js"></script>
+  <script src="../assets/js/admin.js"></script>
+</body>
+</html>

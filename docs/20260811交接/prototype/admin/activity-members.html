@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>活动人员</title>
+  <link rel="stylesheet" href="../assets/css/common.css">
+  <link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body>
+  <div class="page-shell">
+    <aside class="side-nav"></aside>
+    <main class="main">
+      <header class="topbar">
+        <div><b>活动人员</b><br><small>活动人员关系与环节参与维护</small></div>
+        <span data-role-label></span>
+      </header>
+      <section class="content">
+        <div class="page-title">
+          <div>
+            <div class="breadcrumb">人员管理 / 活动人员</div>
+            <h1>主论坛暨新品发布活动人员</h1>
+            <p>主论坛 · 活动人员关系与环节参与维护</p>
+          </div>
+          <div class="toolbar">
+            <button class="btn" onclick="toast('导入后系统生成数据来源：后台导入')">导入活动人员</button>
+            <button class="btn primary" onclick="openModal('selectMemberModal')">新增活动人员</button>
+          </div>
+        </div>
+
+        <div id="activity-member-list" class="panel">
+          <div class="panel-head"><h2>查询条件</h2><div class="toolbar"><button class="btn">重置</button><button class="btn primary">查询</button></div></div>
+          <div class="panel-body filters">
+            <div class="field"><label>姓名/联系方式</label><input class="input" placeholder="姓名、联系方式"></div>
+            <div class="field"><label>来源</label><select class="select"><option>全部</option><option>企业嘉宾</option><option>特别重要嘉宾</option><option>政府嘉宾</option><option>媒体嘉宾</option><option>工作人员</option><option>其他</option></select></div>
+            <div class="field"><label>分组</label><select class="select"><option>全部</option><option>王总客人</option><option>李总客人</option><option>产品线邀约</option><option>会务组</option></select></div>
+            <div class="field"><label>负责人</label><input class="input" placeholder="负责人"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>活动人员列表</h2>
+          </div>
+          <table class="table">
+            <thead>
+              <tr><th>人员</th><th>来源</th><th>分组</th><th>负责人</th><th>数据来源</th><th>备注</th><th>参与状态</th><th>操作</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>陈明远<br><small class="muted">138****1234 / 副总经理</small></td>
+                <td>特别重要嘉宾</td>
+                <td>王总客人</td>
+                <td>王运营</td>
+                <td>报名审核通过</td>
+                <td>需安排前排与接送</td>
+                <td><span class="tag green">正常</span></td>
+                <td><div class="toolbar"><button class="btn" onclick="openModal('memberDetailModal')">详情</button><button class="btn" onclick="openModal('relationModal')">编辑关系</button><button class="btn" onclick="openModal('sessionMemberModal')">分配环节</button><button data-manager-only class="btn danger" onclick="openModal('removeActivityMemberModal')">移除</button></div></td>
+              </tr>
+              <tr>
+                <td>林若溪<br><small class="muted">138****1234 / 产品负责人</small></td>
+                <td>企业嘉宾</td>
+                <td>产品线邀约</td>
+                <td>李运营</td>
+                <td>后台导入</td>
+                <td>产品线邀约</td>
+                <td><span class="tag green">正常</span></td>
+                <td><div class="toolbar"><button class="btn" onclick="openModal('memberDetailModal')">详情</button><button class="btn" onclick="openModal('relationModal')">编辑关系</button><button class="btn" onclick="openModal('sessionMemberModal')">分配环节</button><button data-manager-only class="btn danger" onclick="openModal('removeActivityMemberModal')">移除</button></div></td>
+              </tr>
+              <tr>
+                <td>Michael Tan<br><small class="muted">139****5678 / Partner</small></td>
+                <td>企业嘉宾</td>
+                <td>王总客人</td>
+                <td>王运营</td>
+                <td>手工选择</td>
+                <td>英文接待</td>
+                <td><span class="tag green">正常</span></td>
+                <td><div class="toolbar"><button class="btn" onclick="openModal('memberDetailModal')">详情</button><button class="btn" onclick="openModal('relationModal')">编辑关系</button><button class="btn" onclick="openModal('sessionMemberModal')">分配环节</button><button data-manager-only class="btn danger" onclick="openModal('removeActivityMemberModal')">移除</button></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </section>
+    </main>
+  </div>
+
+  <div id="selectMemberModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>选择活动人员</b><button class="btn ghost" onclick="closeModal('selectMemberModal')">关闭</button></div>
+      <div class="modal-body">
+        <div class="panel" style="box-shadow:none">
+          <div class="panel-head"><h2>人员主档信息</h2><a class="btn" href="member-master.html">从全量人员库选择</a></div>
+          <div class="panel-body mini-form">
+            <div class="field"><label>姓名</label><input class="input" value="陈明远"></div>
+            <div class="field"><label>性别</label><select class="select"><option>男</option><option>女</option><option>其他</option></select></div>
+            <div class="field"><label>国别/地区</label><input class="input" value="中国大陆"></div>
+            <div class="field"><label>籍贯</label><input class="input" value="福建福州"></div>
+            <div class="field"><label>职务</label><input class="input" value="副总经理"></div>
+            <div class="field"><label>证件类型</label><select class="select"><option>身份证</option><option>护照</option><option>港澳通行证</option><option>其他</option></select></div>
+            <div class="field"><label>证件号码</label><input class="input" value="350102198903120031"></div>
+            <div class="field"><label>联系方式</label><input class="input" value="13800001234 / 0591-87560001"></div>
+            <div class="field"><label>邮箱</label><input class="input" value="chen@example.com"></div>
+            <div class="field"><label>语种</label><select class="select"><option>中文</option><option>英文</option><option>其他</option></select></div>
+          </div>
+        </div>
+        <div class="panel" style="box-shadow:none;margin-top:14px">
+          <div class="panel-head"><h2>当前活动关系</h2></div>
+          <div class="panel-body mini-form">
+            <div class="field"><label>来源</label><select class="select"><option>企业嘉宾</option><option>特别重要嘉宾</option><option>政府嘉宾</option><option>媒体嘉宾</option><option>工作人员</option><option>其他</option></select></div>
+            <div class="field"><label>分组</label><input class="input" value="王总客人"></div>
+            <div class="field"><label>负责人</label><input class="input" value="王运营"></div>
+            <div class="field" style="grid-column:1/-1"><label>备注</label><textarea>需安排前排与接送。</textarea></div>
+            <div class="field" style="grid-column:1/-1"><label>数据来源</label><p>手工选择</p></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('selectMemberModal')">取消</button><button class="btn" onclick="closeModal('selectMemberModal');toast('已建立活动人员关系')">保存</button><button class="btn primary" onclick="closeModal('selectMemberModal');openModal('sessionMemberModal')">保存并分配环节</button></div>
+    </div>
+  </div>
+
+  <div id="relationModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>编辑活动人员关系</b><button class="btn ghost" onclick="closeModal('relationModal')">关闭</button></div>
+      <div class="modal-body mini-form">
+        <div class="field"><label>来源</label><select class="select"><option>特别重要嘉宾</option><option>企业嘉宾</option><option>政府嘉宾</option><option>媒体嘉宾</option><option>工作人员</option><option>其他</option></select></div>
+        <div class="field"><label>分组</label><input class="input" value="王总客人"></div>
+        <div class="field"><label>负责人</label><input class="input" value="王运营"></div>
+        <div class="field" style="grid-column:1/-1"><label>备注</label><textarea>需安排前排与接送。</textarea></div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('relationModal')">取消</button><button class="btn primary" onclick="closeModal('relationModal');toast('活动人员关系已保存')">保存</button></div>
+    </div>
+  </div>
+
+  <div id="memberDetailModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>活动人员详情</b><button class="btn ghost" onclick="closeModal('memberDetailModal')">关闭</button></div>
+      <div class="modal-body">
+        <div class="panel" style="box-shadow:none">
+          <div class="panel-head"><h2>人员主档摘要</h2><a class="btn" href="member-master.html">查看主档</a></div>
+          <div class="panel-body grid cols-4">
+            <div><b>姓名</b><p>陈明远</p></div>
+            <div><b>性别</b><p>男</p></div>
+            <div><b>国别/地区</b><p>中国大陆</p></div>
+            <div><b>籍贯</b><p>福建福州</p></div>
+            <div><b>职务</b><p>副总经理</p></div>
+            <div><b>证件类型</b><p>身份证</p></div>
+            <div><b>证件号码</b><p>350102********0031</p></div>
+            <div><b>联系方式</b><p>13800001234 / 0591-87560001</p></div>
+            <div><b>邮箱</b><p>chen@example.com</p></div>
+            <div><b>语种</b><p>中文</p></div>
+          </div>
+        </div>
+        <div class="panel" style="box-shadow:none;margin-top:14px">
+          <div class="panel-head"><h2>当前活动关系</h2><button class="btn" onclick="closeModal('memberDetailModal');openModal('relationModal')">编辑关系</button></div>
+          <div class="panel-body grid cols-4">
+            <div><b>来源</b><p>特别重要嘉宾</p></div>
+            <div><b>分组</b><p>王总客人</p></div>
+            <div><b>负责人</b><p>王运营</p></div>
+            <div><b>数据来源</b><p>报名审核通过</p></div>
+            <div style="grid-column:1/-1"><b>备注</b><p>需安排前排与接送。</p></div>
+          </div>
+        </div>
+        <div class="panel" style="box-shadow:none;margin-top:14px">
+          <div class="panel-head"><h2>环节参与</h2><button class="btn" onclick="closeModal('memberDetailModal');openModal('sessionMemberModal')">调整</button></div>
+          <table class="table">
+            <thead><tr><th>环节</th><th>环节身份</th><th>负责人</th><th>排位状态</th><th>座位</th></tr></thead>
+            <tbody>
+              <tr><td>开幕式</td><td>嘉宾</td><td>王运营</td><td><span class="tag green">已确认</span></td><td>主会场 A 区 A1</td></tr>
+              <tr><td>主题演讲</td><td>演讲嘉宾</td><td>王运营</td><td><span class="tag amber">待确认</span></td><td>待确认后展示</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="panel" style="box-shadow:none;margin-top:14px">
+          <div class="panel-head"><h2>相关业务</h2></div>
+          <div class="panel-body grid cols-4">
+            <a class="stat" href="registration-review.html"><span>报名</span><b>审核通过</b><p class="muted">查看报名记录</p></a>
+            <a class="stat" href="invitation-records.html"><span>邀请函</span><b>已生成</b><p class="muted">待手动提醒</p></a>
+            <a class="stat" href="resource-ledger.html"><span>服务</span><b>2 项</b><p class="muted">用车、用餐</p></a>
+            <a class="stat" href="seating-list.html"><span>座位</span><b>2 条</b><p class="muted">按环节查看</p></a>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('memberDetailModal')">关闭</button><button class="btn" onclick="closeModal('memberDetailModal');openModal('sessionMemberModal')">分配环节</button><a class="btn primary" href="resource-ledger.html">服务绑定</a></div>
+    </div>
+  </div>
+
+  <div id="sessionMemberModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>分配环节人员 <span class="hint-dot" title="支持新增、从全量人员库选择、导入、引用其他环节人员；系统会补齐活动人员关系。">?</span></b><button class="btn ghost" onclick="closeModal('sessionMemberModal')">关闭</button></div>
+      <div class="modal-body">
+        <div class="mini-form" style="margin-bottom:14px">
+          <div class="field"><label>目标环节</label><select class="select"><option>主题演讲</option><option>开幕式</option><option>分论坛 A：数据产品</option></select></div>
+          <div class="field"><label>处理方式</label><select class="select"><option>从全量人员库选择</option><option>新增人员</option><option>导入环节人员</option><option>引用其他环节人员</option></select></div>
+          <div class="field"><label>筛选人员</label><input class="input" placeholder="姓名、联系方式、来源、分组"></div>
+          <div class="field"><label>引用来源环节</label><select class="select"><option>不引用</option><option>开幕式</option><option>分论坛 A：数据产品</option></select></div>
+        </div>
+        <div class="toolbar" style="margin-bottom:12px">
+          <a class="btn" href="member-master.html">从全量库选择</a>
+          <button class="btn" data-toast="新增后将生成全量人员主档、活动人员关系和环节人员关系">新增人员</button>
+          <button class="btn" data-toast="导入后将同步补齐全量、活动、项目和环节关系">导入环节人员</button>
+          <button class="btn" data-toast="已引用其他环节人员，可继续调整本环节身份和负责人">引用环节人员</button>
+        </div>
+        <table class="table">
+          <thead><tr><th>人员</th><th>关系来源</th><th>来源</th><th>分组</th><th>环节身份</th><th>负责人</th><th>备注</th><th>选择</th></tr></thead>
+          <tbody>
+            <tr><td>陈明远<br><small class="muted">13800001234 / 0591-87560001</small></td><td><span class="tag green">已在活动内</span></td><td>特别重要嘉宾</td><td>王总客人</td><td><select class="select"><option>演讲嘉宾</option><option>嘉宾</option><option>工作人员</option></select></td><td>王运营</td><td><input class="input" value="演讲席"></td><td><input type="checkbox" checked></td></tr>
+            <tr><td>林若溪<br><small class="muted">13800001234 / 0592-55670002</small></td><td><span class="tag blue">全量库选择</span></td><td>企业嘉宾</td><td>产品线邀约</td><td><select class="select"><option>参会人员</option><option>嘉宾</option><option>工作人员</option></select></td><td>李运营</td><td><input class="input" value=""></td><td><input type="checkbox"></td></tr>
+            <tr><td>Michael Tan<br><small class="muted">13900005678 / +65 6123 7788</small></td><td><span class="tag cyan">引用开幕式</span></td><td>企业嘉宾</td><td>王总客人</td><td><select class="select"><option>嘉宾</option><option>演讲嘉宾</option><option>参会人员</option></select></td><td>王运营</td><td><input class="input" value="英文接待"></td><td><input type="checkbox" checked></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('sessionMemberModal')">取消</button><button class="btn primary" onclick="closeModal('sessionMemberModal');toast('环节人员已保存，并已补齐活动/项目关系；座位需进入排位方案处理')">保存</button></div>
+    </div>
+  </div>
+
+  <div id="seatResultModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>座位结果</b><button class="btn ghost" onclick="closeModal('seatResultModal')">关闭</button></div>
+      <div class="modal-body">
+        <table class="table">
+          <thead><tr><th>人员</th><th>环节</th><th>排位状态</th><th>座位</th><th>展示状态</th></tr></thead>
+          <tbody>
+            <tr><td>陈明远</td><td>开幕式</td><td><span class="tag green">已确认</span></td><td>主会场 A 区 A1</td><td>H5 可见</td></tr>
+            <tr><td>陈明远</td><td>主题演讲</td><td><span class="tag amber">待确认</span></td><td>待确认后展示</td><td>H5 不展示</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('seatResultModal')">关闭</button><a class="btn primary" href="seating-list.html">进入排位方案</a></div>
+    </div>
+  </div>
+  <div id="removeActivityMemberModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>移除活动人员</b><button class="btn ghost" onclick="closeModal('removeActivityMemberModal')">关闭</button></div>
+      <div class="modal-body">
+        <p>本次将一键解除该人员在当前活动下的关联内容，确认后不支持复原。</p>
+        <table class="table">
+          <thead><tr><th>影响内容</th><th>当前数量/状态</th><th>处理结果</th></tr></thead>
+          <tbody>
+            <tr><td>活动人员关系</td><td>1 条</td><td>解除当前活动关系</td></tr>
+            <tr><td>环节参与关系</td><td>2 条</td><td>解除开幕式、主题演讲参与关系</td></tr>
+            <tr><td>邀请函记录</td><td>已生成 1 条</td><td>标记为不再适用，历史记录保留</td></tr>
+            <tr><td>排位结果</td><td>已确认 1 条、待确认 1 条</td><td>解除人员座位绑定，相关排位方案提示需复核</td></tr>
+            <tr><td>资源服务绑定</td><td>用车、用餐 2 项</td><td>解除服务对象绑定，历史记录保留</td></tr>
+            <tr><td>消息记录</td><td>已发送记录</td><td>历史消息记录保留</td></tr>
+          </tbody>
+        </table>
+        <p class="muted">人员主档仍保留在全量人员库。如后续仍需参与，只能重新新增活动人员并重新配置环节、排位和服务。</p>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('removeActivityMemberModal')">取消</button><button data-manager-only class="btn danger" onclick="closeModal('removeActivityMemberModal');toast('已一键解除活动人员关联，历史记录保留且不可复原')">二次确认并解除</button></div>
+    </div>
+  </div>
+  <script src="../assets/js/mock-data.js"></script>
+  <script src="../assets/js/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>生成邀请函</title><link rel="stylesheet" href="../assets/css/common.css"><link rel="stylesheet" href="../assets/css/admin.css"></head>
+<body><div class="page-shell"><aside class="side-nav"></aside><main class="main"><header class="topbar"><div><b>生成邀请函</b><br><small>生成发函文件和邀请函记录</small></div><span data-role-label></span></header><section class="content">
+<div class="page-title"><div><div class="breadcrumb">邀请函管理 / 发函文件模板 / 生成邀请函</div><h1>生成主论坛邀请函</h1><p>以发函文件模板生成 PDF/Word 邀请函；H5 读取同一生成记录自动展示，不重新选择邀请人员或移动端样式。</p></div><div class="toolbar"><a class="btn" href="invitation-templates.html">发函文件模板</a><a class="btn" href="invitation-records.html">查看生成记录</a></div></div>
+<div class="grid cols-3">
+  <div class="stat"><span>当前活动人员</span><b>126</b><p class="muted">来自活动人员关系</p></div>
+  <div class="stat"><span>本次邀请人员</span><b>82</b><p class="muted">一次选择，文件和 H5 共用</p></div>
+  <div class="stat"><span>生成后提醒</span><b>手动</b><p class="muted">不自动发送短信</p></div>
+</div>
+<div class="panel">
+  <div class="panel-head"><h2>生成配置</h2></div>
+  <div class="panel-body mini-form">
+    <div class="field"><label>项目</label><input class="input" value="2026 数字服务生态大会" readonly></div>
+    <div class="field"><label>活动</label><input class="input" value="主论坛暨新品发布" readonly></div>
+    <div class="field"><label>邀请人员范围</label><select class="select"><option>已选活动人员 82 人</option><option>全部活动人员 126 人</option><option>按来源筛选：特别重要嘉宾</option><option>按分组筛选：王总客人</option></select></div>
+    <div class="field"><label>发函文件模板</label><select class="select"><option>正式邀请函模板</option><option>贵宾邀请函模板</option></select></div>
+    <div class="field"><label>文件格式</label><select class="select"><option>PDF、Word</option><option>PDF</option><option>Word</option></select></div>
+    <div class="field"><label>批量上限</label><input class="input" value="200 份/批" readonly></div>
+    <div class="field"><label>H5 展示</label><input class="input" value="自动读取当前启用样式" readonly></div>
+  </div>
+</div>
+<div class="panel">
+  <div class="panel-head"><h2>本次生成对象</h2><span class="muted">3 人示例</span></div>
+  <table class="table">
+    <thead><tr><th>人员</th><th>来源</th><th>分组</th><th>负责人</th><th>发函文件</th><th>H5 展示</th></tr></thead>
+    <tbody>
+      <tr><td>陈明远<br><small class="muted">138****1234</small></td><td>特别重要嘉宾</td><td>王总客人</td><td>王运营</td><td><span class="tag green">生成</span></td><td><span class="tag green">同记录展示</span></td></tr>
+      <tr><td>林若溪<br><small class="muted">138****1234</small></td><td>企业嘉宾</td><td>产品线邀约</td><td>李运营</td><td><span class="tag green">生成</span></td><td><span class="tag green">同记录展示</span></td></tr>
+      <tr><td>Michael Tan<br><small class="muted">139****5678</small></td><td>企业嘉宾</td><td>王总客人</td><td>王运营</td><td><span class="tag green">生成</span></td><td><span class="tag green">同记录展示</span></td></tr>
+    </tbody>
+  </table>
+  <div class="panel-body"><div class="toolbar"><button class="btn" data-toast="已完成生成前校验">校验变量</button><button data-manager-only class="btn primary" onclick="openModal('generateConfirmModal')">开始生成</button></div></div>
+</div>
+</section></main></div>
+<div id="generateConfirmModal" class="modal-backdrop">
+  <div class="modal">
+    <div class="modal-head"><b>确认生成邀请函</b><button class="btn ghost" onclick="closeModal('generateConfirmModal')">关闭</button></div>
+    <div class="modal-body">
+      <div class="grid cols-3"><div class="stat"><span>邀请人员</span><b>82 人</b></div><div class="stat"><span>发函文件</span><b>PDF/Word</b></div><div class="stat"><span>H5 展示</span><b>同记录</b></div></div>
+      <p class="muted">确认后将生成发函文件和邀请函记录。H5 按同一批记录展示邀请函，不单独选择人员；系统不会自动发送站内信或短信。</p>
+    </div>
+    <div class="modal-foot"><button class="btn" onclick="closeModal('generateConfirmModal')">取消</button><button data-manager-only class="btn primary" onclick="closeModal('generateConfirmModal');toast('已生成邀请函记录，可进入生成记录下载或提醒')">确认生成</button></div>
+  </div>
+</div>
+<script src="../assets/js/mock-data.js"></script><script src="../assets/js/admin.js"></script></body></html>

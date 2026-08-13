@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>活动场地空间</title>
+  <link rel="stylesheet" href="../assets/css/common.css">
+  <link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body>
+  <div class="page-shell">
+    <aside class="side-nav"></aside>
+    <main class="main">
+      <header class="topbar">
+        <div><b>活动场地空间</b><br><small>当前活动使用的场地快照，供环节排位引用</small></div>
+        <span data-role-label></span>
+      </header>
+      <section class="content">
+        <div class="page-title">
+          <div>
+            <div class="breadcrumb">项目管理 / 2026 数字服务生态大会 / 主论坛暨新品发布 / 场地空间</div>
+            <h1>场地空间：主论坛暨新品发布</h1>
+            <p>所属活动：主论坛暨新品发布 · 主会场、洽谈区、签到/物料区</p>
+          </div>
+          <div class="toolbar">
+            <a class="btn" href="activity-detail.html">返回活动详情</a>
+            <a class="btn" href="venue-library.html">从场地库引用</a>
+            <button class="btn primary" data-toast="活动空间配置已保存">保存活动空间</button>
+          </div>
+        </div>
+
+        <div class="grid cols-4">
+          <div class="stat"><span>引用场地</span><b>1</b><p class="muted">福州海峡国际会展中心主会场</p></div>
+          <div class="stat"><span>活动区域</span><b>4</b><p class="muted">可按活动调整用途</p></div>
+          <div class="stat"><span>可用点位</span><b>236</b><p class="muted">活动快照中启用</p></div>
+          <div class="stat"><span>被排位引用</span><b>2</b><p class="muted">开幕式、主题演讲</p></div>
+        </div>
+
+        <div class="split">
+          <div class="panel">
+            <div class="panel-head"><h2>活动空间画布<span class="hint-dot" title="活动空间供排位画布引用；普通环节地点可在环节中直接录入文本。">?</span></h2><div class="toolbar"><button class="btn">调整区域用途</button><button class="btn">禁用区域</button></div></div>
+            <div class="panel-body">
+              <div class="space-map">
+                <div class="zone" style="left:8%;top:12%;width:52%;height:42%;" onclick="openModal('activityZoneModal')">主会场 A 区<br><small>主线排位 / 120</small></div>
+                <div class="zone" style="left:65%;top:12%;width:27%;height:42%;" onclick="openModal('activityZoneModal')">主会场 B 区<br><small>备用座席 / 80</small></div>
+                <div class="zone" style="left:8%;top:62%;width:38%;height:26%;" onclick="openModal('activityZoneModal')">洽谈区<br><small>分论坛/洽谈 / 36</small></div>
+                <div class="zone" style="left:52%;top:62%;width:40%;height:26%;" onclick="openModal('activityZoneModal')">签到/物料区<br><small>不排位 / 24</small></div>
+              </div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>区域列表</h2></div>
+            <table class="table">
+              <thead><tr><th>活动区域</th><th>来源场地区域</th><th>活动用途</th><th>可用点位</th><th>引用环节</th><th>状态</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>主会场 A 区</td><td>主会场 A 区</td><td>主线环节排位</td><td>120</td><td>开幕式、主题演讲</td><td><span class="tag green">正常</span></td><td><div class="toolbar"><button class="btn" onclick="openModal('activityZoneModal')">编辑</button><a class="btn" href="seating-canvas.html">排位</a></div></td></tr>
+                <tr><td>洽谈区</td><td>洽谈区</td><td>分论坛/洽谈</td><td>36</td><td>分论坛 A</td><td><span class="tag green">正常</span></td><td><div class="toolbar"><button class="btn" onclick="openModal('activityZoneModal')">编辑</button><a class="btn" href="seating-canvas.html">排位</a></div></td></tr>
+                <tr><td>签到/物料区</td><td>签到/物料区</td><td>签到和物料发放</td><td>24</td><td>-</td><td><span class="tag green">正常</span></td><td><button class="btn" onclick="openModal('activityZoneModal')">编辑</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+    </main>
+  </div>
+
+  <div id="activityZoneModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>编辑活动区域</b><button class="btn ghost" onclick="closeModal('activityZoneModal')">关闭</button></div>
+      <div class="modal-body mini-form">
+        <div class="field"><label>活动区域名称</label><input class="input" value="主会场 A 区"></div>
+        <div class="field"><label>来源场地区域</label><input class="input" value="福州海峡国际会展中心 / 主会场 A 区"></div>
+        <div class="field"><label>活动用途</label><select class="select"><option>主线环节排位</option><option>分论坛/洽谈</option><option>签到物料</option><option>备用区域</option></select></div>
+        <div class="field"><label>可用点位</label><input class="input" value="120"></div>
+        <div class="field"><label>状态</label><select class="select"><option>正常</option><option>作废</option></select></div>
+        <div class="field" style="grid-column:1/-1"><label>活动说明</label><textarea>当前活动对该区域的使用说明，供环节排位引用。</textarea></div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('activityZoneModal')">取消</button><button class="btn primary" onclick="closeModal('activityZoneModal');toast('活动区域已保存，排位画布可引用')">保存</button></div>
+    </div>
+  </div>
+  <script src="../assets/js/mock-data.js"></script>
+  <script src="../assets/js/admin.js"></script>
+</body>
+</html>

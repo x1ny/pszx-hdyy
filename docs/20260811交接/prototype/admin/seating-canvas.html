@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>环节排位画布</title>
+  <link rel="stylesheet" href="../assets/css/common.css">
+  <link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body>
+  <div class="page-shell">
+    <aside class="side-nav"></aside>
+    <main class="main">
+      <header class="topbar">
+        <div><b>环节排位画布</b><br><small>主题演讲 · 引用活动空间：主会场 A 区</small></div>
+        <span data-role-label></span>
+      </header>
+      <section class="content">
+        <div class="page-title">
+          <div>
+            <div class="breadcrumb">议程/环节 / 排位方案 / 排位画布</div>
+            <h1>主题演讲排位方案</h1>
+            <p>主论坛 · 主题演讲 · 主会场 A 区</p>
+          </div>
+          <div class="toolbar">
+            <a class="btn" href="agenda-timeline.html">返回议程/环节</a>
+            <a class="btn" href="activity-space.html">活动空间</a>
+            <button class="btn primary" data-toast="已保存为待确认方案">保存待确认</button>
+            <button data-manager-only class="btn" data-toast="已确认，H5 可展示本人座位并生成通知">确认排位</button>
+          </div>
+        </div>
+
+        <div class="grid cols-4">
+          <div class="stat"><span>当前环节</span><b>主题演讲</b><p class="muted">09:50-11:30</p></div>
+          <div class="stat"><span>引用区域</span><b>主会场 A 区</b><p class="muted">活动空间快照</p></div>
+          <div class="stat"><span>已排位</span><b>64</b><p class="muted">活动人员 + 环节参与</p></div>
+          <div class="stat"><span>方案状态</span><b>待确认</b><p class="muted">未确认不展示 H5 座位</p></div>
+        </div>
+
+        <div class="split">
+          <div class="panel">
+            <div class="panel-head">
+              <h2>座位画布<span class="hint-dot" title="当前画布只处理本环节排位；同一区域可被其他环节复用。">?</span></h2>
+              <div class="toolbar"><button class="btn">批量排位</button><button class="btn">清空未确认</button><button class="btn" onclick="openModal('seatModal')">编辑座位</button></div>
+            </div>
+            <div class="panel-body">
+              <div class="seat-grid"> 
+                <button class="seat assigned" onclick="openModal('seatModal')">A1</button><button class="seat assigned" onclick="openModal('seatModal')">A2</button><button class="seat focus" onclick="openModal('seatModal')">A3</button><button class="seat">A4</button><button class="seat">A5</button><button class="seat">A6</button>
+                <button class="seat assigned">B1</button><button class="seat assigned">B2</button><button class="seat">B3</button><button class="seat">B4</button><button class="seat">B5</button><button class="seat">B6</button>
+                <button class="seat">C1</button><button class="seat assigned">C2</button><button class="seat assigned">C3</button><button class="seat">C4</button><button class="seat">C5</button><button class="seat">C6</button>
+                <button class="seat">D1</button><button class="seat">D2</button><button class="seat assigned">D3</button><button class="seat assigned">D4</button><button class="seat">D5</button><button class="seat">D6</button>
+              </div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>人员座位<span class="hint-dot" title="座位绑定对象来自本环节参与人员。">?</span></h2><button class="btn" onclick="openModal('memberSeatModal')">从环节人员选择</button></div>
+            <table class="table">
+              <thead><tr><th>人员</th><th>环节身份</th><th>座位</th><th>来源</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td>陈明远</td><td>演讲嘉宾</td><td>A1</td><td>环节参与人员</td><td><button class="btn" onclick="openModal('seatModal')">调整</button></td></tr>
+                <tr><td>林若溪</td><td>参会人员</td><td>A2</td><td>环节参与人员</td><td><button class="btn" onclick="openModal('seatModal')">调整</button></td></tr>
+                <tr><td>Michael Tan</td><td>演讲嘉宾</td><td>A3</td><td>环节参与人员</td><td><button class="btn" onclick="openModal('seatModal')">调整</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="seatModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>编辑座位绑定</b><button class="btn ghost" onclick="closeModal('seatModal')">关闭</button></div>
+      <div class="modal-body mini-form">
+        <div class="field"><label>座位</label><input class="input" value="A3"></div>
+        <div class="field"><label>绑定人员</label><select class="select"><option>Michael Tan / 演讲嘉宾</option><option>陈明远 / 演讲嘉宾</option><option>林若溪 / 参会人员</option></select></div>
+        <div class="field"><label>来源</label><input class="input" value="主题演讲环节参与人员"></div>
+        <div class="field"><label>座位说明</label><input class="input" value="第一排中区"></div>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('seatModal')">取消</button><button class="btn primary" onclick="closeModal('seatModal');toast('座位绑定已保存，方案状态仍为待确认')">保存</button></div>
+    </div>
+  </div>
+
+  <div id="memberSeatModal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head"><b>选择环节人员</b><button class="btn ghost" onclick="closeModal('memberSeatModal')">关闭</button></div>
+      <div class="modal-body">
+        <table class="table"><thead><tr><th>人员</th><th>环节身份</th><th>当前座位</th><th>选择</th></tr></thead><tbody><tr><td>陈明远</td><td>演讲嘉宾</td><td>A1</td><td><input type="checkbox" checked></td></tr><tr><td>林若溪</td><td>参会人员</td><td>A2</td><td><input type="checkbox" checked></td></tr><tr><td>Michael Tan</td><td>演讲嘉宾</td><td>A3</td><td><input type="checkbox" checked></td></tr></tbody></table>
+      </div>
+      <div class="modal-foot"><button class="btn" onclick="closeModal('memberSeatModal')">取消</button><button class="btn primary" onclick="closeModal('memberSeatModal');toast('已加入排位画布')">确认</button></div>
+    </div>
+  </div>
+  <script src="../assets/js/mock-data.js"></script>
+  <script src="../assets/js/admin.js"></script>
+</body>
+</html>
