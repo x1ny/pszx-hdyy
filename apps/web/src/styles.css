@@ -140,3 +140,22 @@ body,
     @apply font-sans;
   }
 }
+
+/*
+ * RichTextEditor（Tiptap）编辑区。ProseMirror 的根节点是 contenteditable 的
+ * div，不是表单控件，没有天然的 placeholder——用 :empty 伪类模拟。
+ * 只有这一个组件在用，不值得为两条规则单开一个 .css 文件。
+ */
+.invitation-rich-text-editor .invitation-rich-text-content {
+  min-height: 8rem;
+  padding: 0.5rem 0.75rem;
+  outline: none;
+}
+
+.invitation-rich-text-editor .invitation-rich-text-content p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--muted-foreground);
+  pointer-events: none;
+}

@@ -19,6 +19,9 @@ import { Route as AuthenticatedProjectListRouteImport } from './routes/_authenti
 import { Route as AuthenticatedSupplierIndexRouteImport } from './routes/_authenticated/supplier/index'
 import { Route as AuthenticatedSystemRoleRouteImport } from './routes/_authenticated/system/role'
 import { Route as AuthenticatedSystemUserRouteImport } from './routes/_authenticated/system/user'
+import { Route as AuthenticatedInvitationBatchIndexRouteImport } from './routes/_authenticated/invitation/batch/index'
+import { Route as AuthenticatedInvitationGenerateIndexRouteImport } from './routes/_authenticated/invitation/generate/index'
+import { Route as AuthenticatedInvitationTemplateIndexRouteImport } from './routes/_authenticated/invitation/template/index'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -72,6 +75,24 @@ const AuthenticatedSystemUserRoute = AuthenticatedSystemUserRouteImport.update({
   path: '/system/user',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedInvitationBatchIndexRoute =
+  AuthenticatedInvitationBatchIndexRouteImport.update({
+    id: '/invitation/batch/',
+    path: '/invitation/batch/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedInvitationGenerateIndexRoute =
+  AuthenticatedInvitationGenerateIndexRouteImport.update({
+    id: '/invitation/generate/',
+    path: '/invitation/generate/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedInvitationTemplateIndexRoute =
+  AuthenticatedInvitationTemplateIndexRouteImport.update({
+    id: '/invitation/template/',
+    path: '/invitation/template/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -83,6 +104,9 @@ export interface FileRoutesByFullPath {
   '/system/user': typeof AuthenticatedSystemUserRoute
   '/member/': typeof AuthenticatedMemberIndexRoute
   '/supplier/': typeof AuthenticatedSupplierIndexRoute
+  '/invitation/batch/': typeof AuthenticatedInvitationBatchIndexRoute
+  '/invitation/generate/': typeof AuthenticatedInvitationGenerateIndexRoute
+  '/invitation/template/': typeof AuthenticatedInvitationTemplateIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -94,6 +118,9 @@ export interface FileRoutesByTo {
   '/system/user': typeof AuthenticatedSystemUserRoute
   '/member': typeof AuthenticatedMemberIndexRoute
   '/supplier': typeof AuthenticatedSupplierIndexRoute
+  '/invitation/batch': typeof AuthenticatedInvitationBatchIndexRoute
+  '/invitation/generate': typeof AuthenticatedInvitationGenerateIndexRoute
+  '/invitation/template': typeof AuthenticatedInvitationTemplateIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -107,6 +134,9 @@ export interface FileRoutesById {
   '/_authenticated/system/user': typeof AuthenticatedSystemUserRoute
   '/_authenticated/member/': typeof AuthenticatedMemberIndexRoute
   '/_authenticated/supplier/': typeof AuthenticatedSupplierIndexRoute
+  '/_authenticated/invitation/batch/': typeof AuthenticatedInvitationBatchIndexRoute
+  '/_authenticated/invitation/generate/': typeof AuthenticatedInvitationGenerateIndexRoute
+  '/_authenticated/invitation/template/': typeof AuthenticatedInvitationTemplateIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -120,6 +150,9 @@ export interface FileRouteTypes {
     | '/system/user'
     | '/member/'
     | '/supplier/'
+    | '/invitation/batch/'
+    | '/invitation/generate/'
+    | '/invitation/template/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -131,6 +164,9 @@ export interface FileRouteTypes {
     | '/system/user'
     | '/member'
     | '/supplier'
+    | '/invitation/batch'
+    | '/invitation/generate'
+    | '/invitation/template'
   id:
     | '__root__'
     | '/'
@@ -143,6 +179,9 @@ export interface FileRouteTypes {
     | '/_authenticated/system/user'
     | '/_authenticated/member/'
     | '/_authenticated/supplier/'
+    | '/_authenticated/invitation/batch/'
+    | '/_authenticated/invitation/generate/'
+    | '/_authenticated/invitation/template/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -223,6 +262,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSystemUserRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/invitation/batch/': {
+      id: '/_authenticated/invitation/batch/'
+      path: '/invitation/batch'
+      fullPath: '/invitation/batch/'
+      preLoaderRoute: typeof AuthenticatedInvitationBatchIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/invitation/generate/': {
+      id: '/_authenticated/invitation/generate/'
+      path: '/invitation/generate'
+      fullPath: '/invitation/generate/'
+      preLoaderRoute: typeof AuthenticatedInvitationGenerateIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/invitation/template/': {
+      id: '/_authenticated/invitation/template/'
+      path: '/invitation/template'
+      fullPath: '/invitation/template/'
+      preLoaderRoute: typeof AuthenticatedInvitationTemplateIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
   }
 }
 
@@ -234,6 +294,9 @@ interface AuthenticatedRouteChildren {
   AuthenticatedSystemUserRoute: typeof AuthenticatedSystemUserRoute
   AuthenticatedMemberIndexRoute: typeof AuthenticatedMemberIndexRoute
   AuthenticatedSupplierIndexRoute: typeof AuthenticatedSupplierIndexRoute
+  AuthenticatedInvitationBatchIndexRoute: typeof AuthenticatedInvitationBatchIndexRoute
+  AuthenticatedInvitationGenerateIndexRoute: typeof AuthenticatedInvitationGenerateIndexRoute
+  AuthenticatedInvitationTemplateIndexRoute: typeof AuthenticatedInvitationTemplateIndexRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -244,6 +307,12 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedSystemUserRoute: AuthenticatedSystemUserRoute,
   AuthenticatedMemberIndexRoute: AuthenticatedMemberIndexRoute,
   AuthenticatedSupplierIndexRoute: AuthenticatedSupplierIndexRoute,
+  AuthenticatedInvitationBatchIndexRoute:
+    AuthenticatedInvitationBatchIndexRoute,
+  AuthenticatedInvitationGenerateIndexRoute:
+    AuthenticatedInvitationGenerateIndexRoute,
+  AuthenticatedInvitationTemplateIndexRoute:
+    AuthenticatedInvitationTemplateIndexRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

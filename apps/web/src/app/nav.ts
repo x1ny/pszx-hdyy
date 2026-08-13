@@ -3,6 +3,7 @@ import {
   FolderKanban,
   LayoutDashboard,
   type LucideIcon,
+  MailIcon,
   Settings,
   Truck,
   UsersRound,
@@ -35,6 +36,15 @@ export const navMain: NavItem[] = [
   },
   { title: "供应商管理", icon: Truck, to: "/supplier" },
   { title: "人员管理", icon: UsersRound, to: "/member" },
+  {
+    title: "邀请函管理",
+    icon: MailIcon,
+    children: [
+      { title: "模板管理", to: "/invitation/template" },
+      { title: "生成邀请函", to: "/invitation/generate" },
+      { title: "生成记录", to: "/invitation/batch" },
+    ],
+  },
   {
     title: "系统管理",
     icon: Settings,

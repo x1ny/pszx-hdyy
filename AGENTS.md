@@ -57,6 +57,8 @@ apps/server    Hono + Better Auth + Drizzle（端口 8787）
 
 单独起某个包用 `bun run --filter '@repo/server' dev`。
 
+**在 `.claude/worktrees/` 这类深路径下跑 `bun install`/`bun add` 报 `ENOENT ... (copyfile)`，或者装完页面到处 `Invalid hook call`：** 这是 Windows + 深路径 worktree 的已知环境问题，不是仓库配置或依赖本身的问题，修法见 [docs/windows-worktree-notes.md](docs/windows-worktree-notes.md)——一句话版：带上 `--linker=hoisted`，且不要中途在 isolated/hoisted 之间切换。
+
 ## 开发调试
 如果需求可自行通过浏览器进行登录、注册，通过真实的页面操作进行调试。
 账号 x1nyhh@163.com 密码xiny1118
