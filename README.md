@@ -42,8 +42,8 @@ That means no CORS setup and no cross-site cookie rules in development — Bette
 
 **No REST, no tRPC/oRPC — plain Hono RPC plus one shared convention.** Full rationale (why not oRPC, why status codes don't carry business meaning, the compiler-perf numbers behind `hcWithType`) is in [docs/architecture-decisions.md](docs/architecture-decisions.md). The rules:
 
-- Routes are named like actions (`getServerInfo`, `submitEcho`), not REST resources, and everything is `POST` — the HTTP verb carries no business meaning.
-- Every response is `{ code: "OK", data } | { code: "SOME_ERROR", message }` (`apps/server/src/shared/result.ts`). Business outcomes — including "not logged in" and "validation failed" — return HTTP **200**; the `code` field is what the client branches on, never `res.status`. Real non-200s are reserved for the two cases that aren't business outcomes: a malformed request body (`zValidator`'s error hook) and an uncaught exception (`app.onError`).
+- Business routes are named like actions (`getServerInfo`, `submitEcho`), not REST resources, and use `POST` — the HTTP verb carries no business meaning. The raw file transfer endpoint `GET /api/file/:fileId` is an explicit transport exception so browsers can preview or download files natively.
+- Business API responses are `{ code: "OK", data } | { code: "SOME_ERROR", message }` (`apps/server/src/shared/result.ts`). The file transfer endpoint is the transport exception: successful reads return raw file bytes, while read failures still return the same JSON envelope. Business outcomes — including "not logged in" and "validation failed" — return HTTP **200**; the `code` field is what the client branches on, never `res.status`. Real non-200s are reserved for the two cases that aren't business outcomes: a malformed request body (`zValidator`'s error hook) and an uncaught exception (`app.onError`).
 - The server chains its routes onto a single value and exports its type:
 
 ```ts

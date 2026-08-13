@@ -32,9 +32,9 @@
 |---|---|
 | 显式 schema | 每个端点自己的 `schemas.ts`（Zod），handler 用 `c.req.valid("json")` |
 | 端到端类型安全 | `hc<AppType>` 全自动推断，改 handler 前端编译期报错 |
-| 脱离 REST 语义 | 路径是动作名（`getServerInfo`、`submitEcho`），全部 POST；业务结果放在 body 的 `code` 字段，不用状态码表达 |
+| 脱离 REST 语义 | 业务路径是动作名（`getServerInfo`、`submitEcho`），全部 POST；业务结果放在 body 的 `code` 字段，不用状态码表达。文件二进制读取使用 `GET /api/file/:fileId` 作为传输层例外，以支持浏览器原生预览和下载 |
 
-**状态码的边界**：只有两类响应会返回真正的非 200 —— 请求体不是合法 JSON（`zValidator` 的自定义 error hook 拦下）、handler 内部抛出未捕获异常（顶层 `app.onError`）。这两类是"传输层出了问题"，跟业务结果无关；除此之外一律 200，`code` 字段承担 `OK` / `UNAUTHORIZED` / `VALIDATION_ERROR` 等所有业务状态。前端**只看 `result.code`，不看 `res.status`** 做业务判断。
+**状态码的边界**：只有两类响应会返回真正的非 200 —— 请求体不是合法 JSON（`zValidator` 的自定义 error hook 拦下）、handler 内部抛出未捕获异常（顶层 `app.onError`）。这两类是"传输层出了问题"，跟业务结果无关；除此之外一律 200，`code` 字段承担 `OK` / `UNAUTHORIZED` / `VALIDATION_ERROR` 等所有业务状态。文件读取成功返回原始二进制，读取失败仍返回 JSON 信封。前端**只看 `result.code`，不看 `res.status`** 做业务判断。
 
 **曾经考虑过 `@hono/zod-openapi`**（Zod schema 同时驱动运行时校验和 OpenAPI 文档），最后没用：OpenAPI 文档的价值在于给"你控制不了的消费方"看（外部团队、非 TS 客户端），当前是同仓库同人维护前后端，`hc<AppType>` 已经提供了比文档更强、且不会过期的保障，为此把每个端点从 ~6 行加到 ~20 行不值。真需要文档/给外部消费方用的那天，`OpenAPIHono` 是 `Hono` 的父类，能平滑升级，不是单向门。
 

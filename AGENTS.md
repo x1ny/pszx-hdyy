@@ -67,9 +67,9 @@ apps/server    Hono + Better Auth + Drizzle（端口 8787）
 
 **不遵循 REST，业务语义和 HTTP 协议解耦，但不引入 RPC 框架（不上 tRPC/oRPC）——就用 Hono 本身 + 一份共享约定。** 详细讨论和实测数据见 [docs/architecture-decisions.md](docs/architecture-decisions.md#前后端类型安全)，这里只写规则：
 
-- **路径是动作名，不是资源。** 用 `getServerInfo`、`submitEcho` 这种动词开头的名字，不要建 `/projects/:id` 这种资源路径。**全部用 POST**，HTTP 动词不承载任何业务含义。
+- **路径是动作名，不是资源。** 用 `getServerInfo`、`submitEcho` 这种动词开头的名字，不要建 `/projects/:id` 这种资源路径。业务接口**全部用 POST**，HTTP 动词不承载任何业务含义；文件二进制读取接口 `GET /api/file/:fileId` 是为了支持浏览器原生预览/下载而保留的传输层例外。
 - **HTTP 状态码不表达业务结果，只有 `code` 字段表达。** 见 `apps/server/src/shared/result.ts` 的 `ApiResult<T>` —— `{ code: "OK", data } | { code: "UNAUTHORIZED" | "VALIDATION_ERROR" | ..., message }`。业务失败（未登录、校验不过）也返回 HTTP 200，前端永远靠 `result.code` 分支，不看 `res.status`。真正的非 200 只留给两种非业务场景：请求体不合法（`zValidator` 的 error hook）、handler 里未捕获的异常（`index.ts` 的 `app.onError`）。
-- 输入用 `shared/validate.ts` 的 `jsonBody(Schema)`（它内部就是 `zValidator("json", …)` 加统一的 error hook），输出用 `c.json(ok(...))` / `c.json(err(...))`——**两边都过一遍 `shared/result.ts` 的信封**，别有的接口走信封有的不走。
+- 输入用 `shared/validate.ts` 的 `jsonBody(Schema)`（它内部就是 `zValidator("json", …)` 加统一的 error hook），输出用 `c.json(ok(...))` / `c.json(err(...))`——业务接口**两边都过一遍 `shared/result.ts` 的信封**。文件二进制读取成功时返回原始文件内容，读取失败仍返回同一错误信封。
 - **绝对不要给 `ok()` / `err()` 补上 `: ApiResult<T>` 返回类型标注。** 它们现在故意让 TS 自然推导，`c.json(ok(row))` 的类型就是 `{code:"OK"; data: Row}` 这一种。补上标注看着更"规范"，代价是每个接口的响应类型都变成「OK ∪ 全部四种错误」，于是：前端 `Extract<响应, {code:"OK"}>` 再也取不回精确的 `data`（只能手抄一份领域类型，然后慢慢跟服务端漂移），错误分支还要处理一堆这个接口根本不会返回的 code。理由写在 `shared/result.ts` 的注释里。
 - 分页接口统一用 `shared/pagination.ts` 的 `PageInput.extend({ …筛选条件 })` 作入参、`{ list, total }` 作出参，别各模块自己定 `pageNo` / `pageNum` / `current`。
 - 需要登录的模块在路由链头上挂 `modules/auth` 的 `requireUser`，然后用 `c.get("authedUser")`（非空），不要每个 handler 里各写一遍 `c.get("user")` 判空。
