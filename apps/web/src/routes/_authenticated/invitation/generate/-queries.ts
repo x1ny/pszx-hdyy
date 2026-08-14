@@ -9,4 +9,4 @@ export type { CreateInvitationBatchValues } from "../-shared/types.ts";
 export { getInvitationTemplate, invitationTemplateListQueryOptions };
 
 export const createInvitationBatch = (values: CreateInvitationBatchValues) =>
-  unwrap(api.api.createInvitationBatch.$post({ json: values }));
+  unwrap(api.api.invitation.batch.create.$post({ json: values }));

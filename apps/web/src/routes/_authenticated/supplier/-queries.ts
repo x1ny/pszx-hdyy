@@ -12,18 +12,18 @@ import { type ApiData, api, unwrap } from "#/shared/lib/api";
 // ---------------------------------------------------------------------------
 
 export type Supplier = ApiData<
-  InferResponseType<typeof api.api.getSupplier.$post>
+  InferResponseType<typeof api.api.supplier.get.$post>
 >;
 export type ServiceCategory = Supplier["serviceCategories"][number];
 export type SupplierStatus = Supplier["status"];
 
 /** 列表入参 = 筛选条件 + 分页，直接取接口的请求体类型。 */
 export type SupplierFilters = InferRequestType<
-  typeof api.api.listSuppliers.$post
+  typeof api.api.supplier.list.$post
 >["json"];
 
 export type SupplierFormValues = InferRequestType<
-  typeof api.api.createSupplier.$post
+  typeof api.api.supplier.create.$post
 >["json"];
 
 /**
@@ -40,7 +40,7 @@ export const supplierKeys = {
 export const supplierListQueryOptions = (filters: SupplierFilters) =>
   queryOptions({
     queryKey: supplierKeys.list(filters),
-    queryFn: () => unwrap(api.api.listSuppliers.$post({ json: filters })),
+    queryFn: () => unwrap(api.api.supplier.list.$post({ json: filters })),
     // 翻页/改筛选时先展示上一页数据，避免表格整体塌成骨架屏再弹回来。
     placeholderData: keepPreviousData,
   });
@@ -48,26 +48,26 @@ export const supplierListQueryOptions = (filters: SupplierFilters) =>
 export const supplierStatsQueryOptions = () =>
   queryOptions({
     queryKey: [...supplierKeys.all, "stats"] as const,
-    queryFn: () => unwrap(api.api.getSupplierStats.$post({ json: {} })),
+    queryFn: () => unwrap(api.api.supplier.stats.$post({ json: {} })),
   });
 
 export const supplierCitiesQueryOptions = () =>
   queryOptions({
     queryKey: supplierKeys.cities(),
-    queryFn: () => unwrap(api.api.listSupplierCities.$post({ json: {} })),
+    queryFn: () => unwrap(api.api.supplier.listCities.$post({ json: {} })),
   });
 
 // 变更操作只导出裸函数，useMutation 留在页面里写 —— 成功提示、关弹窗、
 // 失效哪些查询都是页面的编排逻辑，塞进这里反而要把 queryClient 传进来。
 
 export const createSupplier = (values: SupplierFormValues) =>
-  unwrap(api.api.createSupplier.$post({ json: values }));
+  unwrap(api.api.supplier.create.$post({ json: values }));
 
 export const updateSupplier = (values: SupplierFormValues & { id: number }) =>
-  unwrap(api.api.updateSupplier.$post({ json: values }));
+  unwrap(api.api.supplier.update.$post({ json: values }));
 
 export const deleteSupplier = (id: number) =>
-  unwrap(api.api.deleteSupplier.$post({ json: { id } }));
+  unwrap(api.api.supplier.delete.$post({ json: { id } }));
 
 export const setSupplierStatus = (id: number, status: SupplierStatus) =>
-  unwrap(api.api.setSupplierStatus.$post({ json: { id, status } }));
+  unwrap(api.api.supplier.setStatus.$post({ json: { id, status } }));

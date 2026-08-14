@@ -63,7 +63,7 @@ async function hasDuplicateIdNumber(
 export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
   .use(requireUser)
 
-  .post("/api/listMembers", jsonBody(ListMembersInput), async (c) => {
+  .post("/list", jsonBody(ListMembersInput), async (c) => {
     const { name, companyPosition, status, page, pageSize } =
       c.req.valid("json");
     const where = and(
@@ -89,7 +89,7 @@ export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
     return c.json(ok({ list, total: totalRows[0]?.total ?? 0 }));
   })
 
-  .post("/api/getMember", jsonBody(MemberIdInput), async (c) => {
+  .post("/get", jsonBody(MemberIdInput), async (c) => {
     const [row] = await db
       .select(memberFields)
       .from(member)
@@ -98,7 +98,7 @@ export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
     return row ? c.json(ok(row)) : c.json(notFound());
   })
 
-  .post("/api/createMember", jsonBody(CreateMemberInput), async (c) => {
+  .post("/create", jsonBody(CreateMemberInput), async (c) => {
     const input = c.req.valid("json");
     if (await hasDuplicateIdNumber(input.idNumber)) {
       return c.json(validationError("证件号码已存在"));
@@ -113,7 +113,7 @@ export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
     return c.json(ok(row));
   })
 
-  .post("/api/updateMember", jsonBody(UpdateMemberInput), async (c) => {
+  .post("/update", jsonBody(UpdateMemberInput), async (c) => {
     const { id, ...input } = c.req.valid("json");
     if (await hasDuplicateIdNumber(input.idNumber, id)) {
       return c.json(validationError("证件号码已存在"));
@@ -128,7 +128,7 @@ export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
     return row ? c.json(ok(row)) : c.json(notFound());
   })
 
-  .post("/api/setMemberStatus", jsonBody(SetMemberStatusInput), async (c) => {
+  .post("/setStatus", jsonBody(SetMemberStatusInput), async (c) => {
     const { id, status } = c.req.valid("json");
     const [row] = await db
       .update(member)
@@ -139,7 +139,7 @@ export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
     return row ? c.json(ok(row)) : c.json(notFound());
   })
 
-  .post("/api/deleteMember", jsonBody(MemberIdInput), async (c) => {
+  .post("/delete", jsonBody(MemberIdInput), async (c) => {
     const [row] = await db
       .delete(member)
       .where(eq(member.id, c.req.valid("json").id))

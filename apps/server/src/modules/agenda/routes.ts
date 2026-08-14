@@ -238,7 +238,7 @@ export const agendaRoutes = new Hono<{ Variables: AuthedVariables }>()
 
   // ------------------------------------------------------------------ 查询 --
 
-  .post("/api/listAgenda", jsonBody(ListAgendaInput), async (c) => {
+  .post("/list", jsonBody(ListAgendaInput), async (c) => {
     const { activityId } = c.req.valid("json");
 
     const [lines, segments] = await Promise.all([
@@ -266,7 +266,7 @@ export const agendaRoutes = new Hono<{ Variables: AuthedVariables }>()
 
   // ------------------------------------------------------------------ 环节 --
 
-  .post("/api/createSegment", jsonBody(CreateSegmentInput), async (c) => {
+  .post("/createSegment", jsonBody(CreateSegmentInput), async (c) => {
     const { activityId, agendaLineId, ...input } = c.req.valid("json");
     const userId = c.get("authedUser").id;
 
@@ -306,7 +306,7 @@ export const agendaRoutes = new Hono<{ Variables: AuthedVariables }>()
     return c.json(ok(result.row));
   })
 
-  .post("/api/updateSegment", jsonBody(UpdateSegmentInput), async (c) => {
+  .post("/updateSegment", jsonBody(UpdateSegmentInput), async (c) => {
     const { id, agendaLineId, ...input } = c.req.valid("json");
     const userId = c.get("authedUser").id;
 
@@ -364,7 +364,7 @@ export const agendaRoutes = new Hono<{ Variables: AuthedVariables }>()
   })
 
   .post(
-    "/api/setSegmentStatus",
+    "/setSegmentStatus",
     jsonBody(SetSegmentStatusInput),
     async (c) => {
       const { id, status } = c.req.valid("json");
@@ -428,14 +428,14 @@ export const agendaRoutes = new Hono<{ Variables: AuthedVariables }>()
     },
   )
 
-  // 故意没有 /api/deleteSegment——BR-DEV-021：已被引用的环节不物理删除。
+  // 故意没有 deleteSegment 接口——BR-DEV-021：已被引用的环节不物理删除。
   // status = "voided" 就是这张表的删除通道，同时留两个出口只会让每个调用方
   // 自己纠结用哪个。
 
   // ---------------------------------------------------------------- 议程线 --
 
   .post(
-    "/api/createAgendaLine",
+    "/createLine",
     jsonBody(CreateAgendaLineInput),
     async (c) => {
       const { activityId, name, sortOrder } = c.req.valid("json");
@@ -460,7 +460,7 @@ export const agendaRoutes = new Hono<{ Variables: AuthedVariables }>()
   )
 
   .post(
-    "/api/updateAgendaLine",
+    "/updateLine",
     jsonBody(UpdateAgendaLineInput),
     async (c) => {
       const { id, name, sortOrder } = c.req.valid("json");
@@ -495,7 +495,7 @@ export const agendaRoutes = new Hono<{ Variables: AuthedVariables }>()
     },
   )
 
-  .post("/api/deleteAgendaLine", jsonBody(AgendaLineIdInput), async (c) => {
+  .post("/deleteLine", jsonBody(AgendaLineIdInput), async (c) => {
     const { id } = c.req.valid("json");
 
     const result = await db.transaction(

@@ -10,12 +10,12 @@ import { type ApiData, api, unwrap } from "#/shared/lib/api";
 // routes/_authenticated/member/-queries.ts，不跟着搬。
 
 export type Member = ApiData<
-  InferResponseType<typeof api.api.getMember.$post>
+  InferResponseType<typeof api.api.member.get.$post>
 >;
 export type MemberStatus = Member["status"];
 
 export type MemberFilters = InferRequestType<
-  typeof api.api.listMembers.$post
+  typeof api.api.member.list.$post
 >["json"];
 
 export const memberKeys = {
@@ -26,6 +26,6 @@ export const memberKeys = {
 export const memberListQueryOptions = (filters: MemberFilters) =>
   queryOptions({
     queryKey: memberKeys.list(filters),
-    queryFn: () => unwrap(api.api.listMembers.$post({ json: filters })),
+    queryFn: () => unwrap(api.api.member.list.$post({ json: filters })),
     placeholderData: keepPreviousData,
   });

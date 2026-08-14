@@ -8,7 +8,7 @@ import { EchoInput } from "./validation";
 // named routes, POST for everything (the verb carries no business meaning),
 // business outcomes expressed as `code` in the body rather than HTTP status.
 export const exampleRoutes = new Hono<{ Variables: Variables }>()
-  .post("/api/getServerInfo", (c) =>
+  .post("/getServerInfo", (c) =>
     c.json(
       ok({
         runtime:
@@ -19,13 +19,13 @@ export const exampleRoutes = new Hono<{ Variables: Variables }>()
       }),
     ),
   )
-  .post("/api/getMe", (c) => {
+  .post("/getMe", (c) => {
     const user = c.get("user");
     if (!user) return c.json(err({ code: "UNAUTHORIZED", message: "未登录" }));
     return c.json(ok({ id: user.id, name: user.name, email: user.email }));
   })
   .post(
-    "/api/submitEcho",
+    "/submitEcho",
     zValidator("json", EchoInput, (result, c) => {
       if (!result.success) {
         return c.json(

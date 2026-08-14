@@ -14,17 +14,17 @@ export type {
 export { memberKeys, memberListQueryOptions } from "#/features/member/queries";
 
 export type MemberFormValues = InferRequestType<
-  typeof api.api.createMember.$post
+  typeof api.api.member.create.$post
 >["json"];
 
 export const createMember = (values: MemberFormValues) =>
-  unwrap(api.api.createMember.$post({ json: values }));
+  unwrap(api.api.member.create.$post({ json: values }));
 
 export const updateMember = (values: MemberFormValues & { id: number }) =>
-  unwrap(api.api.updateMember.$post({ json: values }));
+  unwrap(api.api.member.update.$post({ json: values }));
 
 export const deleteMember = (id: number) =>
-  unwrap(api.api.deleteMember.$post({ json: { id } }));
+  unwrap(api.api.member.delete.$post({ json: { id } }));
 
 export const setMemberStatus = (id: number, status: MemberStatus) =>
-  unwrap(api.api.setMemberStatus.$post({ json: { id, status } }));
+  unwrap(api.api.member.setStatus.$post({ json: { id, status } }));

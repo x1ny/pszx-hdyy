@@ -70,13 +70,13 @@ const projectNotFound = () =>
 const activityNotFound = () =>
   err({ code: "NOT_FOUND" as const, message: "活动不存在" });
 
+// 项目和活动挂在两个不同的前缀（/api/project、/api/activity）下，各自的
+// requireUser 因此也各自生效——不是同一条链，是两条并列的链，共享本文件
+// 只是因为两张表关系紧密、字段投影和"下架代替删除"的理由长得一样。
 export const projectRoutes = new Hono<{ Variables: AuthedVariables }>()
-  // 整条链都要求登录，前端的菜单和路由守卫不是安全边界，这里才是。
   .use(requireUser)
 
-  // -------------------------------------------------------------- 项目 --
-
-  .post("/api/listProjects", jsonBody(ListProjectsInput), async (c) => {
+  .post("/list", jsonBody(ListProjectsInput), async (c) => {
     const { name, publishStatus, page, pageSize } = c.req.valid("json");
 
     const where = and(
@@ -103,7 +103,7 @@ export const projectRoutes = new Hono<{ Variables: AuthedVariables }>()
     return c.json(ok({ list, total: totalRows[0]?.total ?? 0 }));
   })
 
-  .post("/api/getProject", jsonBody(ProjectIdInput), async (c) => {
+  .post("/get", jsonBody(ProjectIdInput), async (c) => {
     const [row] = await db
       .select(projectFields)
       .from(project)
@@ -112,7 +112,7 @@ export const projectRoutes = new Hono<{ Variables: AuthedVariables }>()
     return row ? c.json(ok(row)) : c.json(projectNotFound());
   })
 
-  .post("/api/createProject", jsonBody(CreateProjectInput), async (c) => {
+  .post("/create", jsonBody(CreateProjectInput), async (c) => {
     const { totalBudget, ...input } = c.req.valid("json");
     const userId = c.get("authedUser").id;
 
@@ -131,7 +131,7 @@ export const projectRoutes = new Hono<{ Variables: AuthedVariables }>()
     return c.json(ok(row));
   })
 
-  .post("/api/updateProject", jsonBody(UpdateProjectInput), async (c) => {
+  .post("/update", jsonBody(UpdateProjectInput), async (c) => {
     const { id, totalBudget, ...input } = c.req.valid("json");
 
     // 不先查再改：那是两次往返 + 一个竞态窗口。直接写，靠 returning 的
@@ -150,7 +150,7 @@ export const projectRoutes = new Hono<{ Variables: AuthedVariables }>()
   })
 
   .post(
-    "/api/setProjectPublishStatus",
+    "/setPublishStatus",
     jsonBody(SetProjectPublishStatusInput),
     async (c) => {
       const { id, publishStatus } = c.req.valid("json");
@@ -163,16 +163,17 @@ export const projectRoutes = new Hono<{ Variables: AuthedVariables }>()
 
       return row ? c.json(ok(row)) : c.json(projectNotFound());
     },
-  )
+  );
 
-  // 故意没有 /api/deleteProject——项目一旦建成会被活动（进而被人员/资源/
-  // 排位/邀请函）反向引用，物理删除要么级联炸掉一整棵树，要么留一堆
-  // 悬空引用。"下架"（publishStatus = delisted）就是这张表的删除通道，
-  // 效果一样（隐藏、数据留痕），但不会踩中上面任何一个坑。
+// 故意没有 deleteProject 接口——项目一旦建成会被活动（进而被人员/资源/
+// 排位/邀请函）反向引用，物理删除要么级联炸掉一整棵树，要么留一堆
+// 悬空引用。"下架"（publishStatus = delisted）就是这张表的删除通道，
+// 效果一样（隐藏、数据留痕），但不会踩中上面任何一个坑。
 
-  // -------------------------------------------------------------- 活动 --
+export const activityRoutes = new Hono<{ Variables: AuthedVariables }>()
+  .use(requireUser)
 
-  .post("/api/listActivities", jsonBody(ListActivitiesInput), async (c) => {
+  .post("/list", jsonBody(ListActivitiesInput), async (c) => {
     const { projectId, name, activityType, publishStatus, page, pageSize } =
       c.req.valid("json");
 
@@ -199,7 +200,7 @@ export const projectRoutes = new Hono<{ Variables: AuthedVariables }>()
     return c.json(ok({ list, total: totalRows[0]?.total ?? 0 }));
   })
 
-  .post("/api/getActivity", jsonBody(ActivityIdInput), async (c) => {
+  .post("/get", jsonBody(ActivityIdInput), async (c) => {
     const [row] = await db
       .select(activityFields)
       .from(activity)
@@ -208,7 +209,7 @@ export const projectRoutes = new Hono<{ Variables: AuthedVariables }>()
     return row ? c.json(ok(row)) : c.json(activityNotFound());
   })
 
-  .post("/api/createActivity", jsonBody(CreateActivityInput), async (c) => {
+  .post("/create", jsonBody(CreateActivityInput), async (c) => {
     const { totalBudget, ...input } = c.req.valid("json");
     const userId = c.get("authedUser").id;
 
@@ -227,7 +228,7 @@ export const projectRoutes = new Hono<{ Variables: AuthedVariables }>()
     return c.json(ok(row));
   })
 
-  .post("/api/updateActivity", jsonBody(UpdateActivityInput), async (c) => {
+  .post("/update", jsonBody(UpdateActivityInput), async (c) => {
     const { id, totalBudget, ...input } = c.req.valid("json");
 
     const [row] = await db
@@ -244,7 +245,7 @@ export const projectRoutes = new Hono<{ Variables: AuthedVariables }>()
   })
 
   .post(
-    "/api/setActivityPublishStatus",
+    "/setPublishStatus",
     jsonBody(SetActivityPublishStatusInput),
     async (c) => {
       const { id, publishStatus } = c.req.valid("json");
@@ -260,7 +261,7 @@ export const projectRoutes = new Hono<{ Variables: AuthedVariables }>()
   )
 
   .post(
-    "/api/setActivityDisplayEnabled",
+    "/setDisplayEnabled",
     jsonBody(SetActivityDisplayEnabledInput),
     async (c) => {
       const { id, displayEnabled } = c.req.valid("json");
@@ -276,7 +277,7 @@ export const projectRoutes = new Hono<{ Variables: AuthedVariables }>()
   )
 
   .post(
-    "/api/setActivityRegistrationEnabled",
+    "/setRegistrationEnabled",
     jsonBody(SetActivityRegistrationEnabledInput),
     async (c) => {
       const { id, registrationEnabled } = c.req.valid("json");
@@ -291,5 +292,5 @@ export const projectRoutes = new Hono<{ Variables: AuthedVariables }>()
     },
   );
 
-// 同样故意没有 /api/deleteActivity——理由同 project，活动接下来会被
+// 同样故意没有 deleteActivity 接口——理由同 project，活动接下来会被
 // 人员分层/报名/资源/排位/邀请函大量反向引用。"下架"是删除通道。

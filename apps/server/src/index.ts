@@ -5,7 +5,7 @@ import { exampleRoutes } from "./modules/example/routes";
 import { fileRoutes } from "./modules/file/routes";
 import { invitationRoutes } from "./modules/invitation/routes";
 import { memberRoutes } from "./modules/member/routes";
-import { projectRoutes } from "./modules/project/routes";
+import { activityRoutes, projectRoutes } from "./modules/project/routes";
 import { supplierRoutes } from "./modules/supplier/routes";
 import { err } from "./shared/result";
 
@@ -17,16 +17,24 @@ app.route("/", authHandler);
 
 app.use("*", sessionMiddleware);
 
-// Add new feature modules by chaining another .route("/", xyzRoutes) here —
-// only what's chained onto `routes` is visible to hc<AppType> on the client.
+// Add new feature modules by chaining another .route("/api/<module>", xyzRoutes)
+// here — only what's chained onto `routes` is visible to hc<AppType> on the
+// client. Each module owns one prefix, so a module's `.use(requireUser)`
+// (or lack of one, see file below) only ever scopes to its own prefix —
+// it can't leak onto routes registered elsewhere in this chain regardless
+// of ordering.
 const routes = app
-  .route("/", exampleRoutes)
-  .route("/", supplierRoutes)
-  .route("/", memberRoutes)
-  .route("/", invitationRoutes)
-  .route("/", fileRoutes)
-  .route("/", projectRoutes)
-  .route("/", agendaRoutes);
+  .route("/api/example", exampleRoutes)
+  .route("/api/supplier", supplierRoutes)
+  .route("/api/member", memberRoutes)
+  .route("/api/invitation", invitationRoutes)
+  // File upload and file reads are intentionally public — no requireUser
+  // in modules/file/routes.ts, and that's safe now: the prefix means no
+  // other module's auth guard can accidentally cover it either.
+  .route("/api/file", fileRoutes)
+  .route("/api/project", projectRoutes)
+  .route("/api/activity", activityRoutes)
+  .route("/api/agenda", agendaRoutes);
 
 // Catches anything a handler didn't turn into a `code`, i.e. a real crash —
 // the one case where the response legitimately isn't a business outcome.

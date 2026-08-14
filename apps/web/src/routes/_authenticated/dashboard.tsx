@@ -11,7 +11,7 @@ function Dashboard() {
   const { data } = useQuery({
     queryKey: ["server-info"],
     // 原来这里手写了一遍拆信封，现在统一走 shared/lib/api 的 unwrap。
-    queryFn: () => unwrap(api.api.getServerInfo.$post()),
+    queryFn: () => unwrap(api.api.example.getServerInfo.$post()),
   });
 
   return (

@@ -39,7 +39,7 @@ export const supplierRoutes = new Hono<{ Variables: AuthedVariables }>()
   // 整条链都要求登录。前端的菜单和路由守卫不是安全边界，这里才是。
   .use(requireUser)
 
-  .post("/api/listSuppliers", jsonBody(ListSuppliersInput), async (c) => {
+  .post("/list", jsonBody(ListSuppliersInput), async (c) => {
     const { name, serviceCategory, city, status, page, pageSize } =
       c.req.valid("json");
 
@@ -78,7 +78,7 @@ export const supplierRoutes = new Hono<{ Variables: AuthedVariables }>()
     return c.json(ok({ list, total: totalRows[0]?.total ?? 0 }));
   })
 
-  .post("/api/getSupplier", jsonBody(SupplierIdInput), async (c) => {
+  .post("/get", jsonBody(SupplierIdInput), async (c) => {
     const [row] = await db
       .select(supplierFields)
       .from(supplier)
@@ -87,7 +87,7 @@ export const supplierRoutes = new Hono<{ Variables: AuthedVariables }>()
     return row ? c.json(ok(row)) : c.json(notFound());
   })
 
-  .post("/api/createSupplier", jsonBody(CreateSupplierInput), async (c) => {
+  .post("/create", jsonBody(CreateSupplierInput), async (c) => {
     const input = c.req.valid("json");
     const userId = c.get("authedUser").id;
 
@@ -99,7 +99,7 @@ export const supplierRoutes = new Hono<{ Variables: AuthedVariables }>()
     return c.json(ok(row));
   })
 
-  .post("/api/updateSupplier", jsonBody(UpdateSupplierInput), async (c) => {
+  .post("/update", jsonBody(UpdateSupplierInput), async (c) => {
     const { id, ...input } = c.req.valid("json");
 
     // 不先查再改：那是两次往返 + 一个竞态窗口。直接写，靠 returning 的空数组
@@ -113,7 +113,7 @@ export const supplierRoutes = new Hono<{ Variables: AuthedVariables }>()
     return row ? c.json(ok(row)) : c.json(notFound());
   })
 
-  .post("/api/setSupplierStatus", jsonBody(SetSupplierStatusInput), async (c) => {
+  .post("/setStatus", jsonBody(SetSupplierStatusInput), async (c) => {
     const { id, status } = c.req.valid("json");
 
     const [row] = await db
@@ -125,7 +125,7 @@ export const supplierRoutes = new Hono<{ Variables: AuthedVariables }>()
     return row ? c.json(ok(row)) : c.json(notFound());
   })
 
-  .post("/api/deleteSupplier", jsonBody(SupplierIdInput), async (c) => {
+  .post("/delete", jsonBody(SupplierIdInput), async (c) => {
     // 物理删除。旧库的 del_flag 去掉了：它和 status(enabled/disabled) 是同一
     // 张表上的两套「删除」语义，必然长歪，而 status 本来就是停用通道。
     // 等哪天有别的表引用 supplier_id，再回来加 deletedAt 软删。
@@ -137,7 +137,7 @@ export const supplierRoutes = new Hono<{ Variables: AuthedVariables }>()
     return row ? c.json(ok(row)) : c.json(notFound());
   })
 
-  .post("/api/getSupplierStats", async (c) => {
+  .post("/stats", async (c) => {
     // **故意不带筛选条件**：这几个数字是「供应商库整体长什么样」的概览，
     // 跟着筛选一起变的话，用户每敲一个筛选条件顶部数字就跳一次，反而没法当参照。
     //
@@ -157,7 +157,7 @@ export const supplierRoutes = new Hono<{ Variables: AuthedVariables }>()
     );
   })
 
-  .post("/api/listSupplierCities", async (c) => {
+  .post("/listCities", async (c) => {
     // 城市是自由填写的，选项只能从存量数据里归纳 —— 没有城市字典表。
     const rows = await db
       .selectDistinct({ city: supplier.city })

@@ -7,7 +7,7 @@ import { type ApiData, api, unwrap } from "#/shared/lib/api";
 // ---------------------------------------------------------------------------
 
 export type Agenda = ApiData<
-  InferResponseType<typeof api.api.listAgenda.$post>
+  InferResponseType<typeof api.api.agenda.list.$post>
 >;
 export type AgendaLine = Agenda["lines"][number];
 export type Segment = Agenda["segments"][number];
@@ -17,10 +17,10 @@ export type SegmentStatus = Segment["status"];
 export type AgendaLineType = AgendaLine["lineType"];
 
 export type SegmentFormValues = InferRequestType<
-  typeof api.api.createSegment.$post
+  typeof api.api.agenda.createSegment.$post
 >["json"];
 export type UpdateSegmentValues = InferRequestType<
-  typeof api.api.updateSegment.$post
+  typeof api.api.agenda.updateSegment.$post
 >["json"];
 
 export const agendaKeys = {
@@ -36,31 +36,31 @@ export const agendaKeys = {
 export const agendaQueryOptions = (activityId: number) =>
   queryOptions({
     queryKey: agendaKeys.detail(activityId),
-    queryFn: () => unwrap(api.api.listAgenda.$post({ json: { activityId } })),
+    queryFn: () => unwrap(api.api.agenda.list.$post({ json: { activityId } })),
   });
 
 // 变更操作只导出裸函数，useMutation 留在页面里写。
 
 export const createSegment = (values: SegmentFormValues) =>
-  unwrap(api.api.createSegment.$post({ json: values }));
+  unwrap(api.api.agenda.createSegment.$post({ json: values }));
 
 export const updateSegment = (values: UpdateSegmentValues) =>
-  unwrap(api.api.updateSegment.$post({ json: values }));
+  unwrap(api.api.agenda.updateSegment.$post({ json: values }));
 
 export const setSegmentStatus = (id: number, status: SegmentStatus) =>
-  unwrap(api.api.setSegmentStatus.$post({ json: { id, status } }));
+  unwrap(api.api.agenda.setSegmentStatus.$post({ json: { id, status } }));
 
 export const createAgendaLine = (values: {
   activityId: number;
   name: string;
   sortOrder: number;
-}) => unwrap(api.api.createAgendaLine.$post({ json: values }));
+}) => unwrap(api.api.agenda.createLine.$post({ json: values }));
 
 export const updateAgendaLine = (values: {
   id: number;
   name?: string;
   sortOrder: number;
-}) => unwrap(api.api.updateAgendaLine.$post({ json: values }));
+}) => unwrap(api.api.agenda.updateLine.$post({ json: values }));
 
 export const deleteAgendaLine = (id: number) =>
-  unwrap(api.api.deleteAgendaLine.$post({ json: { id } }));
+  unwrap(api.api.agenda.deleteLine.$post({ json: { id } }));

@@ -17,9 +17,9 @@ export const invitationTemplateListQueryOptions = (
 ) =>
   queryOptions({
     queryKey: invitationTemplateKeys.list(filters),
-    queryFn: () => unwrap(api.api.listInvitationTemplates.$post({ json: filters })),
+    queryFn: () => unwrap(api.api.invitation.template.list.$post({ json: filters })),
     placeholderData: keepPreviousData,
   });
 
 export const getInvitationTemplate = (id: number) =>
-  unwrap(api.api.getInvitationTemplate.$post({ json: { id } }));
+  unwrap(api.api.invitation.template.get.$post({ json: { id } }));

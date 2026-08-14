@@ -117,7 +117,7 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
   // ---------------------------------------------------------------------
 
   .post(
-    "/api/listInvitationTemplates",
+    "/template/list",
     jsonBody(ListInvitationTemplatesInput),
     async (c) => {
       const { name, issuer, status, page, pageSize } = c.req.valid("json");
@@ -146,7 +146,7 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
   )
 
   .post(
-    "/api/getInvitationTemplate",
+    "/template/get",
     jsonBody(InvitationTemplateIdInput),
     async (c) => {
       const [row] = await db
@@ -159,7 +159,7 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
   )
 
   .post(
-    "/api/createInvitationTemplate",
+    "/template/create",
     jsonBody(CreateInvitationTemplateInput),
     async (c) => {
       const input = c.req.valid("json");
@@ -175,7 +175,7 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
   )
 
   .post(
-    "/api/updateInvitationTemplate",
+    "/template/update",
     jsonBody(UpdateInvitationTemplateInput),
     async (c) => {
       const { id, ...input } = c.req.valid("json");
@@ -191,7 +191,7 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
   )
 
   .post(
-    "/api/setInvitationTemplateStatus",
+    "/template/setStatus",
     jsonBody(SetInvitationTemplateStatusInput),
     async (c) => {
       const { id, status } = c.req.valid("json");
@@ -207,7 +207,7 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
   )
 
   .post(
-    "/api/deleteInvitationTemplate",
+    "/template/delete",
     jsonBody(InvitationTemplateIdInput),
     async (c) => {
       const [row] = await db
@@ -224,7 +224,7 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
   // ---------------------------------------------------------------------
 
   .post(
-    "/api/createInvitationBatch",
+    "/batch/create",
     jsonBody(CreateInvitationBatchInput),
     async (c) => {
       const {
@@ -321,7 +321,7 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
   )
 
   .post(
-    "/api/listInvitationBatches",
+    "/batch/list",
     jsonBody(ListInvitationBatchesInput),
     async (c) => {
       const {
@@ -378,7 +378,7 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
   )
 
   .post(
-    "/api/getInvitationBatch",
+    "/batch/get",
     jsonBody(InvitationBatchIdInput),
     async (c) => {
       const detail = await loadBatchDetail(c.req.valid("json").id);
@@ -387,7 +387,7 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
   )
 
   .post(
-    "/api/deleteInvitationBatch",
+    "/batch/delete",
     jsonBody(InvitationBatchIdInput),
     async (c) => {
       // items 靠 batchId 的 onDelete: cascade 自动带走，不用手动先删一遍。

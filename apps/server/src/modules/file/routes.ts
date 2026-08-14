@@ -27,7 +27,7 @@ const contentDisposition = (name: string, download: boolean) => {
 
 // File upload and file reads are intentionally public for now.
 export const fileRoutes = new Hono().post(
-    "/api/uploadFile",
+    "/upload",
     bodyLimit({
       maxSize: maxUploadBodyBytes,
       onError: (c) => c.json(uploadTooLarge()),
@@ -54,7 +54,7 @@ export const fileRoutes = new Hono().post(
     },
   )
   .get(
-    "/api/file/:fileId",
+    "/:fileId",
     zValidator("param", FileParams, (result, c) => {
       if (!result.success) {
         return c.json(validationError("文件 ID 格式不正确"));

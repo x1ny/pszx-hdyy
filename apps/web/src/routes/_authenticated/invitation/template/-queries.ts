@@ -20,16 +20,16 @@ export {
 } from "../-shared/template-queries.ts";
 
 export const createInvitationTemplate = (values: InvitationTemplateFormValues) =>
-  unwrap(api.api.createInvitationTemplate.$post({ json: values }));
+  unwrap(api.api.invitation.template.create.$post({ json: values }));
 
 export const updateInvitationTemplate = (
   values: InvitationTemplateFormValues & { id: number },
-) => unwrap(api.api.updateInvitationTemplate.$post({ json: values }));
+) => unwrap(api.api.invitation.template.update.$post({ json: values }));
 
 export const setInvitationTemplateStatus = (
   id: number,
   status: InvitationTemplateStatus,
-) => unwrap(api.api.setInvitationTemplateStatus.$post({ json: { id, status } }));
+) => unwrap(api.api.invitation.template.setStatus.$post({ json: { id, status } }));
 
 export const deleteInvitationTemplate = (id: number) =>
-  unwrap(api.api.deleteInvitationTemplate.$post({ json: { id } }));
+  unwrap(api.api.invitation.template.delete.$post({ json: { id } }));

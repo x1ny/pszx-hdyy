@@ -20,12 +20,12 @@ export const invitationBatchKeys = {
 export const invitationBatchListQueryOptions = (filters: InvitationBatchFilters) =>
   queryOptions({
     queryKey: invitationBatchKeys.list(filters),
-    queryFn: () => unwrap(api.api.listInvitationBatches.$post({ json: filters })),
+    queryFn: () => unwrap(api.api.invitation.batch.list.$post({ json: filters })),
     placeholderData: keepPreviousData,
   });
 
 export const getInvitationBatch = (id: number) =>
-  unwrap(api.api.getInvitationBatch.$post({ json: { id } }));
+  unwrap(api.api.invitation.batch.get.$post({ json: { id } }));
 
 export const deleteInvitationBatch = (id: number) =>
-  unwrap(api.api.deleteInvitationBatch.$post({ json: { id } }));
+  unwrap(api.api.invitation.batch.delete.$post({ json: { id } }));

@@ -75,12 +75,12 @@ apps/server    Hono + Better Auth + Drizzle（端口 8787）
 
 **不遵循 REST，业务语义和 HTTP 协议解耦，但不引入 RPC 框架（不上 tRPC/oRPC）——就用 Hono 本身 + 一份共享约定。** 详细讨论和实测数据见 [docs/architecture-decisions.md](docs/architecture-decisions.md#前后端类型安全)，这里只写规则：
 
-- **路径是动作名，不是资源。** 用 `getServerInfo`、`submitEcho` 这种动词开头的名字，不要建 `/projects/:id` 这种资源路径。业务接口**全部用 POST**，HTTP 动词不承载任何业务含义；文件二进制读取接口 `GET /api/file/:fileId` 是为了支持浏览器原生预览/下载而保留的传输层例外。
+- **路径 = `/api/<模块>/<动作>`，动作名不重复模块名。** 模块内部用 `getServerInfo`、`submitEcho` 这种动词开头的名字，不要建 `/projects/:id` 这种资源路径——前缀只是命名空间，不代表回到了 REST。业务接口**全部用 POST**，HTTP 动词不承载任何业务含义；文件二进制读取接口 `GET /api/file/:fileId` 是为了支持浏览器原生预览/下载而保留的传输层例外。一个模块里有多个子资源（如 `project` 模块下的 project 和 activity）时，拆成两个前缀（`/api/project/*`、`/api/activity/*`），不要挤共用一个前缀又在动作名里加前缀区分。
 - **HTTP 状态码不表达业务结果，只有 `code` 字段表达。** 见 `apps/server/src/shared/result.ts` 的 `ApiResult<T>` —— `{ code: "OK", data } | { code: "UNAUTHORIZED" | "VALIDATION_ERROR" | ..., message }`。业务失败（未登录、校验不过）也返回 HTTP 200，前端永远靠 `result.code` 分支，不看 `res.status`。真正的非 200 只留给两种非业务场景：请求体不合法（`zValidator` 的 error hook）、handler 里未捕获的异常（`index.ts` 的 `app.onError`）。
 - 输入用 `shared/validate.ts` 的 `jsonBody(Schema)`（它内部就是 `zValidator("json", …)` 加统一的 error hook），输出用 `c.json(ok(...))` / `c.json(err(...))`——业务接口**两边都过一遍 `shared/result.ts` 的信封**。文件二进制读取成功时返回原始文件内容，读取失败仍返回同一错误信封。
 - **绝对不要给 `ok()` / `err()` 补上 `: ApiResult<T>` 返回类型标注。** 它们现在故意让 TS 自然推导，`c.json(ok(row))` 的类型就是 `{code:"OK"; data: Row}` 这一种。补上标注看着更"规范"，代价是每个接口的响应类型都变成「OK ∪ 全部四种错误」，于是：前端 `Extract<响应, {code:"OK"}>` 再也取不回精确的 `data`（只能手抄一份领域类型，然后慢慢跟服务端漂移），错误分支还要处理一堆这个接口根本不会返回的 code。理由写在 `shared/result.ts` 的注释里。
 - 分页接口统一用 `shared/pagination.ts` 的 `PageInput.extend({ …筛选条件 })` 作入参、`{ list, total }` 作出参，别各模块自己定 `pageNo` / `pageNum` / `current`。
-- 需要登录的模块在路由链头上挂 `modules/auth` 的 `requireUser`，然后用 `c.get("authedUser")`（非空），不要每个 handler 里各写一遍 `c.get("user")` 判空。
+- 需要登录的模块在路由链头上挂 `modules/auth` 的 `requireUser`，然后用 `c.get("authedUser")`（非空），不要每个 handler 里各写一遍 `c.get("user")` 判空。**`.use(requireUser)` 的作用域就是模块自己的前缀**（`index.ts` 里 `.route("/api/<模块>", xxxRoutes)` 决定的），不依赖链上其他模块的注册顺序——`file` 模块刻意不挂 `requireUser`，靠的正是这一点，而不是"排在前面就没事"。
 - 路由必须**接在链上**（`app.post(...).post(...)`），单独写 `app.post(...)` 不会进 `AppType`
 - `apps/web` 只用 `import type` 引 `@repo/server`，**绝不 runtime import** —— 服务端代码不能进浏览器包
 - 客户端用 `apps/server/src/client-type.ts` 导出的 `hcWithType`，不要直接用 `hc`——前者把类型计算挪到编译期，路由多了以后 IDE 不会变卡（[Hono 官方的 known issue](https://hono.dev/docs/guides/rpc#using-rpc-with-larger-applications)）
@@ -126,12 +126,12 @@ apps/server/
     │   ├── validate.ts     jsonBody()，统一的请求体校验器
     │   └── pagination.ts   PageInput / Paged<T> / toLimitOffset()
     ├── client-type.ts       hcWithType 预编译导出
-    └── index.ts              只做组合：挂 authHandler → session 中间件 → 各模块 .route("/", xxxRoutes)
+    └── index.ts              只做组合：挂 authHandler → session 中间件 → 各模块 .route("/api/<模块>", xxxRoutes)
 ```
 
 **`infra/db.ts` 故意不传 `schema` 参数给 `drizzle()`。** 传了就得把所有模块的表 import 进 `infra/`，违反上面那条依赖方向。代价是拿不到 `db.query.user.findMany()` 这种关系查询语法，改用 `db.select().from(table)`，`table` 从拥有它的模块 import。现在的代码从没用过 `db.query`（Better Auth 是显式接收 schema 的），零损失；真需要关系查询时再单独决定要不要开个 barrel 聚合 schema。
 
-**新增一个业务功能时，在 `modules/` 下新建一个同名目录**（如 `modules/project/{schema,validation,routes}.ts`），在 `index.ts` 里 `.route("/", projectRoutes)` 接上链条即可。表定义放在该模块目录下的 `schema.ts`，会被 `drizzle.config.ts` 的 glob 自动捡到。不要把新路由塞进 `modules/example`——那个目录只是范式演示，真实业务上线后可以整个删掉。
+**新增一个业务功能时，在 `modules/` 下新建一个同名目录**（如 `modules/project/{schema,validation,routes}.ts`），在 `index.ts` 里 `.route("/api/<模块名>", projectRoutes)` 接上链条即可——`routes.ts` 里的路径写成相对该前缀的 `/list`、`/create` 这种，不要再带 `/api/xxx` 全路径。表定义放在该模块目录下的 `schema.ts`，会被 `drizzle.config.ts` 的 glob 自动捡到。不要把新路由塞进 `modules/example`——那个目录只是范式演示，真实业务上线后可以整个删掉。
 
 `shared/` 只放真正跨模块、且不碰外部资源的东西（目前只有 `result.ts`）。如果某个类型/工具只有一个模块在用，就放回那个模块目录里；如果它连接外部资源，归 `infra/`，不归 `shared/`。
 
