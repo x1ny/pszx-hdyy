@@ -4,11 +4,10 @@ import { z } from "zod";
 import { Button } from "#/shared/components/ui/button.tsx";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle,
 } from "#/shared/components/ui/dialog.tsx";
 import {
   Field,
@@ -102,10 +101,10 @@ export function SupplierFormDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{supplier ? "修改供应商" : "新增供应商"}</DialogTitle>
-          <DialogDescription>带 * 的是必填项，保存后立即生效。</DialogDescription>
-        </DialogHeader>
+        <DialogHeader
+          title={supplier ? "修改供应商" : "新增供应商"}
+          description="带 * 的是必填项，保存后立即生效。"
+        />
         {/* key 让切换记录时整个表单重新挂载：比在 effect 里手动 reset 更难写错，
             也不会出现「上一条的校验错误残留到这一条」。Dialog 本身没重挂，
             开关动画不受影响。 */}
@@ -159,13 +158,14 @@ function SupplierForm({
 
   return (
     <form
-      className="flex flex-col gap-4"
+      className="flex min-h-0 flex-1 flex-col"
       onSubmit={(event) => {
         event.preventDefault();
         form.handleSubmit();
       }}
     >
-      <div className="grid gap-4 sm:grid-cols-2">
+      <DialogBody className="flex flex-col gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
         <form.Field name="name">
           {(field) => (
             <Field>
@@ -351,7 +351,7 @@ function SupplierForm({
             </Field>
           )}
         </form.Field>
-      </div>
+        </div>
 
       <form.Field name="remark">
         {(field) => (
@@ -374,7 +374,8 @@ function SupplierForm({
             />
           </Field>
         )}
-      </form.Field>
+        </form.Field>
+      </DialogBody>
 
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel}>

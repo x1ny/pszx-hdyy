@@ -1,6 +1,7 @@
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -20,7 +21,7 @@ export function MemberDetailDialog({
 }: MemberDetailDialogProps) {
   return (
     <Dialog open={!!member} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg">
         {member && (
           <>
             <DialogHeader>
@@ -43,7 +44,7 @@ export function MemberDetailDialog({
               </div>
             </DialogHeader>
 
-            <div className="flex flex-col gap-6">
+            <DialogBody className="flex flex-col gap-6">
               <Section title="基本信息">
                 <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 text-sm">
                   <Row label="姓名">{member.name || "-"}</Row>
@@ -90,7 +91,7 @@ export function MemberDetailDialog({
                   </p>
                 </Section>
               )}
-            </div>
+            </DialogBody>
           </>
         )}
       </DialogContent>

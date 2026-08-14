@@ -4,6 +4,7 @@ import { z } from "zod";
 import { Button } from "#/shared/components/ui/button.tsx";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -107,7 +108,7 @@ export function MemberFormDialog({
 }: MemberFormDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100vh-3rem)] sm:max-w-3xl">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{member ? "修改人员" : "新增人员"}</DialogTitle>
           <DialogDescription>带 * 的是必填项，保存后立即生效。</DialogDescription>
@@ -162,13 +163,14 @@ function MemberForm({
 
   return (
     <form
-      className="flex max-h-[calc(100vh-11rem)] min-w-0 flex-col gap-5 overflow-y-auto px-1"
+      className="flex min-h-0 flex-1 flex-col"
       onSubmit={(event) => {
         event.preventDefault();
         form.handleSubmit();
       }}
     >
-      <div className="grid gap-4 sm:grid-cols-2">
+      <DialogBody className="flex flex-col gap-5">
+        <div className="grid gap-4 sm:grid-cols-2">
         <form.Field name="name">
           {(field) => (
             <Field>
@@ -335,7 +337,7 @@ function MemberForm({
             <TextField field={field} label="语种" placeholder="请输入语种" />
           )}
         </form.Field>
-      </div>
+        </div>
 
       <form.Field name="remark">
         {(field) => (
@@ -354,9 +356,10 @@ function MemberForm({
             <FieldError errors={fieldErrors(field)} />
           </Field>
         )}
-      </form.Field>
+        </form.Field>
+      </DialogBody>
 
-      <DialogFooter className="sticky bottom-0 border-t bg-popover pt-4">
+      <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel}>
           取消
         </Button>

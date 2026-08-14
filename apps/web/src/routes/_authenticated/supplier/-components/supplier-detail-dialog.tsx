@@ -1,6 +1,7 @@
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -25,7 +26,7 @@ export function SupplierDetailDialog({
 }: SupplierDetailDialogProps) {
   return (
     <Dialog open={!!supplier} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg">
         {supplier && (
           <>
             <DialogHeader>
@@ -37,7 +38,7 @@ export function SupplierDetailDialog({
               </DialogDescription>
             </DialogHeader>
 
-            <div className="flex flex-col gap-6">
+            <DialogBody className="flex flex-col gap-6">
               <Section title="服务类目">
                 <div className="flex flex-wrap gap-1.5">
                   {supplier.serviceCategories.length ? (
@@ -89,7 +90,7 @@ export function SupplierDetailDialog({
                   </p>
                 </Section>
               )}
-            </div>
+            </DialogBody>
           </>
         )}
       </DialogContent>

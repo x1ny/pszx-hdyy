@@ -6,6 +6,7 @@ import { Button } from "#/shared/components/ui/button.tsx";
 import { Checkbox } from "#/shared/components/ui/checkbox.tsx";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -84,7 +85,8 @@ export function SelectTargetsDialog({
           <DialogTitle>选择邀请对象</DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <DialogBody className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center gap-2">
           <Input
             className="w-44"
             placeholder="搜索姓名"
@@ -106,7 +108,7 @@ export function SelectTargetsDialog({
           </Button>
         </div>
 
-        <div className="max-h-96 overflow-y-auto rounded-md border">
+        <div className="rounded-md border">
           <Table>
             <TableHeader className="bg-muted/60">
               <TableRow className="hover:bg-transparent">
@@ -179,6 +181,8 @@ export function SelectTargetsDialog({
             </Button>
           </div>
         </div>
+
+        </DialogBody>
 
         <DialogFooter>
           <Button variant="outline" onClick={onCancel}>

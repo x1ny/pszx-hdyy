@@ -2,6 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -60,9 +61,11 @@ export function BatchDetailDialog({ batch, loading, onOpenChange }: BatchDetailD
   return (
     <>
       <Dialog open={!!batch || !!loading} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="sm:max-w-2xl">
           {loading || !batch ? (
-            <div className="p-6 text-center text-muted-foreground">加载中...</div>
+            <DialogBody className="p-0">
+              <div className="p-6 text-center text-muted-foreground">加载中...</div>
+            </DialogBody>
           ) : (
             <>
               <DialogHeader>
@@ -72,7 +75,7 @@ export function BatchDetailDialog({ batch, loading, onOpenChange }: BatchDetailD
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="flex flex-col gap-6">
+              <DialogBody className="flex flex-col gap-6">
                 <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 text-sm">
                   <dt className="text-muted-foreground">生成数量</dt>
                   <dd className="text-right">{batch.itemCount}</dd>
@@ -128,25 +131,27 @@ export function BatchDetailDialog({ batch, loading, onOpenChange }: BatchDetailD
                     ))}
                   </TableBody>
                 </Table>
-              </div>
+              </DialogBody>
             </>
           )}
         </DialogContent>
       </Dialog>
 
       <Dialog open={!!previewItem} onOpenChange={(open) => !open && setPreviewItem(undefined)}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+        <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>邀请函预览</DialogTitle>
           </DialogHeader>
-          {batch && previewItem ? (
-            <InvitationPreview
-              doc={buildInvitationDocument(batch, {
-                recipientName: previewItem.recipientName,
-                issueDate: batch.issueDate,
-              })}
-            />
-          ) : null}
+          <DialogBody>
+            {batch && previewItem ? (
+              <InvitationPreview
+                doc={buildInvitationDocument(batch, {
+                  recipientName: previewItem.recipientName,
+                  issueDate: batch.issueDate,
+                })}
+              />
+            ) : null}
+          </DialogBody>
         </DialogContent>
       </Dialog>
     </>

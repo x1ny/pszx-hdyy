@@ -5,6 +5,7 @@ import { RichTextEditor } from "#/shared/components/rich-text-editor.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -86,7 +87,7 @@ export function TemplateFormDialog({
 }: TemplateFormDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-3xl">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{template ? "编辑模板" : "新增模板"}</DialogTitle>
           <DialogDescription>带 * 的是必填项，保存后立即生效。</DialogDescription>
@@ -135,13 +136,14 @@ function TemplateForm({
 
   return (
     <form
-      className="flex flex-1 flex-col gap-4 overflow-y-auto px-1"
+      className="flex min-h-0 flex-1 flex-col"
       onSubmit={(event) => {
         event.preventDefault();
         form.handleSubmit();
       }}
     >
-      <div className="grid gap-4 sm:grid-cols-3">
+      <DialogBody className="flex flex-col gap-4">
+        <div className="grid gap-4 sm:grid-cols-3">
         <form.Field name="name">
           {(field) => (
             <Field className="sm:col-span-2">
@@ -194,7 +196,7 @@ function TemplateForm({
             </Field>
           )}
         </form.Field>
-      </div>
+        </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <form.Field name="applicableDesc">
@@ -364,7 +366,8 @@ function TemplateForm({
             />
           </Field>
         )}
-      </form.Field>
+        </form.Field>
+      </DialogBody>
 
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel}>

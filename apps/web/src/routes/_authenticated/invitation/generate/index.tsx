@@ -37,6 +37,7 @@ import {
 } from "./-queries";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -411,29 +412,31 @@ function GeneratePage() {
       />
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+        <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>邀请函预览</DialogTitle>
           </DialogHeader>
-          {currentTemplate ? (
-            <InvitationPreview
-              doc={buildInvitationDocument(
-                {
-                  issuer: currentTemplate.issuer,
-                  bodyContent: currentTemplate.bodyContent,
-                  annexTitle: currentTemplate.annexTitle,
-                  annexContent: currentTemplate.annexContent,
-                  contactPerson: previewValues.contactPerson || currentTemplate.contactPerson,
-                  contactPhone: previewValues.contactPhone || currentTemplate.contactPhone,
-                  signOff: previewValues.signOff || currentTemplate.signOff,
-                },
-                {
-                  recipientName: previewRecipientName,
-                  issueDate: previewValues.issueDate,
-                },
-              )}
-            />
-          ) : null}
+          <DialogBody>
+            {currentTemplate ? (
+              <InvitationPreview
+                doc={buildInvitationDocument(
+                  {
+                    issuer: currentTemplate.issuer,
+                    bodyContent: currentTemplate.bodyContent,
+                    annexTitle: currentTemplate.annexTitle,
+                    annexContent: currentTemplate.annexContent,
+                    contactPerson: previewValues.contactPerson || currentTemplate.contactPerson,
+                    contactPhone: previewValues.contactPhone || currentTemplate.contactPhone,
+                    signOff: previewValues.signOff || currentTemplate.signOff,
+                  },
+                  {
+                    recipientName: previewRecipientName,
+                    issueDate: previewValues.issueDate,
+                  },
+                )}
+              />
+            ) : null}
+          </DialogBody>
         </DialogContent>
       </Dialog>
     </div>

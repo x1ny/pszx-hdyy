@@ -5,6 +5,7 @@ import { Button } from "#/shared/components/ui/button.tsx";
 import { Checkbox } from "#/shared/components/ui/checkbox.tsx";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -96,7 +97,7 @@ export function ActivityFormDialog({
 }: ActivityFormDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{activity ? "修改活动" : "新增活动"}</DialogTitle>
           <DialogDescription>
@@ -169,13 +170,14 @@ function ActivityForm({
 
   return (
     <form
-      className="flex flex-col gap-4"
+      className="flex min-h-0 flex-1 flex-col"
       onSubmit={(event) => {
         event.preventDefault();
         form.handleSubmit();
       }}
     >
-      <div className="grid gap-4 sm:grid-cols-2">
+      <DialogBody className="flex flex-col gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
         <form.Field name="name">
           {(field) => (
             <Field className="sm:col-span-2">
@@ -452,7 +454,7 @@ function ActivityForm({
             )}
           </form.Field>
         </div>
-      </div>
+        </div>
 
       <form.Field name="description">
         {(field) => (
@@ -478,7 +480,8 @@ function ActivityForm({
             />
           </Field>
         )}
-      </form.Field>
+        </form.Field>
+      </DialogBody>
 
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel}>

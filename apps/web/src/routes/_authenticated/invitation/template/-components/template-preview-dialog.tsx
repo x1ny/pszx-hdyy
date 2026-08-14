@@ -1,10 +1,5 @@
 import { Loader2Icon } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "#/shared/components/ui/dialog.tsx";
+import { SimpleDialog } from "#/shared/components/ui/simple-dialog.tsx";
 import { buildInvitationDocument } from "../../-shared/document.ts";
 import { InvitationPreview } from "../../-shared/invitation-preview.tsx";
 import type { InvitationTemplate } from "../-queries";
@@ -27,19 +22,19 @@ export function TemplatePreviewDialog({
   onOpenChange,
 }: TemplatePreviewDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>邀请函预览</DialogTitle>
-        </DialogHeader>
-        {loading || !template ? (
-          <div className="flex items-center justify-center py-16 text-muted-foreground">
-            <Loader2Icon className="size-5 animate-spin" />
-          </div>
-        ) : (
-          <InvitationPreview doc={buildInvitationDocument(template)} />
-        )}
-      </DialogContent>
-    </Dialog>
+    <SimpleDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="邀请函预览"
+      contentProps={{ className: "sm:max-w-3xl" }}
+    >
+      {loading || !template ? (
+        <div className="flex items-center justify-center py-16 text-muted-foreground">
+          <Loader2Icon className="size-5 animate-spin" />
+        </div>
+      ) : (
+        <InvitationPreview doc={buildInvitationDocument(template)} />
+      )}
+    </SimpleDialog>
   );
 }
