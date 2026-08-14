@@ -214,6 +214,10 @@ export const activitySegment = pgTable(
     // 现网真的存在开始=结束的瞬时环节（签到、剪彩）。重叠判断用半开区间
     // [start, end)，零时长环节因此不会和任何环节冲突，不需要额外分支。
     check("chk_segment_time_range", sql`${table.startTime} <= ${table.endTime}`),
+
+    // 同 uk_agenda_line_id_activity：给 modules/member 的 segment_member 复合
+    // 外键当靶子，保证那张表冗余的 activity_id 恒等于本环节的 activity_id。
+    unique("uk_segment_id_activity").on(table.id, table.activityId),
   ],
 );
 

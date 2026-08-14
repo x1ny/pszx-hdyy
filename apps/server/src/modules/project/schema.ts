@@ -9,6 +9,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -178,6 +179,12 @@ export const activity = pgTable(
       "chk_activity_time_range",
       sql`${table.startTime} < ${table.endTime}`,
     ),
+
+    // 不是给查询用的，是给 modules/member 的 activity_member 复合外键当靶子
+    // ——那张表冗余存了 project_id，靠这条唯一键保证它恒等于本活动的
+    // project_id。(id) 已是主键，再加 (id, project_id) 近乎零成本。
+    // 同 activity_agenda_line 的 uk_agenda_line_id_activity。
+    unique("uk_activity_id_project").on(table.id, table.projectId),
   ],
 );
 

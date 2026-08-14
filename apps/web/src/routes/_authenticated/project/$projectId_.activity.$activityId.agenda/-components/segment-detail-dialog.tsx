@@ -33,11 +33,13 @@ export function SegmentDetailDialog({
   lines,
   onOpenChange,
   onEdit,
+  onManageMembers,
 }: {
   segment?: Segment;
   lines: AgendaLine[];
   onOpenChange: (open: boolean) => void;
   onEdit: (segment: Segment) => void;
+  onManageMembers: (segment: Segment) => void;
 }) {
   const line = segment
     ? lines.find((candidate) => candidate.id === segment.agendaLineId)
@@ -107,6 +109,16 @@ export function SegmentDetailDialog({
               <Button variant="outline" onClick={() => onOpenChange(false)}>
                 关闭
               </Button>
+              {/* 只在环节开了人员管理时给入口——开关关着的时候后端也会拒绝
+                  写入，与其让运营点进去撞一鼻子灰，不如按开关隐藏。 */}
+              {segment.memberEnabled && (
+                <Button
+                  variant="outline"
+                  onClick={() => onManageMembers(segment)}
+                >
+                  环节人员
+                </Button>
+              )}
               <Button onClick={() => onEdit(segment)}>修改环节</Button>
             </DialogFooter>
           </>

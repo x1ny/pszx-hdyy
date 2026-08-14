@@ -1,0 +1,393 @@
+import { and, eq, inArray } from "drizzle-orm";
+import { db } from "../../infra/db";
+import { activitySegment } from "../agenda/schema";
+import { activity } from "../project/schema";
+import {
+  activityMember,
+  member,
+  type MemberIdType,
+  type MemberRelationOrigin,
+  projectMember,
+  type SegmentMemberRole,
+  segmentMember,
+} from "./schema";
+
+/**
+ * 人员分层的**唯一写入入口**。
+ *
+ * BR-DEV-026 要求："项目、活动、环节入口新增或导入人员时，先创建或引用全量
+ * 人员主档，再创建当前层级人员关系；环节入口新增、选择、导入人员时，应同步
+ * 补齐当前活动人员关系和项目人员关系。"
+ *
+ * 这条规则横跨三张表、必须原子生效，而且四个入口（后台新增、导入、项目分配、
+ * 报名审核通过）都要走。如果让每个 route handler 自己实现，迟早有一个入口漏写
+ * 补齐——漏了之后症状是"环节人员列表里有这个人，活动人员列表里没有"，运营会
+ * 当成 bug 报上来，但数据已经脏了。
+ *
+ * 所以规矩是：**routes 里不许出现对三张关系表的 insert**，一律走这里。
+ *
+ * 全部函数都要求调用方传入事务句柄——补齐链路只有整条成立才有意义，中途失败
+ * 留下半条链比什么都不做更糟。
+ */
+
+/** `db.transaction` 回调里那个句柄的类型。drizzle 没导出它，从签名反推。 */
+export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * ladder 里的业务失败。在事务里 throw 是最省事的回滚方式，routes 层
+ * catch 住翻译成 `err({ code: "VALIDATION_ERROR" })`。
+ */
+export class MemberLadderError extends Error {}
+
+const fail = (message: string): never => {
+  throw new MemberLadderError(message);
+};
+
+/** 三层共用的关系字段。环节层传 null 表示"继承活动层"，见 schema 注释。 */
+export type RelationFields = {
+  source?: string | null;
+  groupName?: string | null;
+  ownerName?: string | null;
+  remark?: string | null;
+};
+
+export type MemberEntry = RelationFields & { memberId: number };
+
+export type SegmentMemberEntry = MemberEntry & {
+  segmentRole?: SegmentMemberRole | null;
+};
+
+/** 关系 id 按 memberId 索引。三个 ensure 函数的统一出参形状。 */
+export type RelationIdByMember = Map<number, number>;
+
+const dedupe = (entries: readonly MemberEntry[]) => {
+  // 选择抽屉多选 + 已选列表可能送来重复的 memberId，先收敛掉。留第一条，
+  // 因为批量插入时后面那条本来也会被唯一键挡掉，行为一致。
+  const seen = new Map<number, MemberEntry>();
+  for (const entry of entries) {
+    if (!seen.has(entry.memberId)) seen.set(entry.memberId, entry);
+  }
+  return [...seen.values()];
+};
+
+/**
+ * 主档必须存在且启用。
+ *
+ * 规则 7："全量人员主档禁用后不删除历史关系和历史展示，只禁止继续新增项目、
+ * 活动、环节、邀请函、排位、资源服务等新关系。"——禁用挡的是**新增**，不是
+ * 已有关系，所以这个检查只在 ensure 路径上，不在读取路径上。
+ */
+async function assertMembersUsable(tx: Tx, memberIds: readonly number[]) {
+  const rows = await tx
+    .select({ id: member.id, name: member.name, status: member.status })
+    .from(member)
+    .where(inArray(member.id, [...memberIds]));
+
+  if (rows.length !== memberIds.length) {
+    fail("选中的人员中有已不存在的记录，请刷新后重试");
+  }
+
+  const disabled = rows.filter((row) => row.status === "disabled");
+  if (disabled.length > 0) {
+    const names = disabled.map((row) => row.name).join("、");
+    fail(`${names} 已禁用，不能新增参与关系`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 手动录入：先建主档，再建关系
+// ---------------------------------------------------------------------------
+
+/** 关系入口手动录入时能填的主档字段。完整维护在全量人员库，这里只收常用几项。 */
+export type NewMemberFields = {
+  name: string;
+  gender?: "男" | "女" | null;
+  companyPosition?: string | null;
+  idType?: MemberIdType | null;
+  idNumber?: string | null;
+  mobile?: string | null;
+  remark?: string | null;
+};
+
+/**
+ * 在事务里新建主档，返回 memberId。
+ *
+ * 三个关系层的"手动录入"都走这里，保证 BR-DEV-026 的第一句——"先创建或引用
+ * 全量人员主档，再创建当前层级关系"——在三个入口是同一份实现。人建出来了但
+ * 关系没建成的话整个事务回滚，不会在全量库里留一条谁也不知道哪来的孤儿主档。
+ *
+ * 证件查重在这里做而不是靠数据库那条 partial unique index 兜：索引撞上会抛
+ * 23503 之外的 23505，翻译成人话要额外一层解析，不如查一次直接说清楚。
+ * 索引仍然是最后一道保险（并发下两个请求同时录同一个证件号）。
+ */
+export async function createMemberInTx(
+  tx: Tx,
+  fields: NewMemberFields,
+  userId: string,
+): Promise<number> {
+  if (fields.idType && fields.idNumber) {
+    const [dup] = await tx
+      .select({ id: member.id, name: member.name })
+      .from(member)
+      .where(
+        and(
+          eq(member.idType, fields.idType),
+          eq(member.idNumber, fields.idNumber),
+        ),
+      )
+      .limit(1);
+
+    if (dup) {
+      fail(
+        `该证件号码已属于全量人员库中的「${dup.name}」，请改用"从已有人员选择"`,
+      );
+    }
+  }
+
+  const [row] = await tx
+    .insert(member)
+    .values({
+      name: fields.name,
+      gender: fields.gender ?? null,
+      companyPosition: fields.companyPosition ?? null,
+      idType: fields.idType ?? null,
+      idNumber: fields.idNumber ?? null,
+      mobile: fields.mobile ?? null,
+      remark: fields.remark ?? null,
+      createdBy: userId,
+      updatedBy: userId,
+    })
+    .returning({ id: member.id });
+
+  return row?.id ?? fail("人员创建失败，请重试");
+}
+
+// ---------------------------------------------------------------------------
+// 项目层
+// ---------------------------------------------------------------------------
+
+/**
+ * 把人拉进项目范围。已有关系时**不覆盖**它的 sourceType——一个运营手工加进
+ * 项目的人，不该因为后来从某个环节补齐过一次就被改写成 backfill。
+ */
+export async function ensureProjectMembers(
+  tx: Tx,
+  input: {
+    projectId: number;
+    memberIds: readonly number[];
+    sourceType: MemberRelationOrigin;
+    userId: string;
+    /** 已在上层校验过主档时跳过，避免同一批人查两遍。 */
+    skipMemberCheck?: boolean;
+  },
+): Promise<RelationIdByMember> {
+  const memberIds = [...new Set(input.memberIds)];
+  if (memberIds.length === 0) return new Map();
+
+  if (!input.skipMemberCheck) await assertMembersUsable(tx, memberIds);
+
+  await tx
+    .insert(projectMember)
+    .values(
+      memberIds.map((memberId) => ({
+        projectId: input.projectId,
+        memberId,
+        sourceType: input.sourceType,
+        createdBy: input.userId,
+        updatedBy: input.userId,
+      })),
+    )
+    // 打在 uk_project_member 上。冲突即"这个人已经在项目里了"，正是 ensure
+    // 想要的语义，也顺带消掉了并发下两个请求同时拉同一个人的竞态。
+    .onConflictDoNothing({
+      target: [projectMember.projectId, projectMember.memberId],
+    });
+
+  // 插入用 onConflictDoNothing 就拿不回冲突行的 id，所以统一再查一次。
+  // 两次往返换来的是批量大小无关的固定开销——1 个人和 1000 个人一样是 2 跳。
+  const rows = await tx
+    .select({ id: projectMember.id, memberId: projectMember.memberId })
+    .from(projectMember)
+    .where(
+      and(
+        eq(projectMember.projectId, input.projectId),
+        inArray(projectMember.memberId, memberIds),
+      ),
+    );
+
+  return new Map(rows.map((row) => [row.memberId, row.id]));
+}
+
+// ---------------------------------------------------------------------------
+// 活动层
+// ---------------------------------------------------------------------------
+
+export async function ensureActivityMembers(
+  tx: Tx,
+  input: {
+    activityId: number;
+    entries: readonly MemberEntry[];
+    originType: MemberRelationOrigin;
+    userId: string;
+    skipMemberCheck?: boolean;
+    /**
+     * 补齐项目关系时记的录入渠道。默认 backfill_from_activity，只有
+     * ensureSegmentMembers 会覆盖成 backfill_from_segment——链条从环节起头时，
+     * 项目关系也该记成"环节带进来的"，而不是"活动带进来的"。文档 8.1.2 规则 6
+     * 只写了活动层要记"环节导入"，但同一句话的道理对项目层一样成立：运营在
+     * 项目人员页看到 backfill_from_activity 会去活动人员页找这条关系的来头，
+     * 而它其实是从某个环节冒出来的。
+     */
+    projectSourceType?: MemberRelationOrigin;
+  },
+): Promise<RelationIdByMember> {
+  const entries = dedupe(input.entries);
+  if (entries.length === 0) return new Map();
+
+  const memberIds = entries.map((entry) => entry.memberId);
+  if (!input.skipMemberCheck) await assertMembersUsable(tx, memberIds);
+
+  const [row] = await tx
+    .select({ projectId: activity.projectId })
+    .from(activity)
+    .where(eq(activity.id, input.activityId));
+  if (!row) fail("活动不存在");
+  const projectId = row.projectId;
+
+  // ⭐ 补齐上一层。项目关系记的是 backfill_* 而不是原样透传 originType：
+  // 运营在项目人员页看到的应该是"这条是从下面带上来的"，而不是"这条是导入的"
+  // ——后者会让人以为项目层自己做过一次导入。
+  const projectMemberIds = await ensureProjectMembers(tx, {
+    projectId,
+    memberIds,
+    sourceType: input.projectSourceType ?? "backfill_from_activity",
+    userId: input.userId,
+    skipMemberCheck: true,
+  });
+
+  await tx
+    .insert(activityMember)
+    .values(
+      entries.map((entry) => ({
+        activityId: input.activityId,
+        projectId,
+        projectMemberId:
+          projectMemberIds.get(entry.memberId) ??
+          fail("项目人员关系补齐失败，请重试"),
+        memberId: entry.memberId,
+        source: entry.source ?? null,
+        groupName: entry.groupName ?? null,
+        ownerName: entry.ownerName ?? null,
+        remark: entry.remark ?? null,
+        originType: input.originType,
+        createdBy: input.userId,
+        updatedBy: input.userId,
+      })),
+    )
+    .onConflictDoNothing({
+      target: [activityMember.activityId, activityMember.memberId],
+    });
+
+  const rows = await tx
+    .select({ id: activityMember.id, memberId: activityMember.memberId })
+    .from(activityMember)
+    .where(
+      and(
+        eq(activityMember.activityId, input.activityId),
+        inArray(activityMember.memberId, memberIds),
+      ),
+    );
+
+  return new Map(rows.map((r) => [r.memberId, r.id]));
+}
+
+// ---------------------------------------------------------------------------
+// 环节层
+// ---------------------------------------------------------------------------
+
+/**
+ * 环节人员。这是补齐链路最长的一条：环节 → 活动 → 项目 → 主档，四层一个事务。
+ *
+ * 文档 8.1.2 规则 6："环节人员导入的环节身份、来源、分组、负责人、备注为环节
+ * 关系字段；若需同步生成活动人员关系，活动关系默认使用同一来源、分组、负责人
+ * 并记录数据来源为'环节导入'。"——所以补出来的活动关系要把这三个值**带过去**，
+ * 而不是留空。带过去之后环节层这三列存的还是原值，看着冗余，但那是
+ * "显式覆盖"和"继承"在数据上可区分的代价，见 schema 里的说明。
+ */
+export async function ensureSegmentMembers(
+  tx: Tx,
+  input: {
+    segmentId: number;
+    entries: readonly SegmentMemberEntry[];
+    originType: MemberRelationOrigin;
+    userId: string;
+  },
+): Promise<RelationIdByMember> {
+  const entries = dedupe(input.entries) as SegmentMemberEntry[];
+  if (entries.length === 0) return new Map();
+
+  const memberIds = entries.map((entry) => entry.memberId);
+  await assertMembersUsable(tx, memberIds);
+
+  const [row] = await tx
+    .select({
+      activityId: activitySegment.activityId,
+      status: activitySegment.status,
+      memberEnabled: activitySegment.memberEnabled,
+    })
+    .from(activitySegment)
+    .where(eq(activitySegment.id, input.segmentId));
+  if (!row) fail("环节不存在");
+
+  // 作废环节不再进入新的业务（BR-DEV 8.2.1 规则 5）。
+  if (row.status === "voided") fail("该环节已作废，不能再维护环节人员");
+  // 环节人员管理是环节配置里的显式开关，关着的时候不该有人员数据流进来。
+  if (!row.memberEnabled) fail("该环节未开启环节人员管理");
+
+  const activityId = row.activityId;
+
+  const activityMemberIds = await ensureActivityMembers(tx, {
+    activityId,
+    entries,
+    originType: "backfill_from_segment",
+    projectSourceType: "backfill_from_segment",
+    userId: input.userId,
+    skipMemberCheck: true,
+  });
+
+  await tx
+    .insert(segmentMember)
+    .values(
+      entries.map((entry) => ({
+        segmentId: input.segmentId,
+        activityId,
+        activityMemberId:
+          activityMemberIds.get(entry.memberId) ??
+          fail("活动人员关系补齐失败，请重试"),
+        memberId: entry.memberId,
+        segmentRole: entry.segmentRole ?? null,
+        source: entry.source ?? null,
+        groupName: entry.groupName ?? null,
+        ownerName: entry.ownerName ?? null,
+        remark: entry.remark ?? null,
+        originType: input.originType,
+        createdBy: input.userId,
+        updatedBy: input.userId,
+      })),
+    )
+    .onConflictDoNothing({
+      target: [segmentMember.segmentId, segmentMember.activityMemberId],
+    });
+
+  const rows = await tx
+    .select({ id: segmentMember.id, memberId: segmentMember.memberId })
+    .from(segmentMember)
+    .where(
+      and(
+        eq(segmentMember.segmentId, input.segmentId),
+        inArray(segmentMember.memberId, memberIds),
+      ),
+    );
+
+  return new Map(rows.map((r) => [r.memberId, r.id]));
+}

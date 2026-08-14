@@ -17,6 +17,7 @@ import { activityDetailQueryOptions } from "../-queries";
 import { AgendaLineDialog } from "./-components/agenda-line-dialog";
 import { AgendaTimeline } from "./-components/agenda-timeline";
 import { SegmentDetailDialog } from "./-components/segment-detail-dialog";
+import { SegmentMembersDialog } from "./-components/segment-members-dialog";
 import {
   SegmentFormDialog,
   type SegmentFormSubmitValues,
@@ -58,8 +59,11 @@ export const Route = createFileRoute(
 });
 
 function AgendaTab() {
-  const { activityId: activityIdParam } = Route.useParams();
+  const { projectId: projectIdParam, activityId: activityIdParam } =
+    Route.useParams();
   const activityId = Number(activityIdParam);
+  // 环节人员弹窗的选择器要能按"本项目人员"筛，所以这一层也要把 projectId 带下去。
+  const projectId = Number(projectIdParam);
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const queryClient = useQueryClient();
@@ -67,6 +71,7 @@ function AgendaTab() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Segment>();
   const [detail, setDetail] = useState<Segment>();
+  const [memberSegment, setMemberSegment] = useState<Segment>();
   const [lineDialogOpen, setLineDialogOpen] = useState(false);
 
   const agendaQuery = useQuery(agendaQueryOptions(activityId));
@@ -343,6 +348,21 @@ function AgendaTab() {
           if (!open) setDetail(undefined);
         }}
         onEdit={openEdit}
+        onManageMembers={(segment) => {
+          setDetail(undefined);
+          setMemberSegment(segment);
+        }}
+      />
+
+      <SegmentMembersDialog
+        segmentId={memberSegment?.id}
+        segmentName={memberSegment?.name}
+        projectId={projectId}
+        activityId={activityId}
+        open={!!memberSegment}
+        onOpenChange={(open) => {
+          if (!open) setMemberSegment(undefined);
+        }}
       />
 
       <AgendaLineDialog

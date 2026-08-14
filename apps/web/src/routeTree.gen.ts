@@ -23,6 +23,8 @@ import { Route as AuthenticatedSystemUserRouteImport } from './routes/_authentic
 import { Route as AuthenticatedInvitationBatchIndexRouteImport } from './routes/_authenticated/invitation/batch/index'
 import { Route as AuthenticatedInvitationGenerateIndexRouteImport } from './routes/_authenticated/invitation/generate/index'
 import { Route as AuthenticatedInvitationTemplateIndexRouteImport } from './routes/_authenticated/invitation/template/index'
+import { Route as AuthenticatedProjectProjectIdIndexRouteImport } from './routes/_authenticated/project/$projectId.index'
+import { Route as AuthenticatedProjectProjectIdMembersRouteImport } from './routes/_authenticated/project/$projectId.members'
 import { Route as AuthenticatedProjectProjectIdActivityActivityIdRouteImport } from './routes/_authenticated/project/$projectId_.activity.$activityId'
 import { Route as AuthenticatedProjectProjectIdActivityActivityIdIndexRouteImport } from './routes/_authenticated/project/$projectId_.activity.$activityId.index'
 import { Route as AuthenticatedProjectProjectIdActivityActivityIdConfigRouteImport } from './routes/_authenticated/project/$projectId_.activity.$activityId.config'
@@ -111,6 +113,18 @@ const AuthenticatedInvitationTemplateIndexRoute =
     path: '/invitation/template/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedProjectProjectIdIndexRoute =
+  AuthenticatedProjectProjectIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedProjectProjectIdRoute,
+  } as any)
+const AuthenticatedProjectProjectIdMembersRoute =
+  AuthenticatedProjectProjectIdMembersRouteImport.update({
+    id: '/members',
+    path: '/members',
+    getParentRoute: () => AuthenticatedProjectProjectIdRoute,
+  } as any)
 const AuthenticatedProjectProjectIdActivityActivityIdRoute =
   AuthenticatedProjectProjectIdActivityActivityIdRouteImport.update({
     id: '/project/$projectId_/activity/$activityId',
@@ -189,15 +203,17 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/$': typeof AuthenticatedSplatRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
-  '/project/$projectId': typeof AuthenticatedProjectProjectIdRoute
+  '/project/$projectId': typeof AuthenticatedProjectProjectIdRouteWithChildren
   '/project/list': typeof AuthenticatedProjectListRoute
   '/system/role': typeof AuthenticatedSystemRoleRoute
   '/system/user': typeof AuthenticatedSystemUserRoute
   '/member/': typeof AuthenticatedMemberIndexRoute
   '/supplier/': typeof AuthenticatedSupplierIndexRoute
+  '/project/$projectId/members': typeof AuthenticatedProjectProjectIdMembersRoute
   '/invitation/batch/': typeof AuthenticatedInvitationBatchIndexRoute
   '/invitation/generate/': typeof AuthenticatedInvitationGenerateIndexRoute
   '/invitation/template/': typeof AuthenticatedInvitationTemplateIndexRoute
+  '/project/$projectId/': typeof AuthenticatedProjectProjectIdIndexRoute
   '/project/$projectId/activity/$activityId': typeof AuthenticatedProjectProjectIdActivityActivityIdRouteWithChildren
   '/project/$projectId/activity/$activityId/config': typeof AuthenticatedProjectProjectIdActivityActivityIdConfigRoute
   '/project/$projectId/activity/$activityId/invitations': typeof AuthenticatedProjectProjectIdActivityActivityIdInvitationsRoute
@@ -215,15 +231,16 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/$': typeof AuthenticatedSplatRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
-  '/project/$projectId': typeof AuthenticatedProjectProjectIdRoute
   '/project/list': typeof AuthenticatedProjectListRoute
   '/system/role': typeof AuthenticatedSystemRoleRoute
   '/system/user': typeof AuthenticatedSystemUserRoute
   '/member': typeof AuthenticatedMemberIndexRoute
   '/supplier': typeof AuthenticatedSupplierIndexRoute
+  '/project/$projectId/members': typeof AuthenticatedProjectProjectIdMembersRoute
   '/invitation/batch': typeof AuthenticatedInvitationBatchIndexRoute
   '/invitation/generate': typeof AuthenticatedInvitationGenerateIndexRoute
   '/invitation/template': typeof AuthenticatedInvitationTemplateIndexRoute
+  '/project/$projectId': typeof AuthenticatedProjectProjectIdIndexRoute
   '/project/$projectId/activity/$activityId/config': typeof AuthenticatedProjectProjectIdActivityActivityIdConfigRoute
   '/project/$projectId/activity/$activityId/invitations': typeof AuthenticatedProjectProjectIdActivityActivityIdInvitationsRoute
   '/project/$projectId/activity/$activityId/members': typeof AuthenticatedProjectProjectIdActivityActivityIdMembersRoute
@@ -242,15 +259,17 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_authenticated/$': typeof AuthenticatedSplatRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
-  '/_authenticated/project/$projectId': typeof AuthenticatedProjectProjectIdRoute
+  '/_authenticated/project/$projectId': typeof AuthenticatedProjectProjectIdRouteWithChildren
   '/_authenticated/project/list': typeof AuthenticatedProjectListRoute
   '/_authenticated/system/role': typeof AuthenticatedSystemRoleRoute
   '/_authenticated/system/user': typeof AuthenticatedSystemUserRoute
   '/_authenticated/member/': typeof AuthenticatedMemberIndexRoute
   '/_authenticated/supplier/': typeof AuthenticatedSupplierIndexRoute
+  '/_authenticated/project/$projectId/members': typeof AuthenticatedProjectProjectIdMembersRoute
   '/_authenticated/invitation/batch/': typeof AuthenticatedInvitationBatchIndexRoute
   '/_authenticated/invitation/generate/': typeof AuthenticatedInvitationGenerateIndexRoute
   '/_authenticated/invitation/template/': typeof AuthenticatedInvitationTemplateIndexRoute
+  '/_authenticated/project/$projectId/': typeof AuthenticatedProjectProjectIdIndexRoute
   '/_authenticated/project/$projectId_/activity/$activityId': typeof AuthenticatedProjectProjectIdActivityActivityIdRouteWithChildren
   '/_authenticated/project/$projectId_/activity/$activityId/config': typeof AuthenticatedProjectProjectIdActivityActivityIdConfigRoute
   '/_authenticated/project/$projectId_/activity/$activityId/invitations': typeof AuthenticatedProjectProjectIdActivityActivityIdInvitationsRoute
@@ -276,9 +295,11 @@ export interface FileRouteTypes {
     | '/system/user'
     | '/member/'
     | '/supplier/'
+    | '/project/$projectId/members'
     | '/invitation/batch/'
     | '/invitation/generate/'
     | '/invitation/template/'
+    | '/project/$projectId/'
     | '/project/$projectId/activity/$activityId'
     | '/project/$projectId/activity/$activityId/config'
     | '/project/$projectId/activity/$activityId/invitations'
@@ -296,15 +317,16 @@ export interface FileRouteTypes {
     | '/login'
     | '/$'
     | '/dashboard'
-    | '/project/$projectId'
     | '/project/list'
     | '/system/role'
     | '/system/user'
     | '/member'
     | '/supplier'
+    | '/project/$projectId/members'
     | '/invitation/batch'
     | '/invitation/generate'
     | '/invitation/template'
+    | '/project/$projectId'
     | '/project/$projectId/activity/$activityId/config'
     | '/project/$projectId/activity/$activityId/invitations'
     | '/project/$projectId/activity/$activityId/members'
@@ -328,9 +350,11 @@ export interface FileRouteTypes {
     | '/_authenticated/system/user'
     | '/_authenticated/member/'
     | '/_authenticated/supplier/'
+    | '/_authenticated/project/$projectId/members'
     | '/_authenticated/invitation/batch/'
     | '/_authenticated/invitation/generate/'
     | '/_authenticated/invitation/template/'
+    | '/_authenticated/project/$projectId/'
     | '/_authenticated/project/$projectId_/activity/$activityId'
     | '/_authenticated/project/$projectId_/activity/$activityId/config'
     | '/_authenticated/project/$projectId_/activity/$activityId/invitations'
@@ -450,6 +474,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedInvitationTemplateIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/project/$projectId/': {
+      id: '/_authenticated/project/$projectId/'
+      path: '/'
+      fullPath: '/project/$projectId/'
+      preLoaderRoute: typeof AuthenticatedProjectProjectIdIndexRouteImport
+      parentRoute: typeof AuthenticatedProjectProjectIdRoute
+    }
+    '/_authenticated/project/$projectId/members': {
+      id: '/_authenticated/project/$projectId/members'
+      path: '/members'
+      fullPath: '/project/$projectId/members'
+      preLoaderRoute: typeof AuthenticatedProjectProjectIdMembersRouteImport
+      parentRoute: typeof AuthenticatedProjectProjectIdRoute
+    }
     '/_authenticated/project/$projectId_/activity/$activityId': {
       id: '/_authenticated/project/$projectId_/activity/$activityId'
       path: '/project/$projectId/activity/$activityId'
@@ -530,6 +568,24 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AuthenticatedProjectProjectIdRouteChildren {
+  AuthenticatedProjectProjectIdMembersRoute: typeof AuthenticatedProjectProjectIdMembersRoute
+  AuthenticatedProjectProjectIdIndexRoute: typeof AuthenticatedProjectProjectIdIndexRoute
+}
+
+const AuthenticatedProjectProjectIdRouteChildren: AuthenticatedProjectProjectIdRouteChildren =
+  {
+    AuthenticatedProjectProjectIdMembersRoute:
+      AuthenticatedProjectProjectIdMembersRoute,
+    AuthenticatedProjectProjectIdIndexRoute:
+      AuthenticatedProjectProjectIdIndexRoute,
+  }
+
+const AuthenticatedProjectProjectIdRouteWithChildren =
+  AuthenticatedProjectProjectIdRoute._addFileChildren(
+    AuthenticatedProjectProjectIdRouteChildren,
+  )
+
 interface AuthenticatedProjectProjectIdActivityActivityIdRouteChildren {
   AuthenticatedProjectProjectIdActivityActivityIdConfigRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdConfigRoute
   AuthenticatedProjectProjectIdActivityActivityIdInvitationsRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdInvitationsRoute
@@ -575,7 +631,7 @@ const AuthenticatedProjectProjectIdActivityActivityIdRouteWithChildren =
 interface AuthenticatedRouteChildren {
   AuthenticatedSplatRoute: typeof AuthenticatedSplatRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
-  AuthenticatedProjectProjectIdRoute: typeof AuthenticatedProjectProjectIdRoute
+  AuthenticatedProjectProjectIdRoute: typeof AuthenticatedProjectProjectIdRouteWithChildren
   AuthenticatedProjectListRoute: typeof AuthenticatedProjectListRoute
   AuthenticatedSystemRoleRoute: typeof AuthenticatedSystemRoleRoute
   AuthenticatedSystemUserRoute: typeof AuthenticatedSystemUserRoute
@@ -590,7 +646,8 @@ interface AuthenticatedRouteChildren {
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedSplatRoute: AuthenticatedSplatRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
-  AuthenticatedProjectProjectIdRoute: AuthenticatedProjectProjectIdRoute,
+  AuthenticatedProjectProjectIdRoute:
+    AuthenticatedProjectProjectIdRouteWithChildren,
   AuthenticatedProjectListRoute: AuthenticatedProjectListRoute,
   AuthenticatedSystemRoleRoute: AuthenticatedSystemRoleRoute,
   AuthenticatedSystemUserRoute: AuthenticatedSystemUserRoute,
