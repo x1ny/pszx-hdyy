@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { agendaRoutes } from "./modules/agenda/routes";
 import { authHandler, sessionMiddleware, type Variables } from "./modules/auth";
 import { exampleRoutes } from "./modules/example/routes";
 import { fileRoutes } from "./modules/file/routes";
@@ -24,7 +25,8 @@ const routes = app
   .route("/", memberRoutes)
   .route("/", invitationRoutes)
   .route("/", fileRoutes)
-  .route("/", projectRoutes);
+  .route("/", projectRoutes)
+  .route("/", agendaRoutes);
 
 // Catches anything a handler didn't turn into a `code`, i.e. a real crash —
 // the one case where the response legitimately isn't a business outcome.
