@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Button } from "#/shared/components/ui/button.tsx";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -86,7 +87,7 @@ export function AgendaLineDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>议程线管理</DialogTitle>
           <DialogDescription>
@@ -96,127 +97,129 @@ export function AgendaLineDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Table>
-          <TableHeader className="bg-muted/60">
-            <TableRow className="hover:bg-transparent">
-              <TableHead className="w-20">类型</TableHead>
-              <TableHead>线路名称</TableHead>
-              <TableHead className="w-24">排序</TableHead>
-              <TableHead className="w-20">环节数</TableHead>
-              <TableHead className="w-36 text-center">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {lines.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} className="text-muted-foreground">
-                  还没有议程线。可以直接新增并行线，主线会在保存第一个主线
-                  环节时自动创建。
-                </TableCell>
+        <DialogBody className="flex flex-col gap-4">
+          <Table>
+            <TableHeader className="bg-muted/60">
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="w-20">类型</TableHead>
+                <TableHead>线路名称</TableHead>
+                <TableHead className="w-24">排序</TableHead>
+                <TableHead className="w-20">环节数</TableHead>
+                <TableHead className="w-36 text-center">操作</TableHead>
               </TableRow>
-            ) : (
-              lines.map((line) => {
-                const draft = draftOf(line);
-                const isMain = line.lineType === "main";
-                const usage = usageByLine.get(line.id) ?? 0;
-                const dirty =
-                  draft.name !== (line.name ?? "") ||
-                  draft.sortOrder !== String(line.sortOrder);
+            </TableHeader>
+            <TableBody>
+              {lines.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-muted-foreground">
+                    还没有议程线。可以直接新增并行线，主线会在保存第一个主线
+                    环节时自动创建。
+                  </TableCell>
+                </TableRow>
+              ) : (
+                lines.map((line) => {
+                  const draft = draftOf(line);
+                  const isMain = line.lineType === "main";
+                  const usage = usageByLine.get(line.id) ?? 0;
+                  const dirty =
+                    draft.name !== (line.name ?? "") ||
+                    draft.sortOrder !== String(line.sortOrder);
 
-                return (
-                  <TableRow key={line.id}>
-                    <TableCell className="whitespace-nowrap">
-                      {isMain ? "主线" : "并行线"}
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        value={draft.name}
-                        placeholder={isMain ? "留空显示为「主线」" : "必填"}
-                        onChange={(event) =>
-                          patchDraft(line, { name: event.target.value })
-                        }
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={999}
-                        disabled={isMain}
-                        value={isMain ? "0" : draft.sortOrder}
-                        onChange={(event) =>
-                          patchDraft(line, { sortOrder: event.target.value })
-                        }
-                      />
-                    </TableCell>
-                    <TableCell className="tabular-nums">{usage}</TableCell>
-                    <TableCell className="text-center">
-                      <div className="inline-flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-primary hover:text-primary"
-                          disabled={!dirty || submitting}
-                          onClick={() =>
-                            onUpdate({
-                              id: line.id,
-                              name: draft.name.trim() || undefined,
-                              sortOrder: Number(draft.sortOrder) || 0,
-                            })
+                  return (
+                    <TableRow key={line.id}>
+                      <TableCell className="whitespace-nowrap">
+                        {isMain ? "主线" : "并行线"}
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={draft.name}
+                          placeholder={isMain ? "留空显示为「主线」" : "必填"}
+                          onChange={(event) =>
+                            patchDraft(line, { name: event.target.value })
                           }
-                        >
-                          保存
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          // 主线不能删；有环节（含作废）的线也不能删，服务端
-                          // 同样会拦，这里先把按钮灰掉少一次无效往返
-                          disabled={isMain || usage > 0 || submitting}
-                          onClick={() => onDelete(line)}
-                        >
-                          删除
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={999}
+                          disabled={isMain}
+                          value={isMain ? "0" : draft.sortOrder}
+                          onChange={(event) =>
+                            patchDraft(line, { sortOrder: event.target.value })
+                          }
+                        />
+                      </TableCell>
+                      <TableCell className="tabular-nums">{usage}</TableCell>
+                      <TableCell className="text-center">
+                        <div className="inline-flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-primary hover:text-primary"
+                            disabled={!dirty || submitting}
+                            onClick={() =>
+                              onUpdate({
+                                id: line.id,
+                                name: draft.name.trim() || undefined,
+                                sortOrder: Number(draft.sortOrder) || 0,
+                              })
+                            }
+                          >
+                            保存
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            // 主线不能删；有环节（含作废）的线也不能删，服务端
+                            // 同样会拦，这里先把按钮灰掉少一次无效往返
+                            disabled={isMain || usage > 0 || submitting}
+                            onClick={() => onDelete(line)}
+                          >
+                            删除
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
 
-        <div className="flex items-end gap-2 rounded-lg border bg-muted/40 p-3">
-          <div className="flex-1">
-            <p className="mb-1.5 font-medium text-sm">新增并行线</p>
-            <Input
-              value={newName}
-              placeholder="例如：分论坛 A"
-              onChange={(event) => setNewName(event.target.value)}
-            />
+          <div className="flex items-end gap-2 rounded-lg border bg-muted/40 p-3">
+            <div className="flex-1">
+              <p className="mb-1.5 font-medium text-sm">新增并行线</p>
+              <Input
+                value={newName}
+                placeholder="例如：分论坛 A"
+                onChange={(event) => setNewName(event.target.value)}
+              />
+            </div>
+            <Button
+              disabled={!newName.trim() || submitting}
+              onClick={() => {
+                onCreate({
+                  name: newName.trim(),
+                  // 排序默认追加到末尾，用户可以在上面的表格里改
+                  sortOrder:
+                    lines.filter((line) => line.lineType === "parallel")
+                      .length + 1,
+                });
+                setNewName("");
+              }}
+            >
+              {submitting ? (
+                <Loader2Icon className="animate-spin" />
+              ) : (
+                <PlusIcon />
+              )}
+              新增
+            </Button>
           </div>
-          <Button
-            disabled={!newName.trim() || submitting}
-            onClick={() => {
-              onCreate({
-                name: newName.trim(),
-                // 排序默认追加到末尾，用户可以在上面的表格里改
-                sortOrder:
-                  lines.filter((line) => line.lineType === "parallel").length +
-                  1,
-              });
-              setNewName("");
-            }}
-          >
-            {submitting ? (
-              <Loader2Icon className="animate-spin" />
-            ) : (
-              <PlusIcon />
-            )}
-            新增
-          </Button>
-        </div>
+        </DialogBody>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

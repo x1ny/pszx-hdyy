@@ -166,214 +166,232 @@ function SupplierForm({
     >
       <DialogBody className="flex flex-col gap-4">
         <div className="grid gap-4 sm:grid-cols-2">
-        <form.Field name="name">
-          {(field) => (
-            <Field>
-              <FieldLabel htmlFor={field.name}>
-                供应商名称
-                <RequiredMark />
-              </FieldLabel>
-              <Input
-                id={field.name}
-                name={field.name}
-                placeholder="请输入供应商名称"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-                aria-invalid={
-                  field.state.meta.isTouched && field.state.meta.errors.length > 0
-                }
-              />
-              {/* 只在字段被碰过（blur 过，或提交时被统一标记）之后才显示错误——
+          <form.Field name="name">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={field.name}>
+                  供应商名称
+                  <RequiredMark />
+                </FieldLabel>
+                <Input
+                  id={field.name}
+                  name={field.name}
+                  placeholder="请输入供应商名称"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  aria-invalid={
+                    field.state.meta.isTouched &&
+                    field.state.meta.errors.length > 0
+                  }
+                />
+                {/* 只在字段被碰过（blur 过，或提交时被统一标记）之后才显示错误——
                   form 级 onChange 校验的是整个 schema，不加这层判断的话，
                   用户刚敲第一个字，其余全部空着的必填项就会一起飘红。 */}
-              <FieldError
-                errors={field.state.meta.isTouched ? field.state.meta.errors : []}
-              />
-            </Field>
-          )}
-        </form.Field>
-
-        <form.Field name="serviceCategories">
-          {(field) => (
-            <Field>
-              <FieldLabel>
-                服务类目
-                <RequiredMark />
-              </FieldLabel>
-              {/* Base UI 的 Select 原生支持 multiple，不用另拼 Popover + Command：
-                  12 个选项不需要搜索框，多一层组合件只是多一处要维护的键盘交互。 */}
-              <Select
-                multiple
-                items={SERVICE_CATEGORY_LABELS}
-                value={field.state.value}
-                onValueChange={(value) => {
-                  field.handleChange(value as ServiceCategory[]);
-                  // Select 关闭时不会触发原生 blur 事件，得手动标记，
-                  // 否则选完类目错误提示要等用户点别处才会消失。
-                  field.handleBlur();
-                }}
-              >
-                <SelectTrigger
-                  className="w-full"
-                  aria-invalid={
-                    field.state.meta.isTouched && field.state.meta.errors.length > 0
+                <FieldError
+                  errors={
+                    field.state.meta.isTouched ? field.state.meta.errors : []
                   }
-                  onBlur={field.handleBlur}
+                />
+              </Field>
+            )}
+          </form.Field>
+
+          <form.Field name="serviceCategories">
+            {(field) => (
+              <Field>
+                <FieldLabel>
+                  服务类目
+                  <RequiredMark />
+                </FieldLabel>
+                {/* Base UI 的 Select 原生支持 multiple，不用另拼 Popover + Command：
+                  12 个选项不需要搜索框，多一层组合件只是多一处要维护的键盘交互。 */}
+                <Select
+                  multiple
+                  items={SERVICE_CATEGORY_LABELS}
+                  value={field.state.value}
+                  onValueChange={(value) => {
+                    field.handleChange(value as ServiceCategory[]);
+                    // Select 关闭时不会触发原生 blur 事件，得手动标记，
+                    // 否则选完类目错误提示要等用户点别处才会消失。
+                    field.handleBlur();
+                  }}
                 >
-                  <SelectValue>
-                    {(value: ServiceCategory[]) =>
-                      value?.length ? (
-                        value.map(categoryLabel).join("、")
-                      ) : (
-                        <span className="text-muted-foreground">
-                          请选择服务类目
-                        </span>
-                      )
+                  <SelectTrigger
+                    className="w-full"
+                    aria-invalid={
+                      field.state.meta.isTouched &&
+                      field.state.meta.errors.length > 0
                     }
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {SERVICE_CATEGORY_VALUES.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {categoryLabel(value)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FieldError
-                errors={field.state.meta.isTouched ? field.state.meta.errors : []}
-              />
-            </Field>
-          )}
-        </form.Field>
+                    onBlur={field.handleBlur}
+                  >
+                    <SelectValue>
+                      {(value: ServiceCategory[]) =>
+                        value?.length ? (
+                          value.map(categoryLabel).join("、")
+                        ) : (
+                          <span className="text-muted-foreground">
+                            请选择服务类目
+                          </span>
+                        )
+                      }
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SERVICE_CATEGORY_VALUES.map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {categoryLabel(value)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FieldError
+                  errors={
+                    field.state.meta.isTouched ? field.state.meta.errors : []
+                  }
+                />
+              </Field>
+            )}
+          </form.Field>
 
-        <form.Field name="city">
-          {(field) => (
-            <Field>
-              <FieldLabel htmlFor={field.name}>
-                所在城市
-                <RequiredMark />
-              </FieldLabel>
-              <Input
-                id={field.name}
-                name={field.name}
-                placeholder="请输入城市"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-                aria-invalid={
-                  field.state.meta.isTouched && field.state.meta.errors.length > 0
-                }
-              />
-              <FieldError
-                errors={field.state.meta.isTouched ? field.state.meta.errors : []}
-              />
-            </Field>
-          )}
-        </form.Field>
+          <form.Field name="city">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={field.name}>
+                  所在城市
+                  <RequiredMark />
+                </FieldLabel>
+                <Input
+                  id={field.name}
+                  name={field.name}
+                  placeholder="请输入城市"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  aria-invalid={
+                    field.state.meta.isTouched &&
+                    field.state.meta.errors.length > 0
+                  }
+                />
+                <FieldError
+                  errors={
+                    field.state.meta.isTouched ? field.state.meta.errors : []
+                  }
+                />
+              </Field>
+            )}
+          </form.Field>
 
-        <form.Field name="contactPerson">
-          {(field) => (
-            <Field>
-              <FieldLabel htmlFor={field.name}>
-                联系人
-                <RequiredMark />
-              </FieldLabel>
-              <Input
-                id={field.name}
-                name={field.name}
-                placeholder="请输入联系人"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-                aria-invalid={
-                  field.state.meta.isTouched && field.state.meta.errors.length > 0
-                }
-              />
-              <FieldError
-                errors={field.state.meta.isTouched ? field.state.meta.errors : []}
-              />
-            </Field>
-          )}
-        </form.Field>
+          <form.Field name="contactPerson">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={field.name}>
+                  联系人
+                  <RequiredMark />
+                </FieldLabel>
+                <Input
+                  id={field.name}
+                  name={field.name}
+                  placeholder="请输入联系人"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  aria-invalid={
+                    field.state.meta.isTouched &&
+                    field.state.meta.errors.length > 0
+                  }
+                />
+                <FieldError
+                  errors={
+                    field.state.meta.isTouched ? field.state.meta.errors : []
+                  }
+                />
+              </Field>
+            )}
+          </form.Field>
 
-        <form.Field name="contactPhone">
-          {(field) => (
-            <Field>
-              <FieldLabel htmlFor={field.name}>
-                联系电话
-                <RequiredMark />
-              </FieldLabel>
-              <Input
-                id={field.name}
-                name={field.name}
-                placeholder="请输入联系电话"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-                aria-invalid={
-                  field.state.meta.isTouched && field.state.meta.errors.length > 0
-                }
-              />
-              <FieldError
-                errors={field.state.meta.isTouched ? field.state.meta.errors : []}
-              />
-            </Field>
-          )}
-        </form.Field>
+          <form.Field name="contactPhone">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={field.name}>
+                  联系电话
+                  <RequiredMark />
+                </FieldLabel>
+                <Input
+                  id={field.name}
+                  name={field.name}
+                  placeholder="请输入联系电话"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  aria-invalid={
+                    field.state.meta.isTouched &&
+                    field.state.meta.errors.length > 0
+                  }
+                />
+                <FieldError
+                  errors={
+                    field.state.meta.isTouched ? field.state.meta.errors : []
+                  }
+                />
+              </Field>
+            )}
+          </form.Field>
 
-        <form.Field name="status">
-          {(field) => (
-            <Field>
-              <FieldLabel>
-                供应商状态
-                <RequiredMark />
-              </FieldLabel>
-              <Select
-                items={SUPPLIER_STATUS_LABELS}
-                value={field.state.value}
-                onValueChange={(value) =>
-                  field.handleChange(value as SupplierFormState["status"])
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SUPPLIER_STATUS_VALUES.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {SUPPLIER_STATUS_LABELS[value]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          )}
-        </form.Field>
+          <form.Field name="status">
+            {(field) => (
+              <Field>
+                <FieldLabel>
+                  供应商状态
+                  <RequiredMark />
+                </FieldLabel>
+                <Select
+                  items={SUPPLIER_STATUS_LABELS}
+                  value={field.state.value}
+                  onValueChange={(value) =>
+                    field.handleChange(value as SupplierFormState["status"])
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SUPPLIER_STATUS_VALUES.map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {SUPPLIER_STATUS_LABELS[value]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
+          </form.Field>
         </div>
 
-      <form.Field name="remark">
-        {(field) => (
-          <Field>
-            <FieldLabel htmlFor={field.name}>备注 / 说明</FieldLabel>
-            <Textarea
-              id={field.name}
-              name={field.name}
-              rows={4}
-              placeholder="记录服务偏好、沟通注意事项等普通说明"
-              value={field.state.value}
-              onBlur={field.handleBlur}
-              onChange={(event) => field.handleChange(event.target.value)}
-              aria-invalid={
-                field.state.meta.isTouched && field.state.meta.errors.length > 0
-              }
-            />
-            <FieldError
-              errors={field.state.meta.isTouched ? field.state.meta.errors : []}
-            />
-          </Field>
-        )}
+        <form.Field name="remark">
+          {(field) => (
+            <Field>
+              <FieldLabel htmlFor={field.name}>备注 / 说明</FieldLabel>
+              <Textarea
+                id={field.name}
+                name={field.name}
+                rows={4}
+                placeholder="记录服务偏好、沟通注意事项等普通说明"
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(event) => field.handleChange(event.target.value)}
+                aria-invalid={
+                  field.state.meta.isTouched &&
+                  field.state.meta.errors.length > 0
+                }
+              />
+              <FieldError
+                errors={
+                  field.state.meta.isTouched ? field.state.meta.errors : []
+                }
+              />
+            </Field>
+          )}
         </form.Field>
       </DialogBody>
 

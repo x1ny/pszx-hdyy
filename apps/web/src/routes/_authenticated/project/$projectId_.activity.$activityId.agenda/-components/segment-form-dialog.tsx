@@ -5,6 +5,7 @@ import { Button } from "#/shared/components/ui/button.tsx";
 import { Checkbox } from "#/shared/components/ui/checkbox.tsx";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -28,11 +29,7 @@ import {
 import { Textarea } from "#/shared/components/ui/textarea.tsx";
 import { toDateTimeLocalValue } from "../../-utils";
 import type { AgendaLine, Segment } from "../-queries";
-import {
-  lineLabel,
-  SEGMENT_TYPE_LABELS,
-  SEGMENT_TYPE_VALUES,
-} from "../-utils";
+import { lineLabel, SEGMENT_TYPE_LABELS, SEGMENT_TYPE_VALUES } from "../-utils";
 
 // 镜像 apps/server/src/modules/agenda/validation.ts 的 SegmentFields，
 // 手抄一份的原因和边界见 supplier-form-dialog.tsx 顶部的说明。
@@ -122,7 +119,7 @@ export function SegmentFormDialog({
 }: SegmentFormDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{segment ? "修改环节" : "新增环节"}</DialogTitle>
           <DialogDescription>
@@ -216,319 +213,330 @@ function SegmentForm({
 
   return (
     <form
-      className="flex flex-col gap-4"
+      // min-h-0 + flex-1：让 DialogBody 能在 DialogContent 的 flex 列里收缩，
+      // 不加的话 flex 子元素不肯缩，滚动永远落在整个弹窗而不是内容区。
+      className="flex min-h-0 flex-1 flex-col"
       onSubmit={(event) => {
         event.preventDefault();
         form.handleSubmit();
       }}
     >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <form.Field name="name">
-          {(field) => (
-            <Field className="sm:col-span-2">
-              <FieldLabel htmlFor={field.name}>
-                环节名称
-                <RequiredMark />
-              </FieldLabel>
-              <Input
-                id={field.name}
-                name={field.name}
-                placeholder="例如：开幕式、主题演讲"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-                aria-invalid={
-                  field.state.meta.isTouched &&
-                  field.state.meta.errors.length > 0
-                }
-              />
-              <FieldError
-                errors={
-                  field.state.meta.isTouched ? field.state.meta.errors : []
-                }
-              />
-            </Field>
-          )}
-        </form.Field>
+      <DialogBody className="flex flex-col gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <form.Field name="name">
+            {(field) => (
+              <Field className="sm:col-span-2">
+                <FieldLabel htmlFor={field.name}>
+                  环节名称
+                  <RequiredMark />
+                </FieldLabel>
+                <Input
+                  id={field.name}
+                  name={field.name}
+                  placeholder="例如：开幕式、主题演讲"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  aria-invalid={
+                    field.state.meta.isTouched &&
+                    field.state.meta.errors.length > 0
+                  }
+                />
+                <FieldError
+                  errors={
+                    field.state.meta.isTouched ? field.state.meta.errors : []
+                  }
+                />
+              </Field>
+            )}
+          </form.Field>
 
-        <form.Field name="segmentType">
-          {(field) => (
-            <Field>
-              <FieldLabel>
-                环节类型
-                <RequiredMark />
-              </FieldLabel>
-              <Select
-                items={SEGMENT_TYPE_LABELS}
-                value={field.state.value}
-                onValueChange={(value) => {
-                  field.handleChange(value as SegmentFormState["segmentType"]);
-                  // Select 关闭时不触发原生 blur，手动补一次，否则错误提示
-                  // 要等用户点别处才消失
-                  field.handleBlur();
-                }}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SEGMENT_TYPE_VALUES.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {SEGMENT_TYPE_LABELS[value]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          )}
-        </form.Field>
+          <form.Field name="segmentType">
+            {(field) => (
+              <Field>
+                <FieldLabel>
+                  环节类型
+                  <RequiredMark />
+                </FieldLabel>
+                <Select
+                  items={SEGMENT_TYPE_LABELS}
+                  value={field.state.value}
+                  onValueChange={(value) => {
+                    field.handleChange(
+                      value as SegmentFormState["segmentType"],
+                    );
+                    // Select 关闭时不触发原生 blur，手动补一次，否则错误提示
+                    // 要等用户点别处才消失
+                    field.handleBlur();
+                  }}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SEGMENT_TYPE_VALUES.map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {SEGMENT_TYPE_LABELS[value]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
+          </form.Field>
 
-        <form.Field name="lineKey">
-          {(field) => (
-            <Field>
-              <FieldLabel>
-                议程线
-                <RequiredMark />
-              </FieldLabel>
-              <Select
-                items={lineItems}
-                value={field.state.value}
-                onValueChange={(value) => {
-                  field.handleChange(String(value));
-                  field.handleBlur();
-                }}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {lineItems.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FieldDescription>
-                主线只能有一条，画在时间轴第一层；需要和主线同时进行的环节
-                放并行线。
-              </FieldDescription>
-            </Field>
-          )}
-        </form.Field>
+          <form.Field name="lineKey">
+            {(field) => (
+              <Field>
+                <FieldLabel>
+                  议程线
+                  <RequiredMark />
+                </FieldLabel>
+                <Select
+                  items={lineItems}
+                  value={field.state.value}
+                  onValueChange={(value) => {
+                    field.handleChange(String(value));
+                    field.handleBlur();
+                  }}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {lineItems.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FieldDescription>
+                  主线只能有一条，画在时间轴第一层；需要和主线同时进行的环节
+                  放并行线。
+                </FieldDescription>
+              </Field>
+            )}
+          </form.Field>
 
-        <form.Subscribe selector={(state) => state.values.lineKey}>
-          {(lineKey) =>
-            lineKey === "new" ? (
-              <form.Field name="newLineName">
-                {(field) => (
-                  <Field className="sm:col-span-2">
+          <form.Subscribe selector={(state) => state.values.lineKey}>
+            {(lineKey) =>
+              lineKey === "new" ? (
+                <form.Field name="newLineName">
+                  {(field) => (
+                    <Field className="sm:col-span-2">
+                      <FieldLabel htmlFor={field.name}>
+                        新并行线名称
+                        <RequiredMark />
+                      </FieldLabel>
+                      <Input
+                        id={field.name}
+                        name={field.name}
+                        placeholder="例如：分论坛 A"
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(event) =>
+                          field.handleChange(event.target.value)
+                        }
+                        aria-invalid={
+                          field.state.meta.isTouched &&
+                          field.state.meta.errors.length > 0
+                        }
+                      />
+                      <FieldDescription>
+                        保存时会先创建这条并行线，再把环节放上去。
+                      </FieldDescription>
+                      <FieldError
+                        errors={
+                          field.state.meta.isTouched
+                            ? field.state.meta.errors
+                            : []
+                        }
+                      />
+                    </Field>
+                  )}
+                </form.Field>
+              ) : null
+            }
+          </form.Subscribe>
+
+          <form.Field name="startTime">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={field.name}>
+                  开始时间
+                  <RequiredMark />
+                </FieldLabel>
+                <Input
+                  id={field.name}
+                  name={field.name}
+                  type="datetime-local"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  aria-invalid={
+                    field.state.meta.isTouched &&
+                    field.state.meta.errors.length > 0
+                  }
+                />
+                <FieldError
+                  errors={
+                    field.state.meta.isTouched ? field.state.meta.errors : []
+                  }
+                />
+              </Field>
+            )}
+          </form.Field>
+
+          <form.Field name="endTime">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={field.name}>
+                  结束时间
+                  <RequiredMark />
+                </FieldLabel>
+                <Input
+                  id={field.name}
+                  name={field.name}
+                  type="datetime-local"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  aria-invalid={
+                    field.state.meta.isTouched &&
+                    field.state.meta.errors.length > 0
+                  }
+                />
+                <FieldError
+                  errors={
+                    field.state.meta.isTouched ? field.state.meta.errors : []
+                  }
+                />
+              </Field>
+            )}
+          </form.Field>
+
+          {/* 超出活动时间范围只提示不阻断——C-016：本期业务冲突允许保存但提示 */}
+          <form.Subscribe
+            selector={(state) => [state.values.startTime, state.values.endTime]}
+          >
+            {([start, end]) => {
+              const outside =
+                (start && new Date(start) < new Date(activityRange.start)) ||
+                (end && new Date(end) > new Date(activityRange.end));
+              return outside ? (
+                <p className="text-warning-foreground text-xs sm:col-span-2">
+                  提示：环节时间超出了活动的起止范围，仍可保存，但请确认不是填错了。
+                </p>
+              ) : null;
+            }}
+          </form.Subscribe>
+
+          <form.Field name="locationText">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={field.name}>地点 / 区域</FieldLabel>
+                <Input
+                  id={field.name}
+                  name={field.name}
+                  placeholder="例如：主会场、6号馆 A区"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                />
+              </Field>
+            )}
+          </form.Field>
+
+          <form.Field name="ownerName">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={field.name}>环节负责人</FieldLabel>
+                <Input
+                  id={field.name}
+                  name={field.name}
+                  placeholder="填写姓名"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                />
+              </Field>
+            )}
+          </form.Field>
+
+          <div className="flex flex-col gap-3 sm:col-span-2 sm:flex-row sm:gap-8">
+            <form.Field name="memberEnabled">
+              {(field) => (
+                <Field
+                  orientation="horizontal"
+                  className="flex-row-reverse justify-end gap-2"
+                >
+                  <Checkbox
+                    id={field.name}
+                    checked={field.state.value}
+                    onCheckedChange={(checked) => field.handleChange(!!checked)}
+                  />
+                  <div>
                     <FieldLabel htmlFor={field.name}>
-                      新并行线名称
-                      <RequiredMark />
+                      开启环节人员管理
                     </FieldLabel>
-                    <Input
-                      id={field.name}
-                      name={field.name}
-                      placeholder="例如：分论坛 A"
-                      value={field.state.value}
-                      onBlur={field.handleBlur}
-                      onChange={(event) =>
-                        field.handleChange(event.target.value)
-                      }
-                      aria-invalid={
-                        field.state.meta.isTouched &&
-                        field.state.meta.errors.length > 0
-                      }
-                    />
                     <FieldDescription>
-                      保存时会先创建这条并行线，再把环节放上去。
+                      本期只是标记，人员模块建成后在这里接入。
                     </FieldDescription>
-                    <FieldError
-                      errors={
-                        field.state.meta.isTouched
-                          ? field.state.meta.errors
-                          : []
-                      }
-                    />
-                  </Field>
-                )}
-              </form.Field>
-            ) : null
-          }
-        </form.Subscribe>
+                  </div>
+                </Field>
+              )}
+            </form.Field>
 
-        <form.Field name="startTime">
-          {(field) => (
-            <Field>
-              <FieldLabel htmlFor={field.name}>
-                开始时间
-                <RequiredMark />
-              </FieldLabel>
-              <Input
-                id={field.name}
-                name={field.name}
-                type="datetime-local"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-                aria-invalid={
-                  field.state.meta.isTouched &&
-                  field.state.meta.errors.length > 0
-                }
-              />
-              <FieldError
-                errors={
-                  field.state.meta.isTouched ? field.state.meta.errors : []
-                }
-              />
-            </Field>
-          )}
-        </form.Field>
-
-        <form.Field name="endTime">
-          {(field) => (
-            <Field>
-              <FieldLabel htmlFor={field.name}>
-                结束时间
-                <RequiredMark />
-              </FieldLabel>
-              <Input
-                id={field.name}
-                name={field.name}
-                type="datetime-local"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-                aria-invalid={
-                  field.state.meta.isTouched &&
-                  field.state.meta.errors.length > 0
-                }
-              />
-              <FieldError
-                errors={
-                  field.state.meta.isTouched ? field.state.meta.errors : []
-                }
-              />
-            </Field>
-          )}
-        </form.Field>
-
-        {/* 超出活动时间范围只提示不阻断——C-016：本期业务冲突允许保存但提示 */}
-        <form.Subscribe
-          selector={(state) => [state.values.startTime, state.values.endTime]}
-        >
-          {([start, end]) => {
-            const outside =
-              (start && new Date(start) < new Date(activityRange.start)) ||
-              (end && new Date(end) > new Date(activityRange.end));
-            return outside ? (
-              <p className="text-warning-foreground text-xs sm:col-span-2">
-                提示：环节时间超出了活动的起止范围，仍可保存，但请确认不是填错了。
-              </p>
-            ) : null;
-          }}
-        </form.Subscribe>
-
-        <form.Field name="locationText">
-          {(field) => (
-            <Field>
-              <FieldLabel htmlFor={field.name}>地点 / 区域</FieldLabel>
-              <Input
-                id={field.name}
-                name={field.name}
-                placeholder="例如：主会场、6号馆 A区"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-              />
-            </Field>
-          )}
-        </form.Field>
-
-        <form.Field name="ownerName">
-          {(field) => (
-            <Field>
-              <FieldLabel htmlFor={field.name}>环节负责人</FieldLabel>
-              <Input
-                id={field.name}
-                name={field.name}
-                placeholder="填写姓名"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-              />
-            </Field>
-          )}
-        </form.Field>
-
-        <div className="flex flex-col gap-3 sm:col-span-2 sm:flex-row sm:gap-8">
-          <form.Field name="memberEnabled">
-            {(field) => (
-              <Field
-                orientation="horizontal"
-                className="flex-row-reverse justify-end gap-2"
-              >
-                <Checkbox
-                  id={field.name}
-                  checked={field.state.value}
-                  onCheckedChange={(checked) => field.handleChange(!!checked)}
-                />
-                <div>
-                  <FieldLabel htmlFor={field.name}>开启环节人员管理</FieldLabel>
-                  <FieldDescription>
-                    本期只是标记，人员模块建成后在这里接入。
-                  </FieldDescription>
-                </div>
-              </Field>
-            )}
-          </form.Field>
-
-          <form.Field name="seatingEnabled">
-            {(field) => (
-              <Field
-                orientation="horizontal"
-                className="flex-row-reverse justify-end gap-2"
-              >
-                <Checkbox
-                  id={field.name}
-                  checked={field.state.value}
-                  onCheckedChange={(checked) => field.handleChange(!!checked)}
-                />
-                <div>
-                  <FieldLabel htmlFor={field.name}>开启排位管理</FieldLabel>
-                  <FieldDescription>
-                    本期只是标记，不要求先配好场地空间或排位方案。
-                  </FieldDescription>
-                </div>
-              </Field>
-            )}
-          </form.Field>
+            <form.Field name="seatingEnabled">
+              {(field) => (
+                <Field
+                  orientation="horizontal"
+                  className="flex-row-reverse justify-end gap-2"
+                >
+                  <Checkbox
+                    id={field.name}
+                    checked={field.state.value}
+                    onCheckedChange={(checked) => field.handleChange(!!checked)}
+                  />
+                  <div>
+                    <FieldLabel htmlFor={field.name}>开启排位管理</FieldLabel>
+                    <FieldDescription>
+                      本期只是标记，不要求先配好场地空间或排位方案。
+                    </FieldDescription>
+                  </div>
+                </Field>
+              )}
+            </form.Field>
+          </div>
         </div>
-      </div>
 
-      <form.Field name="description">
-        {(field) => (
-          <Field>
-            <FieldLabel htmlFor={field.name}>环节说明</FieldLabel>
-            <Textarea
-              id={field.name}
-              name={field.name}
-              rows={3}
-              placeholder="补充说明，例如流程要点、注意事项"
-              value={field.state.value}
-              onBlur={field.handleBlur}
-              onChange={(event) => field.handleChange(event.target.value)}
-              aria-invalid={
-                field.state.meta.isTouched && field.state.meta.errors.length > 0
-              }
-            />
-            <FieldError
-              errors={field.state.meta.isTouched ? field.state.meta.errors : []}
-            />
-          </Field>
-        )}
-      </form.Field>
+        <form.Field name="description">
+          {(field) => (
+            <Field>
+              <FieldLabel htmlFor={field.name}>环节说明</FieldLabel>
+              <Textarea
+                id={field.name}
+                name={field.name}
+                rows={3}
+                placeholder="补充说明，例如流程要点、注意事项"
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(event) => field.handleChange(event.target.value)}
+                aria-invalid={
+                  field.state.meta.isTouched &&
+                  field.state.meta.errors.length > 0
+                }
+              />
+              <FieldError
+                errors={
+                  field.state.meta.isTouched ? field.state.meta.errors : []
+                }
+              />
+            </Field>
+          )}
+        </form.Field>
+      </DialogBody>
 
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel}>

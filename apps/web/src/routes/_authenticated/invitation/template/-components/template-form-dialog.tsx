@@ -12,7 +12,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "#/shared/components/ui/dialog.tsx";
-import { Field, FieldError, FieldLabel } from "#/shared/components/ui/field.tsx";
+import {
+  Field,
+  FieldError,
+  FieldLabel,
+} from "#/shared/components/ui/field.tsx";
 import { Input } from "#/shared/components/ui/input.tsx";
 import {
   Select,
@@ -51,7 +55,11 @@ const TemplateFormSchema = z.object({
   bodyContent: richTextRequired("正文内容"),
   annexTitle: z.string().trim().max(255, "附则标题过长"),
   annexContent: z.string().trim(),
-  contactPerson: z.string().trim().min(1, "联系人不能为空").max(64, "联系人过长"),
+  contactPerson: z
+    .string()
+    .trim()
+    .min(1, "联系人不能为空")
+    .max(64, "联系人过长"),
   contactPhone: z
     .string()
     .trim()
@@ -90,7 +98,9 @@ export function TemplateFormDialog({
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{template ? "编辑模板" : "新增模板"}</DialogTitle>
-          <DialogDescription>带 * 的是必填项，保存后立即生效。</DialogDescription>
+          <DialogDescription>
+            带 * 的是必填项，保存后立即生效。
+          </DialogDescription>
         </DialogHeader>
         <TemplateForm
           key={template?.id ?? "new"}
@@ -144,228 +154,242 @@ function TemplateForm({
     >
       <DialogBody className="flex flex-col gap-4">
         <div className="grid gap-4 sm:grid-cols-3">
-        <form.Field name="name">
-          {(field) => (
-            <Field className="sm:col-span-2">
-              <FieldLabel htmlFor={field.name}>
-                模板名称
-                <RequiredMark />
-              </FieldLabel>
-              <Input
-                id={field.name}
-                placeholder="请输入模板名称"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-                aria-invalid={
-                  field.state.meta.isTouched && field.state.meta.errors.length > 0
-                }
-              />
-              <FieldError
-                errors={field.state.meta.isTouched ? field.state.meta.errors : []}
-              />
-            </Field>
-          )}
-        </form.Field>
+          <form.Field name="name">
+            {(field) => (
+              <Field className="sm:col-span-2">
+                <FieldLabel htmlFor={field.name}>
+                  模板名称
+                  <RequiredMark />
+                </FieldLabel>
+                <Input
+                  id={field.name}
+                  placeholder="请输入模板名称"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  aria-invalid={
+                    field.state.meta.isTouched &&
+                    field.state.meta.errors.length > 0
+                  }
+                />
+                <FieldError
+                  errors={
+                    field.state.meta.isTouched ? field.state.meta.errors : []
+                  }
+                />
+              </Field>
+            )}
+          </form.Field>
 
-        <form.Field name="issuer">
-          {(field) => (
-            <Field>
-              <FieldLabel>
-                发函主体
-                <RequiredMark />
-              </FieldLabel>
-              <Select
-                items={ISSUER_LABELS}
-                value={field.state.value}
-                onValueChange={(value) =>
-                  field.handleChange(value as TemplateFormState["issuer"])
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ISSUER_VALUES.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {ISSUER_LABELS[value]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          )}
-        </form.Field>
+          <form.Field name="issuer">
+            {(field) => (
+              <Field>
+                <FieldLabel>
+                  发函主体
+                  <RequiredMark />
+                </FieldLabel>
+                <Select
+                  items={ISSUER_LABELS}
+                  value={field.state.value}
+                  onValueChange={(value) =>
+                    field.handleChange(value as TemplateFormState["issuer"])
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ISSUER_VALUES.map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {ISSUER_LABELS[value]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
+          </form.Field>
         </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <form.Field name="applicableDesc">
-          {(field) => (
-            <Field>
-              <FieldLabel htmlFor={field.name}>适用说明</FieldLabel>
-              <Input
-                id={field.name}
-                placeholder="写一些关于模板的备注/说明内容"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-              />
-            </Field>
-          )}
-        </form.Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <form.Field name="applicableDesc">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={field.name}>适用说明</FieldLabel>
+                <Input
+                  id={field.name}
+                  placeholder="写一些关于模板的备注/说明内容"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                />
+              </Field>
+            )}
+          </form.Field>
 
-        <form.Field name="status">
+          <form.Field name="status">
+            {(field) => (
+              <Field>
+                <FieldLabel>
+                  状态
+                  <RequiredMark />
+                </FieldLabel>
+                <Select
+                  items={TEMPLATE_STATUS_LABELS}
+                  value={field.state.value}
+                  onValueChange={(value) =>
+                    field.handleChange(value as TemplateFormState["status"])
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TEMPLATE_STATUS_VALUES.map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {TEMPLATE_STATUS_LABELS[value]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
+          </form.Field>
+        </div>
+
+        <form.Field name="bodyContent">
           {(field) => (
             <Field>
               <FieldLabel>
-                状态
+                正文内容
                 <RequiredMark />
               </FieldLabel>
-              <Select
-                items={TEMPLATE_STATUS_LABELS}
+              <RichTextEditor
                 value={field.state.value}
-                onValueChange={(value) =>
-                  field.handleChange(value as TemplateFormState["status"])
+                placeholder="请输入正文内容"
+                onChange={(html) => {
+                  field.handleChange(html);
+                  field.handleBlur();
+                }}
+              />
+              <FieldError
+                errors={
+                  field.state.meta.isTouched ? field.state.meta.errors : []
                 }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {TEMPLATE_STATUS_VALUES.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {TEMPLATE_STATUS_LABELS[value]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              />
             </Field>
           )}
         </form.Field>
-      </div>
 
-      <form.Field name="bodyContent">
-        {(field) => (
-          <Field>
-            <FieldLabel>
-              正文内容
-              <RequiredMark />
-            </FieldLabel>
-            <RichTextEditor
-              value={field.state.value}
-              placeholder="请输入正文内容"
-              onChange={(html) => {
-                field.handleChange(html);
-                field.handleBlur();
-              }}
-            />
-            <FieldError
-              errors={field.state.meta.isTouched ? field.state.meta.errors : []}
-            />
-          </Field>
-        )}
-      </form.Field>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <form.Field name="contactPerson">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={field.name}>
+                  联系人
+                  <RequiredMark />
+                </FieldLabel>
+                <Input
+                  id={field.name}
+                  placeholder="请输入联系人"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  aria-invalid={
+                    field.state.meta.isTouched &&
+                    field.state.meta.errors.length > 0
+                  }
+                />
+                <FieldError
+                  errors={
+                    field.state.meta.isTouched ? field.state.meta.errors : []
+                  }
+                />
+              </Field>
+            )}
+          </form.Field>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <form.Field name="contactPerson">
+          <form.Field name="contactPhone">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={field.name}>
+                  联系电话
+                  <RequiredMark />
+                </FieldLabel>
+                <Input
+                  id={field.name}
+                  placeholder="请输入联系电话"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  aria-invalid={
+                    field.state.meta.isTouched &&
+                    field.state.meta.errors.length > 0
+                  }
+                />
+                <FieldError
+                  errors={
+                    field.state.meta.isTouched ? field.state.meta.errors : []
+                  }
+                />
+              </Field>
+            )}
+          </form.Field>
+
+          <form.Field name="signOff">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={field.name}>
+                  落款
+                  <RequiredMark />
+                </FieldLabel>
+                <Input
+                  id={field.name}
+                  placeholder="请输入落款名称"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  aria-invalid={
+                    field.state.meta.isTouched &&
+                    field.state.meta.errors.length > 0
+                  }
+                />
+                <FieldError
+                  errors={
+                    field.state.meta.isTouched ? field.state.meta.errors : []
+                  }
+                />
+              </Field>
+            )}
+          </form.Field>
+        </div>
+
+        <form.Field name="annexTitle">
           {(field) => (
             <Field>
-              <FieldLabel htmlFor={field.name}>
-                联系人
-                <RequiredMark />
-              </FieldLabel>
+              <FieldLabel htmlFor={field.name}>附则标题</FieldLabel>
               <Input
                 id={field.name}
-                placeholder="请输入联系人"
+                placeholder="请输入附则标题（可选）"
                 value={field.state.value}
                 onBlur={field.handleBlur}
                 onChange={(event) => field.handleChange(event.target.value)}
-                aria-invalid={
-                  field.state.meta.isTouched && field.state.meta.errors.length > 0
-                }
-              />
-              <FieldError
-                errors={field.state.meta.isTouched ? field.state.meta.errors : []}
               />
             </Field>
           )}
         </form.Field>
 
-        <form.Field name="contactPhone">
+        <form.Field name="annexContent">
           {(field) => (
             <Field>
-              <FieldLabel htmlFor={field.name}>
-                联系电话
-                <RequiredMark />
-              </FieldLabel>
-              <Input
-                id={field.name}
-                placeholder="请输入联系电话"
+              <FieldLabel>附则内容</FieldLabel>
+              <RichTextEditor
                 value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-                aria-invalid={
-                  field.state.meta.isTouched && field.state.meta.errors.length > 0
-                }
-              />
-              <FieldError
-                errors={field.state.meta.isTouched ? field.state.meta.errors : []}
+                placeholder="请输入附则内容（可选）"
+                onChange={(html) => field.handleChange(html)}
               />
             </Field>
           )}
-        </form.Field>
-
-        <form.Field name="signOff">
-          {(field) => (
-            <Field>
-              <FieldLabel htmlFor={field.name}>
-                落款
-                <RequiredMark />
-              </FieldLabel>
-              <Input
-                id={field.name}
-                placeholder="请输入落款名称"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-                aria-invalid={
-                  field.state.meta.isTouched && field.state.meta.errors.length > 0
-                }
-              />
-              <FieldError
-                errors={field.state.meta.isTouched ? field.state.meta.errors : []}
-              />
-            </Field>
-          )}
-        </form.Field>
-      </div>
-
-      <form.Field name="annexTitle">
-        {(field) => (
-          <Field>
-            <FieldLabel htmlFor={field.name}>附则标题</FieldLabel>
-            <Input
-              id={field.name}
-              placeholder="请输入附则标题（可选）"
-              value={field.state.value}
-              onBlur={field.handleBlur}
-              onChange={(event) => field.handleChange(event.target.value)}
-            />
-          </Field>
-        )}
-      </form.Field>
-
-      <form.Field name="annexContent">
-        {(field) => (
-          <Field>
-            <FieldLabel>附则内容</FieldLabel>
-            <RichTextEditor
-              value={field.state.value}
-              placeholder="请输入附则内容（可选）"
-              onChange={(html) => field.handleChange(html)}
-            />
-          </Field>
-        )}
         </form.Field>
       </DialogBody>
 

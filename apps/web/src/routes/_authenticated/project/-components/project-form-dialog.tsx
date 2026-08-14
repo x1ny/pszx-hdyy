@@ -39,11 +39,7 @@ import {
 // 直接存 Date——受控输入的 value 只能是字符串，存 Date 还要再转一遍格式。
 const ProjectFormSchema = z
   .object({
-    name: z
-      .string()
-      .trim()
-      .min(1, "项目名称不能为空")
-      .max(255, "项目名称过长"),
+    name: z.string().trim().min(1, "项目名称不能为空").max(255, "项目名称过长"),
     location: z.string().trim().max(255, "地点过长"),
     startTime: z.string(),
     endTime: z.string(),
@@ -169,230 +165,232 @@ function ProjectForm({
     >
       <DialogBody className="flex flex-col gap-4">
         <div className="grid gap-4 sm:grid-cols-2">
-        <form.Field name="name">
-          {(field) => (
-            <Field className="sm:col-span-2">
-              <FieldLabel htmlFor={field.name}>
-                项目名称
-                <RequiredMark />
-              </FieldLabel>
-              <Input
-                id={field.name}
-                name={field.name}
-                placeholder="请输入项目名称"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-                aria-invalid={
-                  field.state.meta.isTouched &&
-                  field.state.meta.errors.length > 0
-                }
-              />
-              <FieldError
-                errors={
-                  field.state.meta.isTouched ? field.state.meta.errors : []
-                }
-              />
-            </Field>
-          )}
-        </form.Field>
+          <form.Field name="name">
+            {(field) => (
+              <Field className="sm:col-span-2">
+                <FieldLabel htmlFor={field.name}>
+                  项目名称
+                  <RequiredMark />
+                </FieldLabel>
+                <Input
+                  id={field.name}
+                  name={field.name}
+                  placeholder="请输入项目名称"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  aria-invalid={
+                    field.state.meta.isTouched &&
+                    field.state.meta.errors.length > 0
+                  }
+                />
+                <FieldError
+                  errors={
+                    field.state.meta.isTouched ? field.state.meta.errors : []
+                  }
+                />
+              </Field>
+            )}
+          </form.Field>
 
-        <form.Field name="location">
-          {(field) => (
-            <Field>
-              <FieldLabel htmlFor={field.name}>项目地点</FieldLabel>
-              <Input
-                id={field.name}
-                name={field.name}
-                placeholder="请输入地点"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-              />
-            </Field>
-          )}
-        </form.Field>
+          <form.Field name="location">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={field.name}>项目地点</FieldLabel>
+                <Input
+                  id={field.name}
+                  name={field.name}
+                  placeholder="请输入地点"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                />
+              </Field>
+            )}
+          </form.Field>
 
-        <form.Field name="totalBudget">
-          {(field) => (
-            <Field>
-              <FieldLabel htmlFor={field.name}>总预算（元）</FieldLabel>
-              <Input
-                id={field.name}
-                name={field.name}
-                type="number"
-                min={0}
-                step="0.01"
-                placeholder="不填表示暂未核定预算"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-              />
-            </Field>
-          )}
-        </form.Field>
+          <form.Field name="totalBudget">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={field.name}>总预算（元）</FieldLabel>
+                <Input
+                  id={field.name}
+                  name={field.name}
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="不填表示暂未核定预算"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                />
+              </Field>
+            )}
+          </form.Field>
 
-        <form.Field name="startTime">
-          {(field) => (
-            <Field>
-              <FieldLabel htmlFor={field.name}>开始时间</FieldLabel>
-              <Input
-                id={field.name}
-                name={field.name}
-                type="datetime-local"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-                aria-invalid={
-                  field.state.meta.isTouched &&
-                  field.state.meta.errors.length > 0
-                }
-              />
-              <FieldError
-                errors={
-                  field.state.meta.isTouched ? field.state.meta.errors : []
-                }
-              />
-            </Field>
-          )}
-        </form.Field>
+          <form.Field name="startTime">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={field.name}>开始时间</FieldLabel>
+                <Input
+                  id={field.name}
+                  name={field.name}
+                  type="datetime-local"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  aria-invalid={
+                    field.state.meta.isTouched &&
+                    field.state.meta.errors.length > 0
+                  }
+                />
+                <FieldError
+                  errors={
+                    field.state.meta.isTouched ? field.state.meta.errors : []
+                  }
+                />
+              </Field>
+            )}
+          </form.Field>
 
-        <form.Field name="endTime">
-          {(field) => (
-            <Field>
-              <FieldLabel htmlFor={field.name}>结束时间</FieldLabel>
-              <Input
-                id={field.name}
-                name={field.name}
-                type="datetime-local"
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-                aria-invalid={
-                  field.state.meta.isTouched &&
-                  field.state.meta.errors.length > 0
-                }
-              />
-              <FieldError
-                errors={
-                  field.state.meta.isTouched ? field.state.meta.errors : []
-                }
-              />
-            </Field>
-          )}
-        </form.Field>
+          <form.Field name="endTime">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={field.name}>结束时间</FieldLabel>
+                <Input
+                  id={field.name}
+                  name={field.name}
+                  type="datetime-local"
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  aria-invalid={
+                    field.state.meta.isTouched &&
+                    field.state.meta.errors.length > 0
+                  }
+                />
+                <FieldError
+                  errors={
+                    field.state.meta.isTouched ? field.state.meta.errors : []
+                  }
+                />
+              </Field>
+            )}
+          </form.Field>
 
-        <form.Field name="hostOrg">
-          {(field) => (
-            <Field>
-              <FieldLabel htmlFor={field.name}>主办单位</FieldLabel>
-              <Input
-                id={field.name}
-                name={field.name}
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-              />
-            </Field>
-          )}
-        </form.Field>
+          <form.Field name="hostOrg">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={field.name}>主办单位</FieldLabel>
+                <Input
+                  id={field.name}
+                  name={field.name}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                />
+              </Field>
+            )}
+          </form.Field>
 
-        <form.Field name="organizerOrg">
-          {(field) => (
-            <Field>
-              <FieldLabel htmlFor={field.name}>承办单位</FieldLabel>
-              <Input
-                id={field.name}
-                name={field.name}
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-              />
-            </Field>
-          )}
-        </form.Field>
+          <form.Field name="organizerOrg">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={field.name}>承办单位</FieldLabel>
+                <Input
+                  id={field.name}
+                  name={field.name}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                />
+              </Field>
+            )}
+          </form.Field>
 
-        <form.Field name="supportOrg">
-          {(field) => (
-            <Field>
-              <FieldLabel htmlFor={field.name}>支持单位</FieldLabel>
-              <Input
-                id={field.name}
-                name={field.name}
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-              />
-            </Field>
-          )}
-        </form.Field>
+          <form.Field name="supportOrg">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={field.name}>支持单位</FieldLabel>
+                <Input
+                  id={field.name}
+                  name={field.name}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                />
+              </Field>
+            )}
+          </form.Field>
 
-        <form.Field name="guidingOrg">
-          {(field) => (
-            <Field>
-              <FieldLabel htmlFor={field.name}>指导单位</FieldLabel>
-              <Input
-                id={field.name}
-                name={field.name}
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(event) => field.handleChange(event.target.value)}
-              />
-            </Field>
-          )}
-        </form.Field>
+          <form.Field name="guidingOrg">
+            {(field) => (
+              <Field>
+                <FieldLabel htmlFor={field.name}>指导单位</FieldLabel>
+                <Input
+                  id={field.name}
+                  name={field.name}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                />
+              </Field>
+            )}
+          </form.Field>
 
-        <form.Field name="publishStatus">
-          {(field) => (
-            <Field>
-              <FieldLabel>发布状态</FieldLabel>
-              <Select
-                items={PUBLISH_STATUS_LABELS}
-                value={field.state.value}
-                onValueChange={(value) =>
-                  field.handleChange(value as ProjectFormState["publishStatus"])
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PUBLISH_STATUS_VALUES.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {PUBLISH_STATUS_LABELS[value]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          )}
-        </form.Field>
+          <form.Field name="publishStatus">
+            {(field) => (
+              <Field>
+                <FieldLabel>发布状态</FieldLabel>
+                <Select
+                  items={PUBLISH_STATUS_LABELS}
+                  value={field.state.value}
+                  onValueChange={(value) =>
+                    field.handleChange(
+                      value as ProjectFormState["publishStatus"],
+                    )
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PUBLISH_STATUS_VALUES.map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {PUBLISH_STATUS_LABELS[value]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
+          </form.Field>
         </div>
 
-      <form.Field name="description">
-        {(field) => (
-          <Field>
-            <FieldLabel htmlFor={field.name}>项目简介</FieldLabel>
-            <Textarea
-              id={field.name}
-              name={field.name}
-              rows={4}
-              placeholder="面向公众展示的简介，暂不支持富文本排版"
-              value={field.state.value}
-              onBlur={field.handleBlur}
-              onChange={(event) => field.handleChange(event.target.value)}
-              aria-invalid={
-                field.state.meta.isTouched &&
-                field.state.meta.errors.length > 0
-              }
-            />
-            <FieldError
-              errors={
-                field.state.meta.isTouched ? field.state.meta.errors : []
-              }
-            />
-          </Field>
-        )}
+        <form.Field name="description">
+          {(field) => (
+            <Field>
+              <FieldLabel htmlFor={field.name}>项目简介</FieldLabel>
+              <Textarea
+                id={field.name}
+                name={field.name}
+                rows={4}
+                placeholder="面向公众展示的简介，暂不支持富文本排版"
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(event) => field.handleChange(event.target.value)}
+                aria-invalid={
+                  field.state.meta.isTouched &&
+                  field.state.meta.errors.length > 0
+                }
+              />
+              <FieldError
+                errors={
+                  field.state.meta.isTouched ? field.state.meta.errors : []
+                }
+              />
+            </Field>
+          )}
         </form.Field>
       </DialogBody>
 

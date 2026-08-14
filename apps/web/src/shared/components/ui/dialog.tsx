@@ -5,6 +5,26 @@ import { cn } from "#/shared/lib/utils.ts"
 import { Button } from "#/shared/components/ui/button.tsx"
 import { XIcon } from "lucide-react"
 
+// ⚠️ 这个文件相对 shadcn registry 原版有改动，`shadcn add dialog` 会静默覆盖，
+// 覆盖后要按下面几条重新打一遍（AGENTS.md：vendored 组件改了必须留说明）：
+//
+// 1. **DialogContent 从 `grid gap-6 p-6` 改成 `flex flex-col overflow-hidden`
+//    + `max-h-[calc(100dvh-2rem)]`。** 原版靠每个调用点自己写
+//    `max-h-[85vh] overflow-y-auto`，滚动的是整个弹窗，头部标题和底部按钮会
+//    一起滚出视野——十几个字段的表单里"保存"按钮直接掉到视口外。现在头尾
+//    `shrink-0` 钉住，只有 DialogBody 滚。用 `dvh` 不用 `vh`：移动端地址栏
+//    伸缩时 `vh` 算出来是错的。
+//
+// 2. **新增 DialogBody**（原版没有这个 slot）。`min-h-0` 是关键且反直觉的
+//    一条：不加的话 flex 子元素不肯收缩，`overflow-y-auto` 永远不触发。
+//    注意 **DialogContent 不再有内边距**，内容必须放进 DialogBody 才有
+//    `px-6 py-6`，否则会贴着弹窗边缘。
+//
+// 3. **DialogHeader 加 `pr-12`** 给右上角关闭按钮留位，标题长了不会被盖住；
+//    并接受可选的 `title`/`description` props（不传 children 时才生效）。
+//
+// 4. **DialogFooter 加 `border-t bg-popover`**，作为钉住的操作条。
+
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />
 }

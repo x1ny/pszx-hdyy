@@ -277,7 +277,13 @@ export function buildAgendaTimeline(
           return [{ line, rows: packRows(laneItems, dayEnd, pct) }];
         });
 
-      return { key, label: dayFormat.format(new Date(dayStart)), ticks, lanes, bands: buildBands(items, dayEnd, pct) };
+      return {
+        key,
+        label: dayFormat.format(new Date(dayStart)),
+        ticks,
+        lanes,
+        bands: buildBands(items, dayEnd, pct),
+      };
     });
 }
 

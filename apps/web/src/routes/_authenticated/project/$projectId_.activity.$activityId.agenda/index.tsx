@@ -248,14 +248,18 @@ function AgendaTab() {
         <div className="flex items-center gap-1 rounded-lg border bg-card p-1 shadow-sm">
           <ViewButton
             active={search.view === "timeline"}
-            onClick={() => navigate({ search: (prev) => ({ ...prev, view: "timeline" }) })}
+            onClick={() =>
+              navigate({ search: (prev) => ({ ...prev, view: "timeline" }) })
+            }
           >
             <RouteIcon />
             时间轴
           </ViewButton>
           <ViewButton
             active={search.view === "list"}
-            onClick={() => navigate({ search: (prev) => ({ ...prev, view: "list" }) })}
+            onClick={() =>
+              navigate({ search: (prev) => ({ ...prev, view: "list" }) })
+            }
           >
             <ListIcon />
             环节列表
@@ -355,7 +359,9 @@ function AgendaTab() {
         }
         onDelete={(line) => {
           if (
-            window.confirm(`确定删除议程线「${lineLabel(line)}」？此操作不可撤销。`)
+            window.confirm(
+              `确定删除议程线「${lineLabel(line)}」？此操作不可撤销。`,
+            )
           ) {
             lineMutation.mutate({ type: "delete", line });
           }

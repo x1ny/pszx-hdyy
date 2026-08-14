@@ -2,6 +2,7 @@ import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -44,7 +45,7 @@ export function SegmentDetailDialog({
 
   return (
     <Dialog open={!!segment} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg">
         {segment && (
           <>
             <DialogHeader>
@@ -74,31 +75,33 @@ export function SegmentDetailDialog({
               </div>
             </DialogHeader>
 
-            <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 text-sm">
-              <Row label="议程线">
-                {line
-                  ? `${lineLabel(line)}${line.lineType === "parallel" ? ` · 排序 ${line.sortOrder}` : " · 主流程"}`
-                  : "-"}
-              </Row>
-              <Row label="地点 / 区域">{segment.locationText || "-"}</Row>
-              <Row label="负责人">{segment.ownerName || "-"}</Row>
-              <Row label="环节人员">
-                {segment.memberEnabled ? "已开启" : "未开启"}
-              </Row>
-              <Row label="排位">
-                {segment.seatingEnabled ? "已开启 · 未配置" : "未开启"}
-              </Row>
-              <Row label="最后修改">{formatDateTime(segment.updatedAt)}</Row>
-            </dl>
+            <DialogBody className="flex flex-col gap-6">
+              <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 text-sm">
+                <Row label="议程线">
+                  {line
+                    ? `${lineLabel(line)}${line.lineType === "parallel" ? ` · 排序 ${line.sortOrder}` : " · 主流程"}`
+                    : "-"}
+                </Row>
+                <Row label="地点 / 区域">{segment.locationText || "-"}</Row>
+                <Row label="负责人">{segment.ownerName || "-"}</Row>
+                <Row label="环节人员">
+                  {segment.memberEnabled ? "已开启" : "未开启"}
+                </Row>
+                <Row label="排位">
+                  {segment.seatingEnabled ? "已开启 · 未配置" : "未开启"}
+                </Row>
+                <Row label="最后修改">{formatDateTime(segment.updatedAt)}</Row>
+              </dl>
 
-            {segment.description && (
-              <div className="flex flex-col gap-1.5">
-                <p className="font-medium text-sm">环节说明</p>
-                <p className="whitespace-pre-wrap text-muted-foreground text-sm leading-relaxed">
-                  {segment.description}
-                </p>
-              </div>
-            )}
+              {segment.description && (
+                <div className="flex flex-col gap-1.5">
+                  <p className="font-medium text-sm">环节说明</p>
+                  <p className="whitespace-pre-wrap text-muted-foreground text-sm leading-relaxed">
+                    {segment.description}
+                  </p>
+                </div>
+              )}
+            </DialogBody>
 
             <DialogFooter>
               <Button variant="outline" onClick={() => onOpenChange(false)}>

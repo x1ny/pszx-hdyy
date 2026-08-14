@@ -56,8 +56,7 @@ export function AgendaTimeline({
               {day.lanes.length} 条议程线 ·{" "}
               {day.lanes.reduce(
                 (total, lane) =>
-                  total +
-                  lane.rows.reduce((sum, row) => sum + row.length, 0),
+                  total + lane.rows.reduce((sum, row) => sum + row.length, 0),
                 0,
               )}{" "}
               个环节
@@ -119,10 +118,7 @@ export function AgendaTimeline({
 
                     <div className="relative flex flex-col gap-1.5">
                       {lane.rows.map((row) => (
-                        <div
-                          key={row[0].segment.id}
-                          className="relative h-14"
-                        >
+                        <div key={row[0].segment.id} className="relative h-14">
                           {row.map((block) => (
                             <button
                               key={block.segment.id}

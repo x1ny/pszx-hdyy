@@ -51,7 +51,11 @@ describe("buildAgendaTimeline", () => {
     expect(
       buildAgendaTimeline(
         [MAIN],
-        [segment(1, "2026-09-18 09:00", "2026-09-18 10:00", { status: "voided" })],
+        [
+          segment(1, "2026-09-18 09:00", "2026-09-18 10:00", {
+            status: "voided",
+          }),
+        ],
       ),
     ).toEqual([]);
   });
