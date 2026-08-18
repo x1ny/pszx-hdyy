@@ -200,10 +200,18 @@ export const activityRoutes = new Hono<{ Variables: AuthedVariables }>()
     return c.json(ok({ list, total: totalRows[0]?.total ?? 0 }));
   })
 
+  /**
+   * 详情比列表多带一个 `projectName`：活动概览要展示"所属项目"。
+   *
+   * 只加在 /get 不加在 /list——列表永远是从项目详情点进来的，那一屏上项目
+   * 名字就在标题里，每行再重复一遍是噪音；而活动详情可以从收藏夹、从别人
+   * 发来的链接直接打开，这时"这活动属于哪个项目"是真的缺失信息。
+   */
   .post("/get", jsonBody(ActivityIdInput), async (c) => {
     const [row] = await db
-      .select(activityFields)
+      .select({ ...activityFields, projectName: project.name })
       .from(activity)
+      .innerJoin(project, eq(project.id, activity.projectId))
       .where(eq(activity.id, c.req.valid("json").id));
 
     return row ? c.json(ok(row)) : c.json(activityNotFound());

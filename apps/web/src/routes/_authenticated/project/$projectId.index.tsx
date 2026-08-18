@@ -2,12 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   CalendarIcon,
-  EyeIcon,
-  EyeOffIcon,
   PlusIcon,
   SearchIcon,
-  SquareCheckBigIcon,
-  SquareIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -47,9 +43,7 @@ import {
   activityKeys,
   activityListQueryOptions,
   createActivity,
-  setActivityDisplayEnabled,
   setActivityPublishStatus,
-  setActivityRegistrationEnabled,
   updateActivity,
 } from "./-queries";
 import {
@@ -163,28 +157,9 @@ function ProjectActivityListPage() {
     onError: (error) => toast.error(error.message),
   });
 
-  const displayMutation = useMutation({
-    mutationFn: (activity: Activity) =>
-      setActivityDisplayEnabled(activity.id, !activity.displayEnabled),
-    onSuccess: (updated) => {
-      toast.success(updated.displayEnabled ? "已开启展示" : "已关闭展示");
-      invalidateActivities();
-    },
-    onError: (error) => toast.error(error.message),
-  });
-
-  const registrationMutation = useMutation({
-    mutationFn: (activity: Activity) =>
-      setActivityRegistrationEnabled(
-        activity.id,
-        !activity.registrationEnabled,
-      ),
-    onSuccess: (updated) => {
-      toast.success(updated.registrationEnabled ? "已开启报名" : "已关闭报名");
-      invalidateActivities();
-    },
-    onError: (error) => toast.error(error.message),
-  });
+  // 展示开关和报名开关的 mutation 随那两列一起去掉了（见表格里的注释）。
+  // queries.ts 里的 setActivityDisplayEnabled/setActivityRegistrationEnabled
+  // 和后端接口都保留着，H5 上马时直接接回来。
 
   const rangeStart = total === 0 ? 0 : (search.page - 1) * search.pageSize + 1;
   const rangeEnd = Math.min(search.page * search.pageSize, total);
@@ -289,8 +264,6 @@ function ProjectActivityListPage() {
               <TableHead>时间范围</TableHead>
               <TableHead>预算</TableHead>
               <TableHead>发布状态</TableHead>
-              <TableHead>H5 展示</TableHead>
-              <TableHead>报名</TableHead>
               <TableHead className="text-center">操作</TableHead>
             </TableRow>
           </TableHeader>
@@ -367,54 +340,10 @@ function ProjectActivityListPage() {
                         }
                       />
                     </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="gap-1.5 text-muted-foreground hover:text-foreground"
-                        disabled={
-                          displayMutation.isPending &&
-                          displayMutation.variables?.id === activity.id
-                        }
-                        onClick={() => displayMutation.mutate(activity)}
-                      >
-                        {activity.displayEnabled ? (
-                          <>
-                            <EyeIcon className="text-success-foreground" />
-                            展示中
-                          </>
-                        ) : (
-                          <>
-                            <EyeOffIcon />
-                            已隐藏
-                          </>
-                        )}
-                      </Button>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="gap-1.5 text-muted-foreground hover:text-foreground"
-                        disabled={
-                          registrationMutation.isPending &&
-                          registrationMutation.variables?.id === activity.id
-                        }
-                        onClick={() => registrationMutation.mutate(activity)}
-                      >
-                        {activity.registrationEnabled ? (
-                          <>
-                            <SquareCheckBigIcon className="text-success-foreground" />
-                            可报名
-                          </>
-                        ) : (
-                          <>
-                            <SquareIcon />
-                            已暂停
-                          </>
-                        )}
-                      </Button>
-                    </TableCell>
+                    {/* H5 展示开关和报名开关两列本期隐藏：两个都只控制 H5 的
+                        行为，而 H5 不建（AGENTS.md）。活动详情页也一并去掉了
+                        这两个芯片，两处口径要一致——只在其中一处留着，用户会
+                        以为另一处漏了。字段、接口和编辑表单都还在。 */}
                     <TableCell className="text-center whitespace-nowrap">
                       <Button
                         variant="ghost"

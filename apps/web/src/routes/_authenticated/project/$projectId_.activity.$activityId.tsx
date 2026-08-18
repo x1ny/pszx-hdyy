@@ -31,9 +31,12 @@ export const Route = createFileRoute(
 });
 
 /**
- * 十个标签页目前只有"活动概览"是真内容，其余九个都是占位页（见各自
- * 路由文件里的 PagePlaceholder）——先把信息架构和导航铺出来，内容
- * 逐个替换即可，标签页的 URL 不会因为内容从占位换成真实现实现而改变。
+ * 标签页承载活动下的全部子模块，URL 不会因为内容从占位换成真实现而改变。
+ *
+ * ⚠️ **报名审核暂时不挂在这里**，路由文件还留着。报名记录的唯一生产者是
+ * H5 报名表单，而 H5 本期不建（见 AGENTS.md）——挂一个永远没有数据进来的
+ * 标签，只会让人以为功能坏了。等 H5 或后台导入其中之一落地，把这一行加
+ * 回来即可，不需要别的改动。
  */
 const TABS = [
   { to: "/project/$projectId/activity/$activityId", label: "活动概览" },
@@ -46,13 +49,30 @@ const TABS = [
     label: "资源台账",
   },
   { to: "/project/$projectId/activity/$activityId/members", label: "活动人员" },
-  {
-    to: "/project/$projectId/activity/$activityId/registration",
-    label: "报名审核",
-  },
   { to: "/project/$projectId/activity/$activityId/invitations", label: "邀请函" },
   { to: "/project/$projectId/activity/$activityId/seating", label: "排位" },
 ] as const;
+
+/**
+ * 业务状态：只表示时间进度，和发布状态是两件事（文档 §8.2 开发处理规则 1）。
+ *
+ * **没有对应的列，按当前时刻算**——它完全由起止时间决定，存一列就要有人在
+ * 活动开始和结束的那一刻去改它，那需要定时任务；而定时任务挂了，状态就永久
+ * 停在错的那一档。
+ */
+function businessStatus(start: string, end: string) {
+  const now = Date.now();
+  if (now < new Date(start).getTime()) {
+    return { label: "未开始", chip: "border-border bg-muted text-muted-foreground" };
+  }
+  if (now > new Date(end).getTime()) {
+    return { label: "已结束", chip: "border-border bg-muted text-muted-foreground" };
+  }
+  return {
+    label: "进行中",
+    chip: "border-success/30 bg-success/10 text-success-foreground",
+  };
+}
 
 function ActivityDetailLayout() {
   const { projectId: projectIdParam, activityId: activityIdParam } =
@@ -94,20 +114,22 @@ function ActivityDetailLayout() {
             >
               {PUBLISH_STATUS_LABELS[activity.publishStatus]}
             </Badge>
-            <ToggleTag
-              active={activity.displayEnabled}
-              onLabel="H5 展示开启"
-              offLabel="H5 展示关闭"
-            />
-            <ToggleTag
-              active={activity.registrationEnabled}
-              onLabel="报名开启"
-              offLabel="报名关闭"
-            />
+            {/* H5 展示开关和报名开关本期不展示：两个都只控制 H5 的行为，
+                而 H5 不建（AGENTS.md）。字段和编辑表单都留着，等 H5 上马
+                把这两个开关的芯片加回来即可（git 历史里有 ToggleTag 组件）。 */}
+            <Badge
+              variant="outline"
+              className={cn(
+                "border",
+                businessStatus(activity.startTime, activity.endTime).chip,
+              )}
+            >
+              {businessStatus(activity.startTime, activity.endTime).label}
+            </Badge>
           </div>
           <p className="text-muted-foreground text-sm">
-            {ACTIVITY_TYPE_LABELS[activity.activityType]} ·{" "}
-            {activity.location || "未填写地点"} ·{" "}
+            {activity.projectName} · {ACTIVITY_TYPE_LABELS[activity.activityType]}{" "}
+            · {activity.location || "未填写地点"} ·{" "}
             {formatDateTime(activity.startTime)} 至{" "}
             {formatDateTime(activity.endTime)}
           </p>
@@ -140,29 +162,5 @@ function ActivityDetailLayout() {
 
       <Outlet />
     </div>
-  );
-}
-
-function ToggleTag({
-  active,
-  onLabel,
-  offLabel,
-}: {
-  active: boolean;
-  onLabel: string;
-  offLabel: string;
-}) {
-  return (
-    <Badge
-      variant="outline"
-      className={cn(
-        "border",
-        active
-          ? "border-success/30 bg-success/10 text-success-foreground"
-          : "border-border bg-muted text-muted-foreground",
-      )}
-    >
-      {active ? onLabel : offLabel}
-    </Badge>
   );
 }

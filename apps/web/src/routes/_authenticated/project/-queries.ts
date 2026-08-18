@@ -18,9 +18,24 @@ export type ProjectFormValues = InferRequestType<
   typeof api.api.project.create.$post
 >["json"];
 
+/**
+ * 列表行。**从 /list 反推，不是从 /get** ——两个接口的投影不再相同：详情多
+ * 带一个 `projectName`（活动可以被人直接甩个链接打开，那时"属于哪个项目"
+ * 是缺失信息；而列表永远是从项目详情点进来的，每行重复项目名是噪音）。
+ *
+ * 之前两处共用一个从 /get 反推的 `Activity`，加完 projectName 之后项目详情页
+ * 的列表行立刻编译不过——那正是这个拆分该发生的信号，不是要去给列表补一个
+ * 它不需要的字段。
+ */
 export type Activity = ApiData<
+  InferResponseType<typeof api.api.activity.list.$post>
+>["list"][number];
+
+/** 活动详情，比列表行多 `projectName`。 */
+export type ActivityDetail = ApiData<
   InferResponseType<typeof api.api.activity.get.$post>
 >;
+
 export type ActivityType = Activity["activityType"];
 // 活动没有单独一份 publishStatus 联合类型——它和项目共用同一套取值
 // （schema.ts 里也是同一个 PUBLISH_STATUSES 常量），这里直接复用
