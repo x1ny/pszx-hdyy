@@ -4,6 +4,13 @@ import { ListIcon, PlusIcon, RouteIcon, TriangleAlertIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { isOpenTodo } from "#/features/resource/labels.ts";
+import {
+  type ResourceDemand,
+  resourceDemandKeys,
+  resourceDemandListQueryOptions,
+} from "#/features/resource/queries.ts";
+import { SegmentDemandsDialog } from "#/features/resource/segment-demands-dialog.tsx";
 import {
   Alert,
   AlertDescription,
@@ -51,10 +58,17 @@ export const Route = createFileRoute(
   "/_authenticated/project/$projectId_/activity/$activityId/agenda/",
 )({
   validateSearch: AgendaSearchSchema,
-  loader: ({ context, params }) =>
-    context.queryClient.ensureQueryData(
-      agendaQueryOptions(Number(params.activityId)),
-    ),
+  // 议程和资源需求一起预取：列表的"资源需求"列要用后者，分两次等于给
+  // 首屏排了一个瀑布。
+  loader: ({ context, params }) => {
+    const activityId = Number(params.activityId);
+    return Promise.all([
+      context.queryClient.ensureQueryData(agendaQueryOptions(activityId)),
+      context.queryClient.ensureQueryData(
+        resourceDemandListQueryOptions(activityId),
+      ),
+    ]);
+  },
   component: AgendaTab,
 });
 
@@ -72,17 +86,31 @@ function AgendaTab() {
   const [editing, setEditing] = useState<Segment>();
   const [detail, setDetail] = useState<Segment>();
   const [memberSegment, setMemberSegment] = useState<Segment>();
+  const [demandSegment, setDemandSegment] = useState<Segment>();
   const [lineDialogOpen, setLineDialogOpen] = useState(false);
 
   const agendaQuery = useQuery(agendaQueryOptions(activityId));
+  // 需求项全量一次拿回，这里只用来画列表那一列的 chip 和统计磁贴；
+  // 弹窗里读的是同一份缓存，不会再发一次请求。
+  const demandQuery = useQuery(resourceDemandListQueryOptions(activityId));
   // 父路由（活动详情布局）的 loader 已经 ensureQueryData 过，这里是缓存命中
   const { data: activity } = useQuery(activityDetailQueryOptions(activityId));
 
   const lines = agendaQuery.data?.lines ?? [];
   const segments = agendaQuery.data?.segments ?? [];
 
-  const invalidateAgenda = () =>
+  /**
+   * 环节一变，资源需求那份缓存也要跟着失效。
+   *
+   * 不是可有可无的保险：需求项列表里带着 `segmentName`、`segmentStatus`、
+   * `segmentStartTime`——改个环节名、调个时间、把环节作废，这三样全变。只失效
+   * 议程的话，本页那一列 chip 和资源需求汇总页都会继续拿旧环节信息渲染，
+   * 而且作废后的环节还会照常出现在待办里催人配资源。
+   */
+  const invalidateAgenda = () => {
     queryClient.invalidateQueries({ queryKey: agendaKeys.all });
+    queryClient.invalidateQueries({ queryKey: resourceDemandKeys.all });
+  };
 
   /**
    * 保存环节。表单里选了"＋ 新建并行线"时，先建线再建环节——这样"在一条
@@ -204,6 +232,15 @@ function AgendaTab() {
   const timeline = buildAgendaTimeline(lines, segments);
   const sequenceLabels = buildSequenceLabels(lines, segments);
 
+  const demands = demandQuery.data?.list ?? [];
+  const demandsBySegment = new Map<number, ResourceDemand[]>();
+  for (const demand of demands) {
+    const bucket = demandsBySegment.get(demand.segmentId);
+    if (bucket) bucket.push(demand);
+    else demandsBySegment.set(demand.segmentId, [demand]);
+  }
+  const openTodoCount = demands.filter(isOpenTodo).length;
+
   // 超出活动时间范围只提示不阻断（C-016：本期业务冲突允许保存但提示）
   const outOfRange = activeSegments.filter(
     (segment) =>
@@ -243,9 +280,9 @@ function AgendaTab() {
           hint="按环节开始日期分组"
         />
         <StatTile
-          label="已开启排位"
-          value={seatingCount}
-          hint="排位方案在后续版本配置"
+          label="资源需求待办"
+          value={openTodoCount}
+          hint={`共声明 ${demands.length} 项 · 已开启排位 ${seatingCount}`}
         />
       </div>
 
@@ -319,12 +356,14 @@ function AgendaTab() {
           segments={tableSegments}
           lines={lines}
           sequenceLabels={sequenceLabels}
+          demandsBySegment={demandsBySegment}
           pendingStatusId={
             statusMutation.isPending ? statusMutation.variables?.id : undefined
           }
           onDetail={setDetail}
           onEdit={openEdit}
           onToggleStatus={(segment) => statusMutation.mutate(segment)}
+          onManageDemands={setDemandSegment}
         />
       )}
 
@@ -362,6 +401,16 @@ function AgendaTab() {
         open={!!memberSegment}
         onOpenChange={(open) => {
           if (!open) setMemberSegment(undefined);
+        }}
+      />
+
+      <SegmentDemandsDialog
+        segmentId={demandSegment?.id}
+        segmentName={demandSegment?.name}
+        activityId={activityId}
+        open={!!demandSegment}
+        onOpenChange={(open) => {
+          if (!open) setDemandSegment(undefined);
         }}
       />
 

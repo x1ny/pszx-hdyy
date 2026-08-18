@@ -11,6 +11,10 @@ import {
   segmentMemberRoutes,
 } from "./modules/member/routes.relation";
 import { activityRoutes, projectRoutes } from "./modules/project/routes";
+import {
+  activityResourceRoutes,
+  resourceDemandRoutes,
+} from "./modules/resource/routes";
 import { supplierRoutes } from "./modules/supplier/routes";
 import { err } from "./shared/result";
 
@@ -46,7 +50,13 @@ const routes = app
   .route("/api/file", fileRoutes)
   .route("/api/project", projectRoutes)
   .route("/api/activity", activityRoutes)
-  .route("/api/agenda", agendaRoutes);
+  .route("/api/agenda", agendaRoutes)
+  // 资源的两层各占一个前缀，理由同人员分层：环节资源需求项是声明层（按活动
+  // 全量查、按环节整体保存），活动资源台账是记录层（分页、按类型筛选、带人员
+  // 绑定）——查询条件、返回列和将来的权限点都不一样，糊成一个前缀只会让字段
+  // 投影失焦。
+  .route("/api/resourceDemand", resourceDemandRoutes)
+  .route("/api/activityResource", activityResourceRoutes);
 
 // Catches anything a handler didn't turn into a `code`, i.e. a real crash —
 // the one case where the response legitimately isn't a business outcome.

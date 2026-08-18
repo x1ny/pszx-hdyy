@@ -7,6 +7,7 @@ import { jsonBody } from "../../shared/validate";
 import { activitySegment } from "../agenda/schema";
 import { type AuthedVariables, requireUser } from "../auth";
 import { activity } from "../project/schema";
+import { activityResource, resourceMemberBinding } from "../resource/schema";
 import {
   createMemberInTx,
   ensureActivityMembers,
@@ -360,23 +361,52 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
    * 移除前的受影响清单。BR-DEV-029 要求"展示影响清单并二次确认"——清单由这个
    * 接口出，前端拿到什么就展示什么，不许自己拼文案。
    *
-   * 本期只有环节关系一项。排位、资源绑定、邀请函的模块建表后往这里加，
+   * 目前有环节关系和资源服务绑定两项。排位、邀请函的模块建表后往这里加，
    * 前端不用改——它渲染的是这个接口返回的列表。
    */
   .post("/impact", jsonBody(RelationIdInput), async (c) => {
     const id = c.req.valid("json").id;
 
-    const segments = await db
-      .select({ id: segmentMember.id, name: activitySegment.name })
-      .from(segmentMember)
-      .innerJoin(activitySegment, eq(activitySegment.id, segmentMember.segmentId))
-      .where(eq(segmentMember.activityMemberId, id))
-      .orderBy(asc(activitySegment.startTime));
+    const [segments, resources] = await Promise.all([
+      db
+        .select({ id: segmentMember.id, name: activitySegment.name })
+        .from(segmentMember)
+        .innerJoin(
+          activitySegment,
+          eq(activitySegment.id, segmentMember.segmentId),
+        )
+        .where(eq(segmentMember.activityMemberId, id))
+        .orderBy(asc(activitySegment.startTime)),
+
+      // 用车/用餐/住宿的服务名单。这一项尤其要展示出来：绑定表上的外键
+      // 故意没设 cascade，静默删掉一份用车名单是运营完全无从察觉的损失。
+      db
+        .select({
+          id: resourceMemberBinding.id,
+          name: activityResource.name,
+        })
+        .from(resourceMemberBinding)
+        .innerJoin(
+          activityResource,
+          eq(activityResource.id, resourceMemberBinding.resourceId),
+        )
+        .where(eq(resourceMemberBinding.activityMemberId, id))
+        .orderBy(asc(activityResource.id)),
+    ]);
 
     return c.json(
       ok({
         items: [
-          { kind: "segment" as const, label: "环节人员", names: segments.map((s) => s.name) },
+          {
+            kind: "segment" as const,
+            label: "环节人员",
+            names: segments.map((s) => s.name),
+          },
+          {
+            kind: "resource" as const,
+            label: "资源服务绑定",
+            names: resources.map((r) => r.name),
+          },
         ].filter((item) => item.names.length > 0),
       }),
     );
@@ -385,18 +415,27 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
   .post("/remove", jsonBody(RemoveActivityMemberInput), async (c) => {
     const { id, cascade } = c.req.valid("json");
 
-    const [related] = await db
-      .select({ total: count() })
-      .from(segmentMember)
-      .where(eq(segmentMember.activityMemberId, id));
-    const segmentCount = related?.total ?? 0;
+    const [[relatedSegments], [relatedBindings]] = await Promise.all([
+      db
+        .select({ total: count() })
+        .from(segmentMember)
+        .where(eq(segmentMember.activityMemberId, id)),
+      db
+        .select({ total: count() })
+        .from(resourceMemberBinding)
+        .where(eq(resourceMemberBinding.activityMemberId, id)),
+    ]);
+    const segmentCount = relatedSegments?.total ?? 0;
+    const bindingCount = relatedBindings?.total ?? 0;
 
-    if (segmentCount > 0 && !cascade) {
+    if ((segmentCount > 0 || bindingCount > 0) && !cascade) {
       // 不是错误，是要求前端走一遍 /impact + 二次确认再回来。
+      const parts = [
+        segmentCount > 0 ? `${segmentCount} 个环节` : null,
+        bindingCount > 0 ? `${bindingCount} 项资源服务安排` : null,
+      ].filter(Boolean);
       return c.json(
-        validationError(
-          `该人员已参与 ${segmentCount} 个环节，请确认是否一并解除`,
-        ),
+        validationError(`该人员已关联 ${parts.join("、")}，请确认是否一并解除`),
       );
     }
 
@@ -405,6 +444,14 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
         await tx
           .delete(segmentMember)
           .where(eq(segmentMember.activityMemberId, id));
+      }
+
+      // 绑定表上的复合外键没有 cascade（见 resource/schema.ts 的注释），
+      // 所以这里必须显式删——否则移除活动人员会撞上外键约束报 500。
+      if (bindingCount > 0) {
+        await tx
+          .delete(resourceMemberBinding)
+          .where(eq(resourceMemberBinding.activityMemberId, id));
       }
 
       const [deleted] = await tx

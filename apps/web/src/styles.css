@@ -60,6 +60,10 @@
      所以文字用更深的一档。 */
   --success-foreground: #006300;
   --warning: #fab219;
+  /* 同 success：这个琥珀色在白底上只有约 1.9:1，够做色块和边框，小字号读不清。
+     文字用深一档的 #8a5a00（约 5.9:1）。补这一条之前 `text-warning-foreground`
+     在 segment-form-dialog 里已经被用了，但 token 不存在，类名是空的。 */
+  --warning-foreground: #8a5a00;
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
@@ -99,6 +103,7 @@
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

@@ -1,4 +1,9 @@
 import { CalendarClockIcon } from "lucide-react";
+import {
+  DEMAND_STATUS_CHIP,
+  RESOURCE_TYPE_LABELS,
+} from "#/features/resource/labels.ts";
+import type { ResourceDemand } from "#/features/resource/queries.ts";
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import {
@@ -36,18 +41,23 @@ export function SegmentTable({
   segments,
   lines,
   sequenceLabels,
+  demandsBySegment,
   pendingStatusId,
   onDetail,
   onEdit,
   onToggleStatus,
+  onManageDemands,
 }: {
   segments: Segment[];
   lines: AgendaLine[];
   sequenceLabels: Map<number, string>;
+  /** 按环节分组的资源需求项，用来画"资源需求"列的 chip。 */
+  demandsBySegment: Map<number, ResourceDemand[]>;
   pendingStatusId?: number;
   onDetail: (segment: Segment) => void;
   onEdit: (segment: Segment) => void;
   onToggleStatus: (segment: Segment) => void;
+  onManageDemands: (segment: Segment) => void;
 }) {
   const lineById = new Map(lines.map((line) => [line.id, line]));
 
@@ -64,6 +74,7 @@ export function SegmentTable({
             <TableHead>时间</TableHead>
             <TableHead>地点 / 区域</TableHead>
             <TableHead>负责人</TableHead>
+            <TableHead className="min-w-32">资源需求</TableHead>
             <TableHead>状态</TableHead>
             <TableHead className="text-center">操作</TableHead>
           </TableRow>
@@ -71,7 +82,7 @@ export function SegmentTable({
         <TableBody>
           {segments.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={10}>
+              <TableCell colSpan={11}>
                 <Empty className="border-0">
                   <EmptyHeader>
                     <EmptyMedia variant="icon">
@@ -140,6 +151,37 @@ export function SegmentTable({
                   <TableCell>{segment.locationText || "-"}</TableCell>
                   <TableCell>{segment.ownerName || "-"}</TableCell>
                   <TableCell>
+                    {(() => {
+                      const demands = demandsBySegment.get(segment.id) ?? [];
+                      if (demands.length === 0) {
+                        return (
+                          <span className="text-muted-foreground text-xs">
+                            无需求
+                          </span>
+                        );
+                      }
+                      // chip 的颜色走**派生状态**而不是资源类型色：这一列
+                      // 要回答的是"哪些还没配好"，不是"是哪类资源"——类型
+                      // 名字本来就写在 chip 上了。
+                      return (
+                        <div className="flex flex-wrap gap-1">
+                          {demands.map((demand) => (
+                            <Badge
+                              key={demand.id}
+                              variant="outline"
+                              className={cn(
+                                "border text-xs",
+                                DEMAND_STATUS_CHIP[demand.status],
+                              )}
+                            >
+                              {RESOURCE_TYPE_LABELS[demand.resourceType]}
+                            </Badge>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </TableCell>
+                  <TableCell>
                     <Badge
                       variant="outline"
                       className={cn(
@@ -168,6 +210,18 @@ export function SegmentTable({
                       >
                         修改
                       </Button>
+                      {/* 作废环节不给配资源：它已经不在议程上了，配了也不
+                          进待办（isOpenTodo 会把它过滤掉） */}
+                      {!voided && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-primary hover:text-primary"
+                          onClick={() => onManageDemands(segment)}
+                        >
+                          资源需求
+                        </Button>
+                      )}
                       {/* 只禁用正在提交的那一行，不要整列一起变灰 */}
                       <Button
                         variant="ghost"
