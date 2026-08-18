@@ -8,13 +8,6 @@ import {
 } from "lucide-react";
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import { buttonVariants } from "#/shared/components/ui/button.tsx";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "#/shared/components/ui/empty.tsx";
 import { Skeleton } from "#/shared/components/ui/skeleton.tsx";
 import { type ApiData, api, unwrap } from "#/shared/lib/api";
 import { cn } from "#/shared/lib/utils.ts";
@@ -77,8 +70,9 @@ const STATUS_META = {
  * 已经是活动详情的标签栏了（见 ed3a38a），再列一遍等于同一层导航出现两次，
  * 而且全配好的时候是 9 行绿色的噪音。
  *
- * 所以这里把「还差什么」放在最上面、占最大篇幅，已完成的收在下面一栏灰着。
- * 全配齐时上半部分是一个 Empty 状态——那才是这个页面存在的意义（BR-DEV-011：
+ * 所以这里把「还差什么」放在最上面，已完成的收在下面一栏灰着；**没有待办时
+ * 「待处理」整栏直接不渲染**，顶部的绿色 chip 就是全部结论。占半屏画一个
+ * "配置齐了"的空状态，本身就是这个页面最该消灭的那种噪音（BR-DEV-011：
  * 活动详情页只作为总入口和配置总览，可展示待处理提示）。
  */
 function ConfigOverviewTab() {
@@ -110,35 +104,25 @@ function ConfigOverviewTab() {
             只统计本活动适用的配置项；缺失只提示，不阻断活动发布
           </p>
         </div>
-        {todos.length > 0 && (
-          <Badge
-            variant="outline"
-            className="border-destructive/30 bg-destructive/10 text-destructive"
-          >
-            {todos.length} 项待处理
-          </Badge>
-        )}
+        {/* 有待办报红，没待办报绿。这两个 chip 就是"配齐没有"的全部表达——
+            不再额外占半屏画一个空状态：一个只说"没事可做"的大盒子，本身
+            就是这个页面最该消灭的那种噪音。 */}
+        <Badge
+          variant="outline"
+          className={
+            todos.length > 0
+              ? "border-destructive/30 bg-destructive/10 text-destructive"
+              : "border-success/30 bg-success/10 text-success-foreground"
+          }
+        >
+          {todos.length > 0 ? `${todos.length} 项待处理` : "已全部完成"}
+        </Badge>
       </div>
 
-      <section className="flex flex-col gap-2">
-        <h2 className="font-semibold text-sm">待处理</h2>
-        {todos.length === 0 ? (
-          <div className="rounded-lg border bg-card shadow-sm">
-            <Empty className="border-0">
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <CircleCheckIcon />
-                </EmptyMedia>
-                <EmptyTitle>配置齐了</EmptyTitle>
-                <EmptyDescription>
-                  当前适用的 {total} 个配置项都已完成。新增环节、开启排位或声明
-                  资源需求后，这里会重新出现待办。
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          </div>
-        ) : (
-          todos.map((item) => (
+      {todos.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <h2 className="font-semibold text-sm">待处理</h2>
+          {todos.map((item) => (
             <ItemRow
               key={item.key}
               item={item}
@@ -146,13 +130,21 @@ function ConfigOverviewTab() {
               activityIdParam={activityIdParam}
               emphasized
             />
-          ))
-        )}
-      </section>
+          ))}
+        </section>
+      )}
 
       <section className="flex flex-col gap-2">
+        {/**
+         * 标题跟着上面那一栏在不在走：
+         * - 有待办时它是「无需处理」，和上面的「待处理」正好对仗，也顺带
+         *   解释了为什么"不适用"和"待建设"会混在这一栏里。
+         * - 没待办时整个页面只剩这一栏，"无需处理"就没了参照物（原先叫
+         *   "其余配置项"，读者会问"其余是相对什么"——那正是这个词的毛病），
+         *   直接叫「配置项」。
+         */}
         <h2 className="font-semibold text-muted-foreground text-sm">
-          其余配置项
+          {todos.length > 0 ? "无需处理" : "配置项"}
         </h2>
         {rest.map((item) => (
           <ItemRow
@@ -166,6 +158,15 @@ function ConfigOverviewTab() {
     </div>
   );
 }
+
+/**
+ * 跳转按钮用实心蓝（`default` 变体 = `bg-primary`）。
+ *
+ * 这里不走 crud-page-guide 里"行内操作用 ghost + text-primary"那条：那条针对
+ * 的是表格操作列，一行三四个按钮并排，实心底会糊成一片。这个页面每行最多
+ * 一个按钮，而且它就是这一行唯一的行动点，实心底才配得上它的分量。
+ */
+const ENTRY_LINK_CLASS = buttonVariants({ size: "sm" });
 
 function ItemRow({
   item,
@@ -237,7 +238,7 @@ function ItemRow({
         <Link
           to="/project/$projectId/activity/$activityId"
           params={{ projectId, activityId: activityIdParam }}
-          className={buttonVariants({ variant: "outline", size: "sm" })}
+          className={ENTRY_LINK_CLASS}
         >
           去活动概览
         </Link>
@@ -261,7 +262,7 @@ function TabLink({
   activityId: string;
   children: React.ReactNode;
 }) {
-  const className = buttonVariants({ variant: "outline", size: "sm" });
+  const className = ENTRY_LINK_CLASS;
   const params = { projectId, activityId };
 
   if (to === "agenda") {
