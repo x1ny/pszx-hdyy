@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { activityConfigRoutes } from "./modules/activity-config/routes";
 import { agendaRoutes } from "./modules/agenda/routes";
 import { authHandler, sessionMiddleware, type Variables } from "./modules/auth";
 import { exampleRoutes } from "./modules/example/routes";
@@ -56,7 +57,10 @@ const routes = app
   // 绑定）——查询条件、返回列和将来的权限点都不一样，糊成一个前缀只会让字段
   // 投影失焦。
   .route("/api/resourceDemand", resourceDemandRoutes)
-  .route("/api/activityResource", activityResourceRoutes);
+  .route("/api/activityResource", activityResourceRoutes)
+  // 只读的配置完整性视图，没有自己的表——它把环节、人员、资源几个模块的
+  // 现状聚合成一张体检表。放在最后注册，因为它依赖上面所有模块。
+  .route("/api/activityConfig", activityConfigRoutes);
 
 // Catches anything a handler didn't turn into a `code`, i.e. a real crash —
 // the one case where the response legitimately isn't a business outcome.
