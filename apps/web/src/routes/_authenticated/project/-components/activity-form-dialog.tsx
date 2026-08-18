@@ -2,7 +2,6 @@ import { useForm } from "@tanstack/react-form";
 import { Loader2Icon } from "lucide-react";
 import { z } from "zod";
 import { Button } from "#/shared/components/ui/button.tsx";
-import { Checkbox } from "#/shared/components/ui/checkbox.tsx";
 import {
   Dialog,
   DialogBody,
@@ -14,7 +13,6 @@ import {
 } from "#/shared/components/ui/dialog.tsx";
 import {
   Field,
-  FieldDescription,
   FieldError,
   FieldLabel,
 } from "#/shared/components/ui/field.tsx";
@@ -415,49 +413,15 @@ function ActivityForm({
             )}
           </form.Field>
 
-          <div className="flex flex-col gap-3 sm:col-span-2 sm:flex-row sm:gap-8">
-            <form.Field name="displayEnabled">
-              {(field) => (
-                <Field
-                  orientation="horizontal"
-                  className="flex-row-reverse justify-end gap-2"
-                >
-                  <Checkbox
-                    id={field.name}
-                    checked={field.state.value}
-                    onCheckedChange={(checked) => field.handleChange(!!checked)}
-                  />
-                  <div>
-                    <FieldLabel htmlFor={field.name}>H5 展示开关</FieldLabel>
-                    <FieldDescription>
-                      独立于发布状态——已上架也可以临时关闭展示。
-                    </FieldDescription>
-                  </div>
-                </Field>
-              )}
-            </form.Field>
-
-            <form.Field name="registrationEnabled">
-              {(field) => (
-                <Field
-                  orientation="horizontal"
-                  className="flex-row-reverse justify-end gap-2"
-                >
-                  <Checkbox
-                    id={field.name}
-                    checked={field.state.value}
-                    onCheckedChange={(checked) => field.handleChange(!!checked)}
-                  />
-                  <div>
-                    <FieldLabel htmlFor={field.name}>报名开关</FieldLabel>
-                    <FieldDescription>
-                      只控制 H5 能否提交新报名，不影响已有报名记录。
-                    </FieldDescription>
-                  </div>
-                </Field>
-              )}
-            </form.Field>
-          </div>
+          {/**
+           * H5 展示开关和报名开关本期不出现在表单里：两个都只控制 H5 的行为，
+           * 而 H5 不建（AGENTS.md）。
+           *
+           * ⚠️ 只是**不渲染控件，不是从表单里拿掉字段**。`defaultValues` 照常
+           * 从活动读这两个值，`onSubmit` 照常原样交回去——否则编辑一次活动就
+           * 会把它们静默重置成 false，而界面上根本没有能让人看出这件事的东西。
+           * H5 上马时把这一段换回两个 Checkbox 即可，schema 和提交逻辑不用动。
+           */}
         </div>
 
         <form.Field name="description">
