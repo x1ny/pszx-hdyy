@@ -152,6 +152,18 @@ Before the monorepo split, production ran on plain Node because Nitro emitted a 
 
 `typeof Bun !== "undefined" ? Bun.version : process.version` in `modules/example/routes.ts`'s `getServerInfo` is the runtime probe pattern, and the only sanctioned reference to the `Bun` global.
 
+## Deployment
+
+One Docker image, one process, one port: **both apps run inside the same Hono**. `bun build` bundles `apps/server` into a single file with its dependencies inlined, so the runtime stage carries no `node_modules`; `apps/web`'s Vite output is served by `serveStatic` mounted *before* the session middleware, so static assets never hit the database.
+
+Same-origin is the whole point — no CORS, nothing to add to `trustedOrigins`, and no build-time `VITE_API_URL`, which is what lets one image run in every environment. Static serving only activates when `WEB_DIST_DIR` is set, so development is untouched and Vite keeps serving assets there.
+
+```bash
+bun run docker:build-push v0.1.0
+```
+
+See [docker/README.md](docker/README.md) for the environment variables, the file-storage volume requirement, and why database migrations are deliberately left out of the container.
+
 ## Styling
 
 [Tailwind CSS](https://tailwindcss.com/) v4 with [shadcn/ui](https://ui.shadcn.com/).

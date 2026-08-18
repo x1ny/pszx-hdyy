@@ -10,7 +10,10 @@
   "scripts": {
     "predev": "docker compose up -d",
     "dev": "bun scripts/dev.ts",
-    "build": "bun run --filter '@repo/web' build",
+    "build": "bun run --filter '@repo/*' build",
+    "release": "bun scripts/release.ts",
+    "docker:build-push": "bun scripts/build-push.ts",
+    "deploy:test": "bun scripts/deploy-test.ts",
     "typecheck": "bun run --filter '@repo/*' typecheck && bunx tsc -p scripts/tsconfig.json --noEmit",
     "test": "bun run --filter '@repo/web' test",
     "db:push": "bun run --filter '@repo/server' db:push",

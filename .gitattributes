@@ -1,0 +1,3 @@
+# entrypoint 以 CRLF 提交的话，容器里 `#!/bin/sh\r` 会报
+# "no such file or directory"，且报错完全不提行尾。强制 LF。
+*.sh text eol=lf

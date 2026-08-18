@@ -1,0 +1,27 @@
+# Docker 只读取构建上下文根目录的这一份。放到 docker/ 下不会生效
+# （BuildKit 只认 context 根的 .dockerignore，或与 Dockerfile 同名的
+# docker/Dockerfile.dockerignore）。
+node_modules
+**/node_modules
+dist
+**/dist
+.git
+.gitignore
+
+# 绝不能进镜像：真实密钥
+.env
+.env.*
+!.env.example
+
+.claude
+.agents
+.cursorignore
+.cursorrules
+.vscode
+docs
+*.log
+*.local
+**/data/files
+.tanstack
+.output
+todos.json

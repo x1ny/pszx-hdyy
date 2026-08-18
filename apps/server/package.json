@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "bun --env-file=../../.env --hot run src/index.ts",
     "start": "bun --env-file=../../.env run src/index.ts",
+    "build": "bun build src/index.ts --target=bun --outfile dist/server.js",
     "auth:generate": "bun run @better-auth/cli generate --config src/modules/auth/auth.ts --output src/modules/auth/schema.ts",
     "db:push": "bun --env-file=../../.env run drizzle-kit push",
     "db:generate": "bun --env-file=../../.env run drizzle-kit generate",

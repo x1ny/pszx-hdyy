@@ -1,6 +1,6 @@
 {
   "extends": "../tsconfig.base.json",
-  "include": ["./dev.ts"],
+  "include": ["./dev.ts", "./release.ts", "./build-push.ts", "./deploy-test.ts", "./deploy-test.config.ts"],
   "compilerOptions": {
     "types": ["bun", "node"]
   }

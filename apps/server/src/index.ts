@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { serveStatic } from "hono/bun";
 import { activityConfigRoutes } from "./modules/activity-config/routes";
 import { agendaRoutes } from "./modules/agenda/routes";
 import { authHandler, sessionMiddleware, type Variables } from "./modules/auth";
@@ -20,6 +21,55 @@ import { supplierRoutes } from "./modules/supplier/routes";
 import { err } from "./shared/result";
 
 const app = new Hono<{ Variables: Variables }>();
+
+// 生产镜像把 web 的构建产物和 server 跑在同一个 Hono 里（见 docker/README.md）。
+// 只有设了 WEB_DIST_DIR 才挂载 —— 开发环境不设，静态资源仍归 Vite，这里等于不存在。
+const webDistDir = process.env.WEB_DIST_DIR?.trim();
+
+if (webDistDir) {
+  const staticFiles = serveStatic({
+    root: webDistDir,
+    onFound: (path, c) => {
+      // Vite 的产物文件名带内容哈希，可以永久缓存；index.html 不带，缓存了就
+      // 再也发不出新版本。
+      c.header(
+        "Cache-Control",
+        path.replace(/\\/g, "/").includes("/assets/")
+          ? "public, max-age=31536000, immutable"
+          : "no-cache",
+      );
+    },
+  });
+  const indexHtml = serveStatic({
+    root: webDistDir,
+    path: "index.html",
+    // 回落这条路径也必须显式 no-cache。不给头的话浏览器会启发式缓存 HTML，
+    // 发版后深链拿到旧 index.html 去引用已经删掉的哈希资源，白屏。
+    onFound: (_path, c) => {
+      c.header("Cache-Control", "no-cache");
+    },
+  });
+
+  // 挂在 sessionMiddleware **之前**。挂在后面的话，每个 js/css/字体请求都会
+  // 触发一次 auth.api.getSession() 查库 —— 一次首屏加载几十个静态请求，
+  // 就是几十次没有任何意义的数据库往返。
+  app.use("*", async (c, next) => {
+    // /api 一律不碰。少了这个判断，打错的接口路径会返回 200 的 index.html，
+    // 前端把 "<!doctype html>" 塞进 JSON.parse，报错信息会完全指错方向。
+    if (c.req.path.startsWith("/api")) {
+      return next();
+    }
+
+    // 找得到文件就直接返回；找不到（/projects/123 这类前端路由被直接刷新）
+    // 回落到 index.html 交给 TanStack Router。
+    const fileResponse = await staticFiles(c, async () => {});
+    if (fileResponse) {
+      return fileResponse;
+    }
+
+    return indexHtml(c, next);
+  });
+}
 
 // Order matters — see modules/auth/routes.ts for why Better Auth is mounted
 // before the session middleware.
