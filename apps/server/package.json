@@ -15,12 +15,14 @@
     "db:generate": "bun --env-file=../../.env run drizzle-kit generate",
     "db:migrate": "bun --env-file=../../.env run drizzle-kit migrate",
     "db:studio": "bun --env-file=../../.env run drizzle-kit studio",
+    "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.9.0",
     "better-auth": "^1.6.26",
     "drizzle-orm": "^0.45.2",
+    "fflate": "^0.8.3",
     "hono": "^4.13.0",
     "pg": "^8.22.0",
     "zod": "^4.4.3"
