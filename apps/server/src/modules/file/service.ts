@@ -88,3 +88,21 @@ export async function findFileForRead(fileId: string) {
   const content = await fileStorage.open(row.storageKey);
   return content ? { file: row, content } : null;
 }
+
+/**
+ * 读出整份文件内容。
+ *
+ * `findFileForRead` 返回的是流（HTTP 下载直接透传，不占内存）；需要在服务端
+ * **处理**文件内容的模块（邀请函按 docx 模板渲染）拿不了流，得要完整字节。
+ * 放在这里而不是让调用方自己 collect：storageKey 到字节的转换属于 file 模块
+ * 的职责，外面不该知道存储是本地磁盘还是别的什么。
+ */
+export async function readFileBytes(fileId: string) {
+  const found = await findFileForRead(fileId);
+  if (!found) return null;
+
+  return {
+    file: found.file,
+    bytes: new Uint8Array(await new Response(found.content.body).arrayBuffer()),
+  };
+}

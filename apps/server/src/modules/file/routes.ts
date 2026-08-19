@@ -2,6 +2,7 @@ import { zValidator } from "@hono/zod-validator";
 import { bodyLimit } from "hono/body-limit";
 import { Hono } from "hono";
 import { fileMaxSizeBytes } from "../../infra/file-config";
+import { contentDisposition } from "../../shared/content-disposition";
 import { err, ok } from "../../shared/result";
 import { findFileForRead, storeUploadedFile } from "./service";
 import { FileParams, FileQuery, UploadFileInput } from "./validation";
@@ -16,14 +17,6 @@ const uploadTooLarge = () =>
   validationError(
     `文件大小不能超过 ${Math.floor(fileMaxSizeBytes / 1024 / 1024)} MB`,
   );
-
-const contentDisposition = (name: string, download: boolean) => {
-  const safeName =
-    name.replace(/[\r\n"]/g, "_").replace(/[^\u0020-\u007e]/g, "_") ||
-    "file";
-  const encodedName = encodeURIComponent(name);
-  return `${download ? "attachment" : "inline"}; filename="${safeName}"; filename*=UTF-8''${encodedName}`;
-};
 
 // File upload and file reads are intentionally public for now.
 export const fileRoutes = new Hono().post(
