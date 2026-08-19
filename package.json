@@ -15,7 +15,7 @@
     "docker:build-push": "bun scripts/build-push.ts",
     "deploy:test": "bun scripts/deploy-test.ts",
     "typecheck": "bun run --filter '@repo/*' typecheck && bunx tsc -p scripts/tsconfig.json --noEmit",
-    "test": "bun run --filter '@repo/web' test",
+    "test": "bun run --filter '@repo/*' test",
     "db:push": "bun run --filter '@repo/server' db:push",
     "db:generate": "bun run --filter '@repo/server' db:generate",
     "db:migrate": "bun run --filter '@repo/server' db:migrate",

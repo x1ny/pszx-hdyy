@@ -20,21 +20,20 @@ import { Route as AuthenticatedProjectListRouteImport } from './routes/_authenti
 import { Route as AuthenticatedSupplierIndexRouteImport } from './routes/_authenticated/supplier/index'
 import { Route as AuthenticatedSystemRoleRouteImport } from './routes/_authenticated/system/role'
 import { Route as AuthenticatedSystemUserRouteImport } from './routes/_authenticated/system/user'
-import { Route as AuthenticatedInvitationBatchIndexRouteImport } from './routes/_authenticated/invitation/batch/index'
-import { Route as AuthenticatedInvitationGenerateIndexRouteImport } from './routes/_authenticated/invitation/generate/index'
 import { Route as AuthenticatedInvitationTemplateIndexRouteImport } from './routes/_authenticated/invitation/template/index'
 import { Route as AuthenticatedProjectProjectIdIndexRouteImport } from './routes/_authenticated/project/$projectId.index'
 import { Route as AuthenticatedProjectProjectIdMembersRouteImport } from './routes/_authenticated/project/$projectId.members'
 import { Route as AuthenticatedProjectProjectIdActivityActivityIdRouteImport } from './routes/_authenticated/project/$projectId_.activity.$activityId'
 import { Route as AuthenticatedProjectProjectIdActivityActivityIdIndexRouteImport } from './routes/_authenticated/project/$projectId_.activity.$activityId.index'
 import { Route as AuthenticatedProjectProjectIdActivityActivityIdConfigRouteImport } from './routes/_authenticated/project/$projectId_.activity.$activityId.config'
-import { Route as AuthenticatedProjectProjectIdActivityActivityIdInvitationsRouteImport } from './routes/_authenticated/project/$projectId_.activity.$activityId.invitations'
 import { Route as AuthenticatedProjectProjectIdActivityActivityIdMembersRouteImport } from './routes/_authenticated/project/$projectId_.activity.$activityId.members'
 import { Route as AuthenticatedProjectProjectIdActivityActivityIdRegistrationRouteImport } from './routes/_authenticated/project/$projectId_.activity.$activityId.registration'
 import { Route as AuthenticatedProjectProjectIdActivityActivityIdResourcesRouteImport } from './routes/_authenticated/project/$projectId_.activity.$activityId.resources'
 import { Route as AuthenticatedProjectProjectIdActivityActivityIdSeatingRouteImport } from './routes/_authenticated/project/$projectId_.activity.$activityId.seating'
 import { Route as AuthenticatedProjectProjectIdActivityActivityIdVenueRouteImport } from './routes/_authenticated/project/$projectId_.activity.$activityId.venue'
 import { Route as AuthenticatedProjectProjectIdActivityActivityIdAgendaIndexRouteImport } from './routes/_authenticated/project/$projectId_.activity.$activityId.agenda/index'
+import { Route as AuthenticatedProjectProjectIdActivityActivityIdInvitationsIndexRouteImport } from './routes/_authenticated/project/$projectId_.activity.$activityId.invitations/index'
+import { Route as AuthenticatedProjectProjectIdActivityActivityIdInvitationsGenerateRouteImport } from './routes/_authenticated/project/$projectId_.activity.$activityId.invitations.generate'
 import { Route as AuthenticatedProjectProjectIdActivityActivityIdResourceLedgerIndexRouteImport } from './routes/_authenticated/project/$projectId_.activity.$activityId.resource-ledger/index'
 
 const IndexRoute = IndexRouteImport.update({
@@ -95,18 +94,6 @@ const AuthenticatedSystemUserRoute = AuthenticatedSystemUserRouteImport.update({
   path: '/system/user',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedInvitationBatchIndexRoute =
-  AuthenticatedInvitationBatchIndexRouteImport.update({
-    id: '/invitation/batch/',
-    path: '/invitation/batch/',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
-const AuthenticatedInvitationGenerateIndexRoute =
-  AuthenticatedInvitationGenerateIndexRouteImport.update({
-    id: '/invitation/generate/',
-    path: '/invitation/generate/',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
 const AuthenticatedInvitationTemplateIndexRoute =
   AuthenticatedInvitationTemplateIndexRouteImport.update({
     id: '/invitation/template/',
@@ -141,12 +128,6 @@ const AuthenticatedProjectProjectIdActivityActivityIdConfigRoute =
   AuthenticatedProjectProjectIdActivityActivityIdConfigRouteImport.update({
     id: '/config',
     path: '/config',
-    getParentRoute: () => AuthenticatedProjectProjectIdActivityActivityIdRoute,
-  } as any)
-const AuthenticatedProjectProjectIdActivityActivityIdInvitationsRoute =
-  AuthenticatedProjectProjectIdActivityActivityIdInvitationsRouteImport.update({
-    id: '/invitations',
-    path: '/invitations',
     getParentRoute: () => AuthenticatedProjectProjectIdActivityActivityIdRoute,
   } as any)
 const AuthenticatedProjectProjectIdActivityActivityIdMembersRoute =
@@ -188,6 +169,24 @@ const AuthenticatedProjectProjectIdActivityActivityIdAgendaIndexRoute =
     path: '/agenda/',
     getParentRoute: () => AuthenticatedProjectProjectIdActivityActivityIdRoute,
   } as any)
+const AuthenticatedProjectProjectIdActivityActivityIdInvitationsIndexRoute =
+  AuthenticatedProjectProjectIdActivityActivityIdInvitationsIndexRouteImport.update(
+    {
+      id: '/invitations/',
+      path: '/invitations/',
+      getParentRoute: () =>
+        AuthenticatedProjectProjectIdActivityActivityIdRoute,
+    } as any,
+  )
+const AuthenticatedProjectProjectIdActivityActivityIdInvitationsGenerateRoute =
+  AuthenticatedProjectProjectIdActivityActivityIdInvitationsGenerateRouteImport.update(
+    {
+      id: '/invitations/generate',
+      path: '/invitations/generate',
+      getParentRoute: () =>
+        AuthenticatedProjectProjectIdActivityActivityIdRoute,
+    } as any,
+  )
 const AuthenticatedProjectProjectIdActivityActivityIdResourceLedgerIndexRoute =
   AuthenticatedProjectProjectIdActivityActivityIdResourceLedgerIndexRouteImport.update(
     {
@@ -210,20 +209,19 @@ export interface FileRoutesByFullPath {
   '/member/': typeof AuthenticatedMemberIndexRoute
   '/supplier/': typeof AuthenticatedSupplierIndexRoute
   '/project/$projectId/members': typeof AuthenticatedProjectProjectIdMembersRoute
-  '/invitation/batch/': typeof AuthenticatedInvitationBatchIndexRoute
-  '/invitation/generate/': typeof AuthenticatedInvitationGenerateIndexRoute
   '/invitation/template/': typeof AuthenticatedInvitationTemplateIndexRoute
   '/project/$projectId/': typeof AuthenticatedProjectProjectIdIndexRoute
   '/project/$projectId/activity/$activityId': typeof AuthenticatedProjectProjectIdActivityActivityIdRouteWithChildren
   '/project/$projectId/activity/$activityId/config': typeof AuthenticatedProjectProjectIdActivityActivityIdConfigRoute
-  '/project/$projectId/activity/$activityId/invitations': typeof AuthenticatedProjectProjectIdActivityActivityIdInvitationsRoute
   '/project/$projectId/activity/$activityId/members': typeof AuthenticatedProjectProjectIdActivityActivityIdMembersRoute
   '/project/$projectId/activity/$activityId/registration': typeof AuthenticatedProjectProjectIdActivityActivityIdRegistrationRoute
   '/project/$projectId/activity/$activityId/resources': typeof AuthenticatedProjectProjectIdActivityActivityIdResourcesRoute
   '/project/$projectId/activity/$activityId/seating': typeof AuthenticatedProjectProjectIdActivityActivityIdSeatingRoute
   '/project/$projectId/activity/$activityId/venue': typeof AuthenticatedProjectProjectIdActivityActivityIdVenueRoute
   '/project/$projectId/activity/$activityId/': typeof AuthenticatedProjectProjectIdActivityActivityIdIndexRoute
+  '/project/$projectId/activity/$activityId/invitations/generate': typeof AuthenticatedProjectProjectIdActivityActivityIdInvitationsGenerateRoute
   '/project/$projectId/activity/$activityId/agenda/': typeof AuthenticatedProjectProjectIdActivityActivityIdAgendaIndexRoute
+  '/project/$projectId/activity/$activityId/invitations/': typeof AuthenticatedProjectProjectIdActivityActivityIdInvitationsIndexRoute
   '/project/$projectId/activity/$activityId/resource-ledger/': typeof AuthenticatedProjectProjectIdActivityActivityIdResourceLedgerIndexRoute
 }
 export interface FileRoutesByTo {
@@ -237,19 +235,18 @@ export interface FileRoutesByTo {
   '/member': typeof AuthenticatedMemberIndexRoute
   '/supplier': typeof AuthenticatedSupplierIndexRoute
   '/project/$projectId/members': typeof AuthenticatedProjectProjectIdMembersRoute
-  '/invitation/batch': typeof AuthenticatedInvitationBatchIndexRoute
-  '/invitation/generate': typeof AuthenticatedInvitationGenerateIndexRoute
   '/invitation/template': typeof AuthenticatedInvitationTemplateIndexRoute
   '/project/$projectId': typeof AuthenticatedProjectProjectIdIndexRoute
   '/project/$projectId/activity/$activityId/config': typeof AuthenticatedProjectProjectIdActivityActivityIdConfigRoute
-  '/project/$projectId/activity/$activityId/invitations': typeof AuthenticatedProjectProjectIdActivityActivityIdInvitationsRoute
   '/project/$projectId/activity/$activityId/members': typeof AuthenticatedProjectProjectIdActivityActivityIdMembersRoute
   '/project/$projectId/activity/$activityId/registration': typeof AuthenticatedProjectProjectIdActivityActivityIdRegistrationRoute
   '/project/$projectId/activity/$activityId/resources': typeof AuthenticatedProjectProjectIdActivityActivityIdResourcesRoute
   '/project/$projectId/activity/$activityId/seating': typeof AuthenticatedProjectProjectIdActivityActivityIdSeatingRoute
   '/project/$projectId/activity/$activityId/venue': typeof AuthenticatedProjectProjectIdActivityActivityIdVenueRoute
   '/project/$projectId/activity/$activityId': typeof AuthenticatedProjectProjectIdActivityActivityIdIndexRoute
+  '/project/$projectId/activity/$activityId/invitations/generate': typeof AuthenticatedProjectProjectIdActivityActivityIdInvitationsGenerateRoute
   '/project/$projectId/activity/$activityId/agenda': typeof AuthenticatedProjectProjectIdActivityActivityIdAgendaIndexRoute
+  '/project/$projectId/activity/$activityId/invitations': typeof AuthenticatedProjectProjectIdActivityActivityIdInvitationsIndexRoute
   '/project/$projectId/activity/$activityId/resource-ledger': typeof AuthenticatedProjectProjectIdActivityActivityIdResourceLedgerIndexRoute
 }
 export interface FileRoutesById {
@@ -266,20 +263,19 @@ export interface FileRoutesById {
   '/_authenticated/member/': typeof AuthenticatedMemberIndexRoute
   '/_authenticated/supplier/': typeof AuthenticatedSupplierIndexRoute
   '/_authenticated/project/$projectId/members': typeof AuthenticatedProjectProjectIdMembersRoute
-  '/_authenticated/invitation/batch/': typeof AuthenticatedInvitationBatchIndexRoute
-  '/_authenticated/invitation/generate/': typeof AuthenticatedInvitationGenerateIndexRoute
   '/_authenticated/invitation/template/': typeof AuthenticatedInvitationTemplateIndexRoute
   '/_authenticated/project/$projectId/': typeof AuthenticatedProjectProjectIdIndexRoute
   '/_authenticated/project/$projectId_/activity/$activityId': typeof AuthenticatedProjectProjectIdActivityActivityIdRouteWithChildren
   '/_authenticated/project/$projectId_/activity/$activityId/config': typeof AuthenticatedProjectProjectIdActivityActivityIdConfigRoute
-  '/_authenticated/project/$projectId_/activity/$activityId/invitations': typeof AuthenticatedProjectProjectIdActivityActivityIdInvitationsRoute
   '/_authenticated/project/$projectId_/activity/$activityId/members': typeof AuthenticatedProjectProjectIdActivityActivityIdMembersRoute
   '/_authenticated/project/$projectId_/activity/$activityId/registration': typeof AuthenticatedProjectProjectIdActivityActivityIdRegistrationRoute
   '/_authenticated/project/$projectId_/activity/$activityId/resources': typeof AuthenticatedProjectProjectIdActivityActivityIdResourcesRoute
   '/_authenticated/project/$projectId_/activity/$activityId/seating': typeof AuthenticatedProjectProjectIdActivityActivityIdSeatingRoute
   '/_authenticated/project/$projectId_/activity/$activityId/venue': typeof AuthenticatedProjectProjectIdActivityActivityIdVenueRoute
   '/_authenticated/project/$projectId_/activity/$activityId/': typeof AuthenticatedProjectProjectIdActivityActivityIdIndexRoute
+  '/_authenticated/project/$projectId_/activity/$activityId/invitations/generate': typeof AuthenticatedProjectProjectIdActivityActivityIdInvitationsGenerateRoute
   '/_authenticated/project/$projectId_/activity/$activityId/agenda/': typeof AuthenticatedProjectProjectIdActivityActivityIdAgendaIndexRoute
+  '/_authenticated/project/$projectId_/activity/$activityId/invitations/': typeof AuthenticatedProjectProjectIdActivityActivityIdInvitationsIndexRoute
   '/_authenticated/project/$projectId_/activity/$activityId/resource-ledger/': typeof AuthenticatedProjectProjectIdActivityActivityIdResourceLedgerIndexRoute
 }
 export interface FileRouteTypes {
@@ -296,20 +292,19 @@ export interface FileRouteTypes {
     | '/member/'
     | '/supplier/'
     | '/project/$projectId/members'
-    | '/invitation/batch/'
-    | '/invitation/generate/'
     | '/invitation/template/'
     | '/project/$projectId/'
     | '/project/$projectId/activity/$activityId'
     | '/project/$projectId/activity/$activityId/config'
-    | '/project/$projectId/activity/$activityId/invitations'
     | '/project/$projectId/activity/$activityId/members'
     | '/project/$projectId/activity/$activityId/registration'
     | '/project/$projectId/activity/$activityId/resources'
     | '/project/$projectId/activity/$activityId/seating'
     | '/project/$projectId/activity/$activityId/venue'
     | '/project/$projectId/activity/$activityId/'
+    | '/project/$projectId/activity/$activityId/invitations/generate'
     | '/project/$projectId/activity/$activityId/agenda/'
+    | '/project/$projectId/activity/$activityId/invitations/'
     | '/project/$projectId/activity/$activityId/resource-ledger/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -323,19 +318,18 @@ export interface FileRouteTypes {
     | '/member'
     | '/supplier'
     | '/project/$projectId/members'
-    | '/invitation/batch'
-    | '/invitation/generate'
     | '/invitation/template'
     | '/project/$projectId'
     | '/project/$projectId/activity/$activityId/config'
-    | '/project/$projectId/activity/$activityId/invitations'
     | '/project/$projectId/activity/$activityId/members'
     | '/project/$projectId/activity/$activityId/registration'
     | '/project/$projectId/activity/$activityId/resources'
     | '/project/$projectId/activity/$activityId/seating'
     | '/project/$projectId/activity/$activityId/venue'
     | '/project/$projectId/activity/$activityId'
+    | '/project/$projectId/activity/$activityId/invitations/generate'
     | '/project/$projectId/activity/$activityId/agenda'
+    | '/project/$projectId/activity/$activityId/invitations'
     | '/project/$projectId/activity/$activityId/resource-ledger'
   id:
     | '__root__'
@@ -351,20 +345,19 @@ export interface FileRouteTypes {
     | '/_authenticated/member/'
     | '/_authenticated/supplier/'
     | '/_authenticated/project/$projectId/members'
-    | '/_authenticated/invitation/batch/'
-    | '/_authenticated/invitation/generate/'
     | '/_authenticated/invitation/template/'
     | '/_authenticated/project/$projectId/'
     | '/_authenticated/project/$projectId_/activity/$activityId'
     | '/_authenticated/project/$projectId_/activity/$activityId/config'
-    | '/_authenticated/project/$projectId_/activity/$activityId/invitations'
     | '/_authenticated/project/$projectId_/activity/$activityId/members'
     | '/_authenticated/project/$projectId_/activity/$activityId/registration'
     | '/_authenticated/project/$projectId_/activity/$activityId/resources'
     | '/_authenticated/project/$projectId_/activity/$activityId/seating'
     | '/_authenticated/project/$projectId_/activity/$activityId/venue'
     | '/_authenticated/project/$projectId_/activity/$activityId/'
+    | '/_authenticated/project/$projectId_/activity/$activityId/invitations/generate'
     | '/_authenticated/project/$projectId_/activity/$activityId/agenda/'
+    | '/_authenticated/project/$projectId_/activity/$activityId/invitations/'
     | '/_authenticated/project/$projectId_/activity/$activityId/resource-ledger/'
   fileRoutesById: FileRoutesById
 }
@@ -453,20 +446,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSystemUserRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/invitation/batch/': {
-      id: '/_authenticated/invitation/batch/'
-      path: '/invitation/batch'
-      fullPath: '/invitation/batch/'
-      preLoaderRoute: typeof AuthenticatedInvitationBatchIndexRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    '/_authenticated/invitation/generate/': {
-      id: '/_authenticated/invitation/generate/'
-      path: '/invitation/generate'
-      fullPath: '/invitation/generate/'
-      preLoaderRoute: typeof AuthenticatedInvitationGenerateIndexRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
     '/_authenticated/invitation/template/': {
       id: '/_authenticated/invitation/template/'
       path: '/invitation/template'
@@ -507,13 +486,6 @@ declare module '@tanstack/react-router' {
       path: '/config'
       fullPath: '/project/$projectId/activity/$activityId/config'
       preLoaderRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdConfigRouteImport
-      parentRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdRoute
-    }
-    '/_authenticated/project/$projectId_/activity/$activityId/invitations': {
-      id: '/_authenticated/project/$projectId_/activity/$activityId/invitations'
-      path: '/invitations'
-      fullPath: '/project/$projectId/activity/$activityId/invitations'
-      preLoaderRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdInvitationsRouteImport
       parentRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdRoute
     }
     '/_authenticated/project/$projectId_/activity/$activityId/members': {
@@ -558,6 +530,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdAgendaIndexRouteImport
       parentRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdRoute
     }
+    '/_authenticated/project/$projectId_/activity/$activityId/invitations/': {
+      id: '/_authenticated/project/$projectId_/activity/$activityId/invitations/'
+      path: '/invitations'
+      fullPath: '/project/$projectId/activity/$activityId/invitations/'
+      preLoaderRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdInvitationsIndexRouteImport
+      parentRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdRoute
+    }
+    '/_authenticated/project/$projectId_/activity/$activityId/invitations/generate': {
+      id: '/_authenticated/project/$projectId_/activity/$activityId/invitations/generate'
+      path: '/invitations/generate'
+      fullPath: '/project/$projectId/activity/$activityId/invitations/generate'
+      preLoaderRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdInvitationsGenerateRouteImport
+      parentRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdRoute
+    }
     '/_authenticated/project/$projectId_/activity/$activityId/resource-ledger/': {
       id: '/_authenticated/project/$projectId_/activity/$activityId/resource-ledger/'
       path: '/resource-ledger'
@@ -588,14 +574,15 @@ const AuthenticatedProjectProjectIdRouteWithChildren =
 
 interface AuthenticatedProjectProjectIdActivityActivityIdRouteChildren {
   AuthenticatedProjectProjectIdActivityActivityIdConfigRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdConfigRoute
-  AuthenticatedProjectProjectIdActivityActivityIdInvitationsRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdInvitationsRoute
   AuthenticatedProjectProjectIdActivityActivityIdMembersRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdMembersRoute
   AuthenticatedProjectProjectIdActivityActivityIdRegistrationRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdRegistrationRoute
   AuthenticatedProjectProjectIdActivityActivityIdResourcesRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdResourcesRoute
   AuthenticatedProjectProjectIdActivityActivityIdSeatingRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdSeatingRoute
   AuthenticatedProjectProjectIdActivityActivityIdVenueRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdVenueRoute
   AuthenticatedProjectProjectIdActivityActivityIdIndexRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdIndexRoute
+  AuthenticatedProjectProjectIdActivityActivityIdInvitationsGenerateRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdInvitationsGenerateRoute
   AuthenticatedProjectProjectIdActivityActivityIdAgendaIndexRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdAgendaIndexRoute
+  AuthenticatedProjectProjectIdActivityActivityIdInvitationsIndexRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdInvitationsIndexRoute
   AuthenticatedProjectProjectIdActivityActivityIdResourceLedgerIndexRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdResourceLedgerIndexRoute
 }
 
@@ -603,8 +590,6 @@ const AuthenticatedProjectProjectIdActivityActivityIdRouteChildren: Authenticate
   {
     AuthenticatedProjectProjectIdActivityActivityIdConfigRoute:
       AuthenticatedProjectProjectIdActivityActivityIdConfigRoute,
-    AuthenticatedProjectProjectIdActivityActivityIdInvitationsRoute:
-      AuthenticatedProjectProjectIdActivityActivityIdInvitationsRoute,
     AuthenticatedProjectProjectIdActivityActivityIdMembersRoute:
       AuthenticatedProjectProjectIdActivityActivityIdMembersRoute,
     AuthenticatedProjectProjectIdActivityActivityIdRegistrationRoute:
@@ -617,8 +602,12 @@ const AuthenticatedProjectProjectIdActivityActivityIdRouteChildren: Authenticate
       AuthenticatedProjectProjectIdActivityActivityIdVenueRoute,
     AuthenticatedProjectProjectIdActivityActivityIdIndexRoute:
       AuthenticatedProjectProjectIdActivityActivityIdIndexRoute,
+    AuthenticatedProjectProjectIdActivityActivityIdInvitationsGenerateRoute:
+      AuthenticatedProjectProjectIdActivityActivityIdInvitationsGenerateRoute,
     AuthenticatedProjectProjectIdActivityActivityIdAgendaIndexRoute:
       AuthenticatedProjectProjectIdActivityActivityIdAgendaIndexRoute,
+    AuthenticatedProjectProjectIdActivityActivityIdInvitationsIndexRoute:
+      AuthenticatedProjectProjectIdActivityActivityIdInvitationsIndexRoute,
     AuthenticatedProjectProjectIdActivityActivityIdResourceLedgerIndexRoute:
       AuthenticatedProjectProjectIdActivityActivityIdResourceLedgerIndexRoute,
   }
@@ -637,8 +626,6 @@ interface AuthenticatedRouteChildren {
   AuthenticatedSystemUserRoute: typeof AuthenticatedSystemUserRoute
   AuthenticatedMemberIndexRoute: typeof AuthenticatedMemberIndexRoute
   AuthenticatedSupplierIndexRoute: typeof AuthenticatedSupplierIndexRoute
-  AuthenticatedInvitationBatchIndexRoute: typeof AuthenticatedInvitationBatchIndexRoute
-  AuthenticatedInvitationGenerateIndexRoute: typeof AuthenticatedInvitationGenerateIndexRoute
   AuthenticatedInvitationTemplateIndexRoute: typeof AuthenticatedInvitationTemplateIndexRoute
   AuthenticatedProjectProjectIdActivityActivityIdRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdRouteWithChildren
 }
@@ -653,10 +640,6 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedSystemUserRoute: AuthenticatedSystemUserRoute,
   AuthenticatedMemberIndexRoute: AuthenticatedMemberIndexRoute,
   AuthenticatedSupplierIndexRoute: AuthenticatedSupplierIndexRoute,
-  AuthenticatedInvitationBatchIndexRoute:
-    AuthenticatedInvitationBatchIndexRoute,
-  AuthenticatedInvitationGenerateIndexRoute:
-    AuthenticatedInvitationGenerateIndexRoute,
   AuthenticatedInvitationTemplateIndexRoute:
     AuthenticatedInvitationTemplateIndexRoute,
   AuthenticatedProjectProjectIdActivityActivityIdRoute:

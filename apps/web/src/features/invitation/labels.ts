@@ -1,9 +1,4 @@
-export {
-  ISSUER_LABELS,
-  ISSUER_VALUES,
-  ISSUER_VISUAL,
-} from "../-shared/issuer-visual.ts";
-import type { InvitationTemplateStatus } from "./-queries";
+import type { InvitationTemplateStatus } from "./queries";
 
 export const TEMPLATE_STATUS_LABELS = {
   enabled: "启用",
@@ -30,3 +25,18 @@ const dateTimeFormat = new Intl.DateTimeFormat("zh-CN", {
 
 export const formatDateTime = (iso: string | null | undefined) =>
   iso ? dateTimeFormat.format(new Date(iso)) : "-";
+
+/** 今天的 ISO 日期。手拼而不是 toISOString()，后者按 UTC 切，东八区半夜会差一天。 */
+export const todayIsoDate = () => {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+};
+
+/** 排版用的手机号打码，不是权限控制——完整号码就在同一个响应体里。 */
+export const maskMobile = (mobile?: string | null) => {
+  if (!mobile) return "-";
+  return mobile.length < 7
+    ? mobile
+    : `${mobile.slice(0, 3)}****${mobile.slice(-4)}`;
+};

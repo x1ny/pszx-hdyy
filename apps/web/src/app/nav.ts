@@ -36,15 +36,16 @@ export const navMain: NavItem[] = [
   },
   { title: "供应商管理", icon: Truck, to: "/supplier" },
   { title: "人员管理", icon: UsersRound, to: "/member" },
-  {
-    title: "邀请函管理",
-    icon: MailIcon,
-    children: [
-      { title: "模板管理", to: "/invitation/template" },
-      { title: "生成邀请函", to: "/invitation/generate" },
-      { title: "生成记录", to: "/invitation/batch" },
-    ],
-  },
+  /**
+   * 只剩模板一项，所以不套折叠分组。
+   *
+   * 生成邀请函和生成记录都挪进了活动详情的「邀请函」标签页——它们全都需要活动
+   * 上下文才能工作：选人只能从**本活动的活动人员**里选，一份邀请函的唯一性也是
+   * 按 (活动, 人员) 定的。放在全局菜单里，第一步永远是「先选一个活动」。
+   *
+   * 模板留在全局：三份真实模板是按发函主体（联盟/商会/专班）分的，不按活动分。
+   */
+  { title: "邀请函模板", icon: MailIcon, to: "/invitation/template" },
   {
     title: "系统管理",
     icon: Settings,

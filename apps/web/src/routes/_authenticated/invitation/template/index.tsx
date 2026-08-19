@@ -1,9 +1,26 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { MailPlusIcon, PlusIcon, SearchIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
+import {
+  TEMPLATE_STATUS_CHIP,
+  TEMPLATE_STATUS_LABELS,
+  TEMPLATE_STATUS_VALUES,
+  formatDateTime,
+} from "#/features/invitation/labels";
+import {
+  type InvitationTemplate,
+  type InvitationTemplateFormValues,
+  createInvitationTemplate,
+  deleteInvitationTemplate,
+  getInvitationTemplate,
+  invitationTemplateKeys,
+  invitationTemplateListQueryOptions,
+  setInvitationTemplateStatus,
+  updateInvitationTemplate,
+} from "#/features/invitation/queries";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,7 +31,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "#/shared/components/ui/alert-dialog.tsx";
-import { Button, buttonVariants } from "#/shared/components/ui/button.tsx";
+import { Button } from "#/shared/components/ui/button.tsx";
 import {
   Empty,
   EmptyDescription,
@@ -42,29 +59,9 @@ import {
 import { cn } from "#/shared/lib/utils.ts";
 import { TemplateFormDialog } from "./-components/template-form-dialog";
 import { TemplatePreviewDialog } from "./-components/template-preview-dialog";
-import {
-  type InvitationTemplate,
-  type InvitationTemplateFormValues,
-  createInvitationTemplate,
-  deleteInvitationTemplate,
-  getInvitationTemplate,
-  invitationTemplateKeys,
-  invitationTemplateListQueryOptions,
-  setInvitationTemplateStatus,
-  updateInvitationTemplate,
-} from "./-queries";
-import {
-  ISSUER_LABELS,
-  ISSUER_VALUES,
-  TEMPLATE_STATUS_CHIP,
-  TEMPLATE_STATUS_LABELS,
-  TEMPLATE_STATUS_VALUES,
-  formatDateTime,
-} from "./-utils";
 
 const TemplateSearchSchema = z.object({
   name: z.string().optional().catch(undefined),
-  issuer: z.enum(ISSUER_VALUES).optional().catch(undefined),
   status: z.enum(TEMPLATE_STATUS_VALUES).optional().catch(undefined),
   page: z.number().int().min(1).default(1).catch(1),
   pageSize: z.number().int().min(1).max(100).default(10).catch(10),
@@ -77,11 +74,6 @@ export const Route = createFileRoute("/_authenticated/invitation/template/")({
     context.queryClient.ensureQueryData(invitationTemplateListQueryOptions(deps)),
   component: TemplatePage,
 });
-
-const ISSUER_FILTER_ITEMS = [
-  { value: null, label: "全部发函主体" },
-  ...ISSUER_VALUES.map((value) => ({ value, label: ISSUER_LABELS[value] })),
-];
 
 const STATUS_FILTER_ITEMS = [
   { value: null, label: "全部状态" },
@@ -101,9 +93,7 @@ function TemplatePage() {
   const [nameInput, setNameInput] = useState(search.name ?? "");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<InvitationTemplate>();
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewTemplate, setPreviewTemplate] = useState<InvitationTemplate>();
+  const [previewFileId, setPreviewFileId] = useState<string>();
   const [pendingDelete, setPendingDelete] = useState<InvitationTemplate>();
 
   const listQuery = useQuery(invitationTemplateListQueryOptions(search));
@@ -167,27 +157,8 @@ function TemplatePage() {
     setFormOpen(true);
   };
 
-  const handlePreview = async (template: InvitationTemplate) => {
-    setPreviewOpen(true);
-    setPreviewLoading(true);
-    setPreviewTemplate(undefined);
-    try {
-      const detail = await getInvitationTemplate(template.id);
-      if (!detail) {
-        toast.error("模板不存在");
-        setPreviewOpen(false);
-        return;
-      }
-      setPreviewTemplate(detail);
-    } finally {
-      setPreviewLoading(false);
-    }
-  };
-
   const rangeStart = total === 0 ? 0 : (search.page - 1) * search.pageSize + 1;
   const rangeEnd = Math.min(search.page * search.pageSize, total);
-  const hasPrev = search.page > 1;
-  const hasNext = rangeEnd < total;
 
   return (
     <div className="flex flex-1 flex-col gap-4">
@@ -197,9 +168,9 @@ function TemplatePage() {
             <MailPlusIcon className="size-5" />
           </div>
           <div>
-            <h1 className="font-semibold text-xl tracking-tight">邀请函模板管理</h1>
+            <h1 className="font-semibold text-xl tracking-tight">邀请函模板</h1>
             <p className="text-muted-foreground text-sm">
-              维护邀请函正文、附则、联系方式等可复用的模板。
+              上传 .docx 作为版式来源；生成邀请函在活动详情的「邀请函」页发起。
             </p>
           </div>
         </div>
@@ -230,23 +201,6 @@ function TemplatePage() {
             onChange={(event) => setNameInput(event.target.value)}
           />
         </form>
-
-        <Select
-          items={ISSUER_FILTER_ITEMS}
-          value={search.issuer ?? null}
-          onValueChange={(value) => applyFilter({ issuer: value ?? undefined })}
-        >
-          <SelectTrigger className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {ISSUER_FILTER_ITEMS.map((item) => (
-              <SelectItem key={item.value ?? "all"} value={item.value}>
-                {item.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
 
         <Select
           items={STATUS_FILTER_ITEMS}
@@ -282,8 +236,8 @@ function TemplatePage() {
           <TableHeader className="bg-muted/60">
             <TableRow className="hover:bg-transparent">
               <TableHead className="min-w-40">模板名称</TableHead>
-              <TableHead>发函主体</TableHead>
               <TableHead className="min-w-40">适用说明</TableHead>
+              <TableHead>变量</TableHead>
               <TableHead>状态</TableHead>
               <TableHead>更新时间</TableHead>
               <TableHead className="text-center">操作</TableHead>
@@ -312,86 +266,84 @@ function TemplatePage() {
                       </EmptyMedia>
                       <EmptyTitle>没有匹配的模板</EmptyTitle>
                       <EmptyDescription>
-                        换个筛选条件，或者新增一个模板。
+                        换个筛选条件，或者上传一份 .docx 新增模板。
                       </EmptyDescription>
                     </EmptyHeader>
                   </Empty>
                 </TableCell>
               </TableRow>
             ) : (
-              list.map((template) => (
-                <TableRow key={template.id}>
-                  <TableCell className="font-medium">{template.name}</TableCell>
-                  <TableCell>{ISSUER_LABELS[template.issuer]}</TableCell>
-                  <TableCell className="max-w-64 truncate text-muted-foreground">
-                    {template.applicableDesc || "-"}
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 font-medium text-xs",
-                        TEMPLATE_STATUS_CHIP[template.status],
-                      )}
-                    >
-                      {TEMPLATE_STATUS_LABELS[template.status]}
-                    </span>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-muted-foreground">
-                    {formatDateTime(template.updatedAt)}
-                  </TableCell>
-                  <TableCell className="text-center whitespace-nowrap">
-                    <div className="inline-flex items-center gap-1">
-                      <Link
-                        to="/invitation/generate"
-                        search={{ templateId: template.id }}
-                        className={buttonVariants({
-                          variant: "ghost",
-                          size: "sm",
-                          className: "text-primary hover:text-primary",
-                        })}
+              list.map((template) => {
+                const custom = template.variables.filter(
+                  (item) => item.kind === "custom",
+                ).length;
+                return (
+                  <TableRow key={template.id}>
+                    <TableCell className="font-medium">{template.name}</TableCell>
+                    <TableCell className="max-w-64 truncate text-muted-foreground">
+                      {template.applicableDesc || "-"}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                      {template.variables.length === 0
+                        ? "无"
+                        : `${template.variables.length} 个 · ${custom} 个需填写`}
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 font-medium text-xs",
+                          TEMPLATE_STATUS_CHIP[template.status],
+                        )}
                       >
-                        生成
-                      </Link>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-primary hover:text-primary"
-                        onClick={() => handlePreview(template)}
-                      >
-                        预览
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-primary hover:text-primary"
-                        onClick={() => handleEdit(template)}
-                      >
-                        编辑
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-primary hover:text-primary"
-                        disabled={
-                          statusMutation.isPending &&
-                          statusMutation.variables?.id === template.id
-                        }
-                        onClick={() => statusMutation.mutate(template)}
-                      >
-                        {template.status === "enabled" ? "停用" : "启用"}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => setPendingDelete(template)}
-                      >
-                        删除
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
+                        {TEMPLATE_STATUS_LABELS[template.status]}
+                      </span>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                      {formatDateTime(template.updatedAt)}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-center">
+                      <div className="inline-flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-primary hover:text-primary"
+                          onClick={() => setPreviewFileId(template.templateFileId)}
+                        >
+                          预览
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-primary hover:text-primary"
+                          onClick={() => handleEdit(template)}
+                        >
+                          编辑
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-primary hover:text-primary"
+                          disabled={
+                            statusMutation.isPending &&
+                            statusMutation.variables?.id === template.id
+                          }
+                          onClick={() => statusMutation.mutate(template)}
+                        >
+                          {template.status === "enabled" ? "停用" : "启用"}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setPendingDelete(template)}
+                        >
+                          删除
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
@@ -424,7 +376,7 @@ function TemplatePage() {
           <Button
             variant="outline"
             size="sm"
-            disabled={!hasPrev}
+            disabled={search.page <= 1}
             onClick={() =>
               navigate({ search: (prev) => ({ ...prev, page: prev.page - 1 }) })
             }
@@ -434,7 +386,7 @@ function TemplatePage() {
           <Button
             variant="outline"
             size="sm"
-            disabled={!hasNext}
+            disabled={rangeEnd >= total}
             onClick={() =>
               navigate({ search: (prev) => ({ ...prev, page: prev.page + 1 }) })
             }
@@ -456,12 +408,10 @@ function TemplatePage() {
       />
 
       <TemplatePreviewDialog
-        open={previewOpen}
-        loading={previewLoading}
-        template={previewTemplate}
+        open={!!previewFileId}
+        templateFileId={previewFileId}
         onOpenChange={(open) => {
-          setPreviewOpen(open);
-          if (!open) setPreviewTemplate(undefined);
+          if (!open) setPreviewFileId(undefined);
         }}
       />
 
@@ -475,7 +425,8 @@ function TemplatePage() {
           <AlertDialogHeader>
             <AlertDialogTitle>确认删除该模板？</AlertDialogTitle>
             <AlertDialogDescription>
-              「{pendingDelete?.name}」将被永久删除，该操作不可恢复。
+              「{pendingDelete?.name}」将被永久删除，该操作不可恢复。已经用它生成
+              过邀请函的模板不能删除，只能停用。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
