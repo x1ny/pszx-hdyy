@@ -351,7 +351,7 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
 
   /**
    * 保存前预览：同样吃 fileId，用户不必先保存一个自己都没看过的模板。
-   * 返回的是真实渲染出来的 .docx，前端用 docx-preview 在页面里渲染。
+   * 返回的是真实渲染出来的 .docx，前端用 @silurus/ooxml 在 Canvas 里渲染。
    */
   .post(
     "/template/preview",

@@ -28,8 +28,8 @@ export function TemplatePreviewDialog({
         <DialogHeader>
           <DialogTitle>模板预览</DialogTitle>
           <DialogDescription>
-            用样例数据渲染的效果。页面内预览受浏览器排版能力限制，印章位置、红头
-            线条可能与 Word 里略有出入，最终以下载的文件为准。
+            用样例数据渲染的效果。预览直接按原文件分页绘制；设备缺少模板字体时，
+            字形可能与 Word 里略有差异。
           </DialogDescription>
         </DialogHeader>
         <DialogBody>

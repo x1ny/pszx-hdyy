@@ -1,7 +1,109 @@
+import { DocxScrollViewer } from "@silurus/ooxml/docx";
 import { useQuery } from "@tanstack/react-query";
-import { renderAsync } from "docx-preview";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { AlertCircleIcon, Loader2Icon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { cn } from "#/shared/lib/utils";
+
+const embeddedFontTag =
+  /<(?:\w+:)?embed(?:Regular|Bold|Italic|BoldItalic)\b[^>]*\/>/g;
+const paragraphTag = /<w:p\b[^>]*>[\s\S]*?<\/w:p>/g;
+const paragraphPropertiesTag = /<w:pPr\b[^>]*>[\s\S]*?<\/w:pPr>/;
+const runTag = /<w:r\b[^>]*>[\s\S]*?<\/w:r>/g;
+const textTag = /<w:t\b[^>]*>([\s\S]*?)<\/w:t>/g;
+const singleUnderlineTag = /<w:u\b[^>]*w:val=["']single["'][^>]*\/>/;
+const redColorTag = /<w:color\b[^>]*w:val=["']FF0000["'][^>]*\/>/i;
+const fontSizeTag = /<w:sz\b[^>]*w:val=["'](\d+)["'][^>]*\/>/g;
+const spacingTag = /<w:spacing\b[^>]*\/>/;
+const exactLineRuleAttribute = /w:lineRule=["']exact["']/;
+const lineHeightAttribute = /w:line=["'](\d+)["']/;
+
+/**
+ * WPS/Word 会把“整段红色下划线空格”按两端对齐拉伸到正文宽度；
+ * @silurus/ooxml 目前按普通空格宽度排版，字号较大的那一段会换行，多画一截。
+ * 对这种纯装饰段落，等价地改成段落底边框：宽度、上下间距仍由原段落决定，
+ * 同时不会再受空格度量和换行实现影响。
+ */
+function normalizeUnderlinedWhitespaceRules(documentXml: string) {
+  return documentXml.replace(paragraphTag, (paragraph) => {
+    const textMatches = [...paragraph.matchAll(textTag)];
+    const spacing = paragraph.match(spacingTag)?.[0];
+    const lineHeight = Number(spacing?.match(lineHeightAttribute)?.[1]);
+    if (
+      textMatches.length === 0 ||
+      textMatches.some((match) => !/^\s*$/.test(match[1] ?? "")) ||
+      !singleUnderlineTag.test(paragraph) ||
+      !redColorTag.test(paragraph) ||
+      !spacing ||
+      !exactLineRuleAttribute.test(spacing) ||
+      !Number.isFinite(lineHeight) ||
+      lineHeight > 100
+    ) {
+      return paragraph;
+    }
+
+    const explicitFontSizes = [...paragraph.matchAll(fontSizeTag)].map((match) =>
+      Number(match[1]),
+    );
+    const largestFontSize = Math.max(0, ...explicitFontSizes);
+    // w:sz 是半磅，边框 w:sz 是八分之一磅。大字号下划线约为字号的 1/20；
+    // 普通字号使用 Word 的最细 0.5pt 线，正好对应模板的“上粗下细”。
+    const borderSize =
+      largestFontSize >= 40 ? Math.ceil(largestFontSize / 5) : 4;
+    const border = `<w:pBdr><w:bottom w:val="single" w:sz="${borderSize}" w:space="0" w:color="FF0000"/></w:pBdr>`;
+    const properties = paragraph.match(paragraphPropertiesTag)?.[0];
+    if (!properties) return paragraph;
+
+    const borderedProperties = properties.replace(
+      "</w:pPr>",
+      `${border}</w:pPr>`,
+    );
+    return paragraph
+      .replace(properties, borderedProperties)
+      .replace(runTag, (run) => {
+        const texts = [...run.matchAll(textTag)];
+        return texts.length > 0 &&
+          texts.every((match) => /^\s*$/.test(match[1] ?? ""))
+          ? ""
+          : run;
+      });
+  });
+}
+
+/**
+ * 只调整内存里的预览副本，不改服务端文件和下载内容。
+ *
+ * 业务模板嵌入的是子集字体，只包含模板原有字符。占位符替换出来的人名等字符
+ * 可能不在子集中，Canvas 会把它们画成空字形。保留字体名称和所有排版信息，
+ * 仅去掉 fontTable 里的 embed 标签，可让渲染器改用本机同名字体或系统回退字体。
+ * 同时把上面的纯装饰下划线归一化为等价边框，规避空格换行差异。
+ */
+function prepareDocxPreviewSource(source: ArrayBuffer) {
+  const files = unzipSync(new Uint8Array(source));
+  let changed = false;
+
+  const fontTable = files["word/fontTable.xml"];
+  if (fontTable) {
+    const xml = strFromU8(fontTable);
+    const sanitizedXml = xml.replace(embeddedFontTag, "");
+    if (sanitizedXml !== xml) {
+      files["word/fontTable.xml"] = strToU8(sanitizedXml);
+      changed = true;
+    }
+  }
+
+  const document = files["word/document.xml"];
+  if (document) {
+    const xml = strFromU8(document);
+    const normalizedXml = normalizeUnderlinedWhitespaceRules(xml);
+    if (normalizedXml !== xml) {
+      files["word/document.xml"] = strToU8(normalizedXml);
+      changed = true;
+    }
+  }
+
+  return changed ? Uint8Array.from(zipSync(files, { level: 1 })).buffer : source;
+}
 
 /**
  * 在页面里渲染一份真实的 .docx。
@@ -11,10 +113,9 @@ import { useEffect, useRef, useState } from "react";
  * 在落款之后，在导出的 Word 里却排在联系人之前，没人发现。现在版式只存在于
  * docx 模板文件里，前端无从近似，也就没有漂移的余地。
  *
- * 已知边界：docx-preview 受 HTML/CSS 能力限制（[官方说明]，Google Docs 那种
- * 像素级还原是靠 canvas 画的）。固定行距、首行缩进这类能还原；浮动锚定的印章
- * 位置、红头双线可能有偏差。它是**够用的近似**，不是所见即所得——真正的最终
- * 效果以下载下来的文件为准。
+ * @silurus/ooxml 直接解析 OOXML，并按分页结果绘制到 Canvas，不再把 Word 结构
+ * 转成 HTML/CSS 后让浏览器重新排版。它仍然依赖客户端可用字体，所以没有安装
+ * 模板字体的设备可能出现字形差异；最终归档内容始终以下载的原始文件为准。
  */
 export function DocxPreview({
   load,
@@ -27,7 +128,11 @@ export function DocxPreview({
   enabled?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [renderError, setRenderError] = useState<string>();
+  const [renderState, setRenderState] = useState<{
+    blob?: Blob;
+    status: "idle" | "loading" | "ready" | "error";
+    message?: string;
+  }>({ status: "idle" });
 
   const fileQuery = useQuery({
     queryKey,
@@ -50,70 +155,93 @@ export function DocxPreview({
     if (!container || !blob) return;
 
     let cancelled = false;
-    setRenderError(undefined);
+    let viewer: DocxScrollViewer | undefined;
 
-    renderAsync(blob, container, undefined, {
-      className: "docx",
-      inWrapper: true,
-      /**
-       * ⚠️ 不要注入模板里嵌入的字体。
-       *
-       * 业务给的模板嵌的是**子集化**字体（每个 176–270 KB，完整中文字体是
-       * 5–20 MB），只含原文档里出现过的那些字。docx-preview 会把它们注入成
-       * `@font-face` 并声明 `unicode-range: U+0-10FFFF`——等于告诉浏览器
-       * 「这套字体什么字都有」，于是遇到子集里没有的字（替换进去的人名，
-       * 比如「佳」「耿」）浏览器**不回退**，直接画一个空的 .notdef：
-       * 元素有正确宽度、颜色是黑的，但一个字形都没有。
-       *
-       * 关掉之后按字体名走系统字体（仿宋/黑体/楷体在中文 Windows 上都是
-       * 自带的），没装的机器会回退到默认字体——观感略有出入，但**所有字都
-       * 看得见**，比隐形的人名强得多。
-       */
-      ignoreFonts: true,
-      // 让文档按自己的纸张尺寸排版，容器负责滚动——这份公函的页边距
-      // （上下 2.54cm / 左右 3.17cm）本身就是版式的一部分，压掉就不像了。
-      ignoreWidth: false,
-      ignoreHeight: false,
-      breakPages: true,
-      renderHeaders: true,
-      renderFooters: true,
-    }).catch((error: unknown) => {
+    const handleRenderError = (error: unknown) => {
       if (cancelled) return;
       console.error("Failed to render docx preview", error);
-      setRenderError("这份文件无法在页面内预览，可以下载后用 Word 打开查看");
-    });
+      setRenderState({
+        blob,
+        status: "error",
+        message: "这份文件无法在页面内预览，可以下载后用 Word 打开查看",
+      });
+    };
+
+    setRenderState({ blob, status: "loading" });
+
+    const render = async () => {
+      try {
+        viewer = new DocxScrollViewer(container, {
+          // 邀请函通常只有几页。主线程模式直接使用浏览器字体度量，优先保证版式；
+          // Canvas 仅负责只读绘制，不开启文本/对象选择或链接交互。
+          mode: "main",
+          useGoogleFonts: false,
+          enableTextSelection: false,
+          enableElementSelection: false,
+          enableHyperlinks: false,
+          background: "transparent",
+          gap: 16,
+          paddingTop: 16,
+          paddingBottom: 16,
+          paddingLeft: 16,
+          paddingRight: 16,
+          onError: handleRenderError,
+        });
+
+        const source = prepareDocxPreviewSource(await blob.arrayBuffer());
+        if (cancelled) return;
+
+        await viewer.load(source);
+        if (!cancelled) setRenderState({ blob, status: "ready" });
+      } catch (error) {
+        handleRenderError(error);
+      }
+    };
+
+    void render();
 
     return () => {
       cancelled = true;
-      // docx-preview 是直接往容器里塞 DOM 的，不清掉会在重渲染时叠加一份。
-      container.innerHTML = "";
+      // 释放画布、ResizeObserver、字体和解析器持有的 WASM/文档资源。
+      viewer?.destroy();
     };
   }, [blob]);
 
-  const message = renderError ?? (fileQuery.error as Error | null)?.message;
+  const renderError =
+    renderState.blob === blob && renderState.status === "error"
+      ? renderState.message
+      : undefined;
+  let queryError: string | undefined;
+  if (fileQuery.error instanceof Error) queryError = fileQuery.error.message;
+  else if (fileQuery.error) queryError = String(fileQuery.error);
+  const message = renderError ?? queryError;
+  const isRendering =
+    !!blob &&
+    (renderState.blob !== blob || renderState.status === "loading");
+  const isLoading = fileQuery.isPending || isRendering;
 
   return (
-    <div className="relative max-h-[70vh] min-h-64 overflow-auto rounded-md border bg-muted/30 p-4">
+    <div className="relative h-[70vh] max-h-[50rem] min-h-64 overflow-hidden rounded-md border bg-muted/30">
       {/* 只在「还没有任何内容可看」时挡住。后台重拉时保留已渲染的文档，
           不要一有 fetch 就把用户正在看的东西撤掉。 */}
-      {fileQuery.isPending ? (
-        <div className="flex h-64 items-center justify-center gap-2 text-muted-foreground text-sm">
+      {isLoading ? (
+        <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-muted/30 text-muted-foreground text-sm">
           <Loader2Icon className="size-4 animate-spin" />
-          正在生成预览…
+          {fileQuery.isPending ? "正在生成预览…" : "正在渲染文档…"}
         </div>
       ) : null}
 
       {message ? (
-        <div className="flex h-64 flex-col items-center justify-center gap-2 px-6 text-center text-muted-foreground text-sm">
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 px-6 text-center text-muted-foreground text-sm">
           <AlertCircleIcon className="size-5 text-destructive" />
           {message}
         </div>
       ) : null}
 
-      {/* 容器常驻。docx-preview 拿的是 ref，条件渲染会让它在首次渲染时拿到 null。 */}
+      {/* 容器常驻并保留尺寸；display:none 会让滚动预览器按 0 宽度布局。 */}
       <div
         ref={containerRef}
-        className={message || fileQuery.isPending ? "hidden" : undefined}
+        className={cn("size-full", (message || isLoading) && "invisible")}
       />
     </div>
   );
