@@ -6,8 +6,8 @@ ARG BUN_IMAGE=oven/bun:1.3-alpine
 FROM ${BUN_IMAGE} AS builder
 WORKDIR /app
 
-ARG NPM_REGISTRY=https://registry.npmmirror.com
-ENV BUN_CONFIG_REGISTRY=${NPM_REGISTRY}
+# ARG NPM_REGISTRY=https://registry.npmmirror.com
+# ENV BUN_CONFIG_REGISTRY=${NPM_REGISTRY}
 
 # 先只拷 manifest 再装依赖，源码改动就不会让这一层的缓存失效。
 # --linker=hoisted 是刻意的：isolated 会在 node_modules/.bun 下铺一片符号链接，
