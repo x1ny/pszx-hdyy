@@ -98,7 +98,14 @@ function InvitationsPage() {
 
       <FilterBar
         onSubmit={() => {
-          setRecipientName(keywordInput.trim() || undefined);
+          const next = keywordInput.trim() || undefined;
+          // 条件没变时 setState 会被 React 原地吞掉，显式重拉一次，让「查询」
+          // 同时承担刷新语义（理由见 filter-bar.tsx）。
+          if (next === recipientName && page === 1) {
+            listQuery.refetch();
+            return;
+          }
+          setRecipientName(next);
           setPage(1);
         }}
       >

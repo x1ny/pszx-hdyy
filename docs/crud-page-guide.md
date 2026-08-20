@@ -147,6 +147,13 @@ useEffect(() => {
   setStatusInput(search.status ?? null);
 }, [search.name, search.status]);
 
+const applyFilter = (patch: Partial<typeof search>) => {
+  const next = { ...search, ...patch, page: 1 };
+  // 条件没变时 navigate 是空操作，显式重拉一次，让「查询」同时承担刷新语义
+  if (isSameFilter(search, next)) return invalidate();
+  navigate({ search: next });
+};
+
 <FilterBar
   onSubmit={() =>
     applyFilter({ name: nameInput.trim() || undefined, status: statusInput ?? undefined })
@@ -169,6 +176,14 @@ useEffect(() => {
   没法从外观判断哪个控件是哪种脾气，只能靠试。统一之后那颗蓝色按钮就是唯一的触发点。
 - 顺带的好处：改三个条件原来是三次往返、三条 history，现在是一次。自由输入框也不再
   每敲一个字母 push 一条 history。
+- **「查询」同时是「刷新」。** 条件没变时 `navigate` 到同一个 URL 是彻底的空操作
+  （router 走 `isSameLocation` 分支、loader 不重跑、queryKey 也没变），用户点下去
+  一点反应都没有。所以 `applyFilter` 里要用 `filter-bar.tsx` 的 `isSameFilter` 判一下，
+  相同就 `invalidate()`。**顺序不能反过来**——先 invalidate 再 navigate 的话，条件真
+  变了会先为旧条件白拉一次。
+- 筛选条件放本地 `useState` 的那几处（选人弹窗、邀请函生成页的选人列表）同理：
+  `setState` 传同一个值会被 React 原地吞掉，相同就直接 `listQuery.refetch()`。前端算
+  筛选的页面（活动资源汇总）navigate 本来就不发请求，「查询」一律顺手 `refetch()` 一次。
 - **`onReset` 里要显式把草稿清一遍，不能只靠 `useEffect`。** 用户输了字还没点查询就点
   重置时，URL 上本来就是空的，effect 的依赖不变、不会重跑，输入框会留着上一次的字。
 - 分页的「每页 N 条」不算筛选，保持选完立即生效。

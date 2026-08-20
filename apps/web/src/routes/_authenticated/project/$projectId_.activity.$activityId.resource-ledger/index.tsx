@@ -34,7 +34,11 @@ import {
   setResourceStatus,
   updateResource,
 } from "#/features/resource/queries.ts";
-import { FilterActions, FilterBar } from "#/shared/components/filter-bar.tsx";
+import {
+  FilterActions,
+  FilterBar,
+  isSameFilter,
+} from "#/shared/components/filter-bar.tsx";
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button, buttonVariants } from "#/shared/components/ui/button.tsx";
 import {
@@ -218,10 +222,15 @@ function ResourceLedgerTab() {
     onError: (error) => toast.error(error.message),
   });
 
-  const setFilter = (patch: Record<string, unknown>) =>
+  const setFilter = (patch: Partial<typeof search>) => {
     // 改任何筛选都把 page 重置成 1：停在第 5 页而筛选结果只有 2 页的话，
     // 页面会看起来"筛没了"。
-    navigate({ search: (prev) => ({ ...prev, ...patch, page: 1 }) });
+    const next = { ...search, ...patch, page: 1 };
+    // 条件没变时 navigate 是空操作，显式重拉一次，让「查询」同时承担刷新
+    // 语义（理由见 filter-bar.tsx）。
+    if (isSameFilter(search, next)) return invalidate();
+    navigate({ search: next });
+  };
 
   const list = listQuery.data?.list ?? [];
   const total = listQuery.data?.total ?? 0;

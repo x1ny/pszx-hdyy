@@ -354,6 +354,8 @@ apps/web/src/
 
 **全站只有一种筛选交互：改控件只改本地草稿，点蓝色「查询」才生效。** 没有"选完下拉立刻刷新"的页面，弹窗里的选人表格也一样。统一走 `shared/components/filter-bar.tsx` 的 `<FilterBar>` + `<FilterActions>`，不要在页面里自己拼这两颗按钮。细节和范例见 [docs/crud-page-guide.md](docs/crud-page-guide.md) 的「筛选栏统一走 `<FilterBar>`」。
 
+**这颗「查询」同时承担刷新语义。** 条件没变时 `navigate` / `setState` 都是彻底的空操作，点下去什么都不会发生——页面得自己重拉一次，否则按钮在用户眼里就是坏的。写法是 `filter-bar.tsx` 导出的 `isSameFilter`：条件变了就 `navigate`，没变就 `invalidate()`，合起来是「点一次 = 恰好一次请求」。
+
 例外只有一个：分页的「每页 N 条」不算筛选，选完立即生效。
 
 ## 404 与错误处理

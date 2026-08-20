@@ -3,6 +3,18 @@ import { Button } from "#/shared/components/ui/button.tsx";
 import { cn } from "#/shared/lib/utils.ts";
 
 /**
+ * 两组筛选条件是不是等价——`applyFilter` 用它决定这一次「查询」该导航还是重拉。
+ *
+ * 只比一层就够：筛选条件全是 string / number / boolean 这种标量，URL search params
+ * 也存不下别的。缺字段和字段是 undefined 算同一件事——zod 解析出来的对象里，没填的
+ * 可选字段有没有这个 key 并不确定，但两者对接口来说都是「不筛这一项」。
+ */
+function isSameFilter<T extends object>(a: T, b: T) {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  return [...keys].every((key) => a[key as keyof T] === b[key as keyof T]);
+}
+
+/**
  * 列表页筛选栏。
  *
  * 全站的表格筛选统一走「攒草稿 → 点查询才生效」这一种交互，不再有「选完下拉
@@ -22,6 +34,22 @@ import { cn } from "#/shared/lib/utils.ts";
  *   <FilterActions onReset={reset} />
  * </FilterBar>
  * ```
+ *
+ * 「查询」同时承担刷新语义：条件变了就写 URL，key 一变自然是一次新请求；条件没变
+ * 时 navigate 是彻底的空操作（router 走 isSameLocation 分支、loader 不重跑、queryKey
+ * 也没变），页面必须自己 invalidate 一次——否则用户点下去什么都不发生，这颗按钮在他
+ * 眼里就是坏的。所以每个列表页的 applyFilter 都长这样：
+ *
+ * ```tsx
+ * const applyFilter = (patch: Partial<typeof search>) => {
+ *   const next = { ...search, ...patch, page: 1 };
+ *   if (isSameFilter(search, next)) return invalidate();
+ *   navigate({ search: next });
+ * };
+ * ```
+ *
+ * 两条分支合起来是「点一次 = 恰好一次请求」。顺序不能反过来写成「先 invalidate 再
+ * navigate」：条件真变了的话会先为旧条件白拉一次，正是统一筛选时想省掉的那种浪费。
  *
  * 是 `<form>` 而不是 `<div>`：回车提交、按钮 `type="submit"` 这些都由浏览器免费
  * 提供，不用自己在每个输入框上挂 onKeyDown 判断 Enter。
@@ -94,4 +122,4 @@ function FilterActions({
   );
 }
 
-export { FilterActions, FilterBar };
+export { FilterActions, FilterBar, isSameFilter };

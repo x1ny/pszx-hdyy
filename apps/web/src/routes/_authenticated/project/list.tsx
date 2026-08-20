@@ -4,7 +4,11 @@ import { FolderKanbanIcon, PlusIcon, SearchIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
-import { FilterActions, FilterBar } from "#/shared/components/filter-bar.tsx";
+import {
+  FilterActions,
+  FilterBar,
+  isSameFilter,
+} from "#/shared/components/filter-bar.tsx";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -117,11 +121,16 @@ function ProjectListPage() {
   const list = listQuery.data?.list ?? [];
   const total = listQuery.data?.total ?? 0;
 
-  const applyFilter = (patch: Partial<typeof search>) =>
-    navigate({ search: (prev) => ({ ...prev, ...patch, page: 1 }) });
-
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: projectKeys.all });
+
+  const applyFilter = (patch: Partial<typeof search>) => {
+    const next = { ...search, ...patch, page: 1 };
+    // 条件没变时 navigate 是空操作，显式重拉一次，让「查询」同时承担刷新
+    // 语义（理由见 filter-bar.tsx）。
+    if (isSameFilter(search, next)) return invalidate();
+    navigate({ search: next });
+  };
 
   const saveMutation = useMutation({
     mutationFn: (values: ProjectFormValues) =>

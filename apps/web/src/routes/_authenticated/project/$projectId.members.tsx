@@ -15,7 +15,11 @@ import {
   projectMemberListQueryOptions,
   removeProjectMember,
 } from "#/features/member/relation-queries.ts";
-import { FilterActions, FilterBar } from "#/shared/components/filter-bar.tsx";
+import {
+  FilterActions,
+  FilterBar,
+  isSameFilter,
+} from "#/shared/components/filter-bar.tsx";
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import {
@@ -146,19 +150,22 @@ function ProjectMembersPage() {
   const list = listQuery.data?.list ?? [];
   const total = listQuery.data?.total ?? 0;
 
-  const applyFilter = () =>
-    navigate({
-      search: (prev) => ({
-        ...prev,
-        name: nameInput.trim() || undefined,
-        sourceType: sourceInput ?? undefined,
-        activityId: activityInput ?? undefined,
-        page: 1,
-      }),
-    });
-
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: projectMemberKeys.all });
+
+  const applyFilter = () => {
+    const next = {
+      ...search,
+      name: nameInput.trim() || undefined,
+      sourceType: sourceInput ?? undefined,
+      activityId: activityInput ?? undefined,
+      page: 1,
+    };
+    // 条件没变时 navigate 是空操作，显式重拉一次，让「查询」同时承担刷新
+    // 语义（理由见 filter-bar.tsx）。
+    if (isSameFilter(search, next)) return invalidate();
+    navigate({ search: next });
+  };
 
   const addMutation = useMutation({
     mutationFn: (memberIds: number[]) =>

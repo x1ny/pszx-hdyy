@@ -138,8 +138,12 @@ function ResourceSummaryTab() {
 
   const voidedSegmentCount = all.length - scoped.length;
 
-  const setFilter = (patch: Partial<typeof search>) =>
+  // 这一页的筛选是前端算的，navigate 本身不产生请求，所以「查询」一律顺手重拉
+  // 一次需求列表——按钮的刷新语义在这里只能靠这句兑现。
+  const setFilter = (patch: Partial<typeof search>) => {
+    demandQuery.refetch();
     navigate({ search: (prev) => ({ ...prev, ...patch }) });
+  };
 
   return (
     <div className="flex flex-col gap-4">

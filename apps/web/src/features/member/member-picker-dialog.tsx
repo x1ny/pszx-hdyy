@@ -164,7 +164,14 @@ export function MemberPickerDialog({
             className="flex items-center gap-2"
             onSubmit={(event) => {
               event.preventDefault();
-              setApplied(keyword.trim());
+              const next = keyword.trim();
+              // 条件没变时 setState 会被 React 原地吞掉，显式重拉一次，让「查询」
+              // 同时承担刷新语义（理由见 filter-bar.tsx）。
+              if (next === applied && page === 1) {
+                listQuery.refetch();
+                return;
+              }
+              setApplied(next);
               setPage(1);
             }}
           >

@@ -224,7 +224,14 @@ function GeneratePage() {
               className="flex items-center gap-2"
               onSubmit={(event) => {
                 event.preventDefault();
-                setNameFilter(nameInput.trim() || undefined);
+                const next = nameInput.trim() || undefined;
+                // 条件没变时 setState 会被 React 原地吞掉，显式重拉一次，让
+                // 「查询」同时承担刷新语义（理由见 filter-bar.tsx）。
+                if (next === nameFilter && page === 1) {
+                  membersQuery.refetch();
+                  return;
+                }
+                setNameFilter(next);
                 setPage(1);
               }}
             >

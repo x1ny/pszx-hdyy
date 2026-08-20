@@ -24,7 +24,11 @@ import {
   removeActivityMember,
   updateActivityMember,
 } from "#/features/member/relation-queries.ts";
-import { FilterActions, FilterBar } from "#/shared/components/filter-bar.tsx";
+import {
+  FilterActions,
+  FilterBar,
+  isSameFilter,
+} from "#/shared/components/filter-bar.tsx";
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import {
@@ -113,8 +117,13 @@ function ActivityMembersPage() {
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: activityMemberKeys.all });
 
-  const applyFilter = (patch: Partial<typeof search>) =>
-    navigate({ search: (prev) => ({ ...prev, ...patch, page: 1 }) });
+  const applyFilter = (patch: Partial<typeof search>) => {
+    const next = { ...search, ...patch, page: 1 };
+    // 条件没变时 navigate 是空操作，显式重拉一次，让「查询」同时承担刷新
+    // 语义（理由见 filter-bar.tsx）。
+    if (isSameFilter(search, next)) return invalidate();
+    navigate({ search: next });
+  };
 
   const addMutation = useMutation({
     mutationFn: (memberIds: number[]) =>
