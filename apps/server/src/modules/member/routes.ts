@@ -1,15 +1,18 @@
-import { and, count, desc, eq, ilike, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, ne, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../../infra/db";
 import { toLimitOffset } from "../../shared/pagination";
 import { err, ok } from "../../shared/result";
 import { jsonBody } from "../../shared/validate";
+import { activitySegment } from "../agenda/schema";
 import { type AuthedVariables, requireUser } from "../auth";
+import { activity, project } from "../project/schema";
 import {
   activityMember,
   member,
   type MemberIdType,
   projectMember,
+  segmentMember,
 } from "./schema";
 import {
   CreateMemberInput,
@@ -240,6 +243,92 @@ export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
       .where(eq(member.id, c.req.valid("json").id));
 
     return row ? c.json(ok(row)) : c.json(notFound());
+  })
+
+  /**
+   * 人员详情里的"参与信息"：这个人进过哪些项目、在每个项目下参与了哪些活动。
+   *
+   * 驱动表是 project_member 而不是 activity_member。人可以进了项目还没被分到
+   * 任何活动（项目人员导入完、活动还没建就是这个状态），那种项目照样要出现在
+   * 列表里，只是活动表为空——按 activity_member 驱动会把这一整类项目漏掉，而
+   * 它恰恰是运营最需要看见的"这个人还没安排活动"。
+   *
+   * 三层关系表当初就为这个方向留了索引（idx_project_member_member /
+   * idx_activity_member_member / idx_segment_member_member），是按 memberId 正查。
+   *
+   * ⚠️ 没有分页，也没有数据范围过滤。前者是因为一个人的项目数在几十量级，
+   * 分页要先定"按什么排、默认展开几个"，那是产品口径；后者是因为
+   * 授权（docs/authorization.md）整体还没实施，全系统都还没有"只看我授权的
+   * 项目"这个能力。等它落地，这个接口是必须回来加过滤的——人员主档是全局的，
+   * 而这里返回的分组、来源、活动安排是项目内信息。
+   */
+  .post("/participation", jsonBody(MemberIdInput), async (c) => {
+    const { id } = c.req.valid("json");
+
+    const [projects, activities] = await Promise.all([
+      db
+        .select({
+          projectId: project.id,
+          projectName: project.name,
+          location: project.location,
+          startTime: project.startTime,
+          endTime: project.endTime,
+        })
+        .from(projectMember)
+        .innerJoin(project, eq(project.id, projectMember.projectId))
+        .where(eq(projectMember.memberId, id))
+        // 起止时间可空，`desc` 在 Postgres 下默认 nulls first，会把没填时间的
+        // 项目顶到最前面。手写 nulls last 让"最近的项目在最上面"真的成立。
+        .orderBy(sql`${project.startTime} desc nulls last`, desc(project.id)),
+
+      db
+        .select({
+          activityMemberId: activityMember.id,
+          projectId: activityMember.projectId,
+          activityId: activity.id,
+          activityName: activity.name,
+          location: activity.location,
+          startTime: activity.startTime,
+          endTime: activity.endTime,
+          groupName: activityMember.groupName,
+          source: activityMember.source,
+
+          /**
+           * 参与环节取名字而不是计数：这一列是给人看"他在这场活动里干什么"的，
+           * "3 个环节"回答不了。作废环节排除在外——参与关系还在（历史引用保留），
+           * 但那个环节已经不发生了，列出来只会让人以为还有安排。
+           *
+           * 关联条件必须写 `eq(...)`，理由见 memberReadFields 上那段注释。
+           */
+          segmentNames: sql<string[]>`coalesce((
+            select array_agg(${activitySegment.name} order by ${activitySegment.startTime})
+            from ${segmentMember}
+            join ${activitySegment} on ${eq(activitySegment.id, segmentMember.segmentId)}
+            where ${eq(segmentMember.activityMemberId, activityMember.id)}
+              and ${eq(activitySegment.status, "active")}
+          ), '{}'::text[])`.as("segment_names"),
+        })
+        .from(activityMember)
+        .innerJoin(activity, eq(activity.id, activityMember.activityId))
+        .where(eq(activityMember.memberId, id))
+        .orderBy(asc(activity.startTime), asc(activity.id)),
+    ]);
+
+    const byProject = new Map<number, typeof activities>();
+    for (const row of activities) {
+      const bucket = byProject.get(row.projectId);
+      if (bucket) bucket.push(row);
+      else byProject.set(row.projectId, [row]);
+    }
+
+    return c.json(
+      ok({
+        list: projects.map((row) => ({
+          ...row,
+          activities: byProject.get(row.projectId) ?? [],
+        })),
+      }),
+    );
   })
 
   .post("/create", jsonBody(CreateMemberInput), async (c) => {
