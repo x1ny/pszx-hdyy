@@ -41,8 +41,8 @@ const ProjectFormSchema = z
   .object({
     name: z.string().trim().min(1, "项目名称不能为空").max(255, "项目名称过长"),
     location: z.string().trim().max(255, "地点过长"),
-    startTime: z.string(),
-    endTime: z.string(),
+    startTime: z.string().min(1, "开始时间不能为空"),
+    endTime: z.string().min(1, "结束时间不能为空"),
     totalBudget: z.string(),
     hostOrg: z.string().trim().max(255, "主办单位过长"),
     organizerOrg: z.string().trim().max(255, "承办单位过长"),
@@ -92,8 +92,7 @@ export function ProjectFormDialog({
         <DialogHeader>
           <DialogTitle>{project ? "修改项目" : "新增项目"}</DialogTitle>
           <DialogDescription>
-            带 * 的是必填项。项目时间范围可以先不填——立项时往往还没定具体档期，
-            旗下活动会各自有自己的确定时间。
+            带 * 的是必填项。项目起止时间必须填写完整，结束时间要晚于开始时间。
           </DialogDescription>
         </DialogHeader>
         {/* key 让切换记录时整个表单重新挂载，见 supplier-form-dialog.tsx 的
@@ -142,8 +141,8 @@ function ProjectForm({
       onSubmit({
         name: value.name,
         location: value.location || undefined,
-        startTime: value.startTime ? new Date(value.startTime) : undefined,
-        endTime: value.endTime ? new Date(value.endTime) : undefined,
+        startTime: new Date(value.startTime),
+        endTime: new Date(value.endTime),
         totalBudget:
           value.totalBudget === "" ? undefined : Number(value.totalBudget),
         hostOrg: value.hostOrg || undefined,
@@ -231,7 +230,10 @@ function ProjectForm({
           <form.Field name="startTime">
             {(field) => (
               <Field>
-                <FieldLabel htmlFor={field.name}>开始时间</FieldLabel>
+                <FieldLabel htmlFor={field.name}>
+                  开始时间
+                  <RequiredMark />
+                </FieldLabel>
                 <Input
                   id={field.name}
                   name={field.name}
@@ -256,7 +258,10 @@ function ProjectForm({
           <form.Field name="endTime">
             {(field) => (
               <Field>
-                <FieldLabel htmlFor={field.name}>结束时间</FieldLabel>
+                <FieldLabel htmlFor={field.name}>
+                  结束时间
+                  <RequiredMark />
+                </FieldLabel>
                 <Input
                   id={field.name}
                   name={field.name}

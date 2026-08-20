@@ -45,9 +45,9 @@ export const ProjectInput = z
   .object({
     name: required("项目名称", 255),
     location: optionalText(255),
-    // 两个时间字段都允许不填，也允许只填一个——立项时往往还没定具体档期。
-    startTime: z.coerce.date().optional(),
-    endTime: z.coerce.date().optional(),
+    // 新增和编辑项目时，开始/结束时间必须成对填写；历史数据仍可能为空。
+    startTime: z.coerce.date("开始时间不能为空"),
+    endTime: z.coerce.date("结束时间不能为空"),
     totalBudget: optionalBudget,
     hostOrg: optionalText(255),
     organizerOrg: optionalText(255),
@@ -56,11 +56,10 @@ export const ProjectInput = z
     description: optionalText(2000),
     publishStatus: PublishStatusEnum.default("draft"),
   })
-  .refine(
-    (value) =>
-      !value.startTime || !value.endTime || value.startTime < value.endTime,
-    { message: "结束时间必须晚于开始时间", path: ["endTime"] },
-  );
+  .refine((value) => value.startTime < value.endTime, {
+    message: "结束时间必须晚于开始时间",
+    path: ["endTime"],
+  });
 
 export const CreateProjectInput = ProjectInput;
 

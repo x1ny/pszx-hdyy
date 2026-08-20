@@ -59,8 +59,8 @@ export const project = pgTable("project", {
   name: text("name").notNull(),
   location: text("location"),
 
-  // 项目级时间范围允许为空：立项时往往只有大致意向，具体档期由旗下
-  // 活动各自敲定。
+  // 数据库列暂保留可空以兼容历史项目；新增和编辑项目由 validation.ts
+  // 要求填写完整的时间范围。
   startTime: timestamp("start_time", { withTimezone: true }),
   endTime: timestamp("end_time", { withTimezone: true }),
 
