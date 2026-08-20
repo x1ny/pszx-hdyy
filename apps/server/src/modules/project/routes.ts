@@ -1,4 +1,4 @@
-import { and, count, desc, eq, ilike } from "drizzle-orm";
+import { and, count, desc, eq, gte, ilike, lte } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../../infra/db";
 import { toLimitOffset } from "../../shared/pagination";
@@ -70,6 +70,13 @@ const projectNotFound = () =>
 const activityNotFound = () =>
   err({ code: "NOT_FOUND" as const, message: "活动不存在" });
 
+// 项目平台的日期筛选按中国大陆业务时区计算整日边界，而不是按运行容器的
+// 时区解析 YYYY-MM-DD，避免部署环境时区变化导致日期筛选偏移一天。
+const startOfFilterDay = (value: string) =>
+  new Date(`${value}T00:00:00.000+08:00`);
+const endOfFilterDay = (value: string) =>
+  new Date(`${value}T23:59:59.999+08:00`);
+
 // 项目和活动挂在两个不同的前缀（/api/project、/api/activity）下，各自的
 // requireUser 因此也各自生效——不是同一条链，是两条并列的链，共享本文件
 // 只是因为两张表关系紧密、字段投影和"下架代替删除"的理由长得一样。
@@ -77,11 +84,16 @@ export const projectRoutes = new Hono<{ Variables: AuthedVariables }>()
   .use(requireUser)
 
   .post("/list", jsonBody(ListProjectsInput), async (c) => {
-    const { name, publishStatus, page, pageSize } = c.req.valid("json");
+    const { name, publishStatus, startTime, endTime, page, pageSize } =
+      c.req.valid("json");
 
     const where = and(
       name ? ilike(project.name, `%${name}%`) : undefined,
       publishStatus ? eq(project.publishStatus, publishStatus) : undefined,
+      startTime
+        ? gte(project.startTime, startOfFilterDay(startTime))
+        : undefined,
+      endTime ? lte(project.endTime, endOfFilterDay(endTime)) : undefined,
     );
 
     const { limit, offset } = toLimitOffset({ page, pageSize });

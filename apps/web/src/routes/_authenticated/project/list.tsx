@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { FolderKanbanIcon, PlusIcon, SearchIcon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { Button } from "#/shared/components/ui/button.tsx";
@@ -12,6 +12,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "#/shared/components/ui/empty.tsx";
+import { Field, FieldGroup, FieldLabel } from "#/shared/components/ui/field.tsx";
 import { Input } from "#/shared/components/ui/input.tsx";
 import {
   Select,
@@ -53,6 +54,8 @@ import {
 const ProjectSearchSchema = z.object({
   name: z.string().optional().catch(undefined),
   publishStatus: z.enum(PUBLISH_STATUS_VALUES).optional().catch(undefined),
+  startTime: z.iso.date().optional().catch(undefined),
+  endTime: z.iso.date().optional().catch(undefined),
   page: z.number().int().min(1).default(1).catch(1),
   pageSize: z.number().int().min(1).max(100).default(10).catch(10),
 });
@@ -66,7 +69,7 @@ export const Route = createFileRoute("/_authenticated/project/list")({
 });
 
 const PUBLISH_STATUS_FILTER_ITEMS = [
-  { value: null, label: "全部发布状态" },
+  { value: null, label: "全部" },
   ...PUBLISH_STATUS_VALUES.map((value) => ({
     value,
     label: PUBLISH_STATUS_LABELS[value],
@@ -80,9 +83,21 @@ function ProjectListPage() {
   const navigate = Route.useNavigate();
   const queryClient = useQueryClient();
 
-  const [nameInput, setNameInput] = useState(search.name ?? "");
+  const [keywordInput, setKeywordInput] = useState(search.name ?? "");
+  const [publishStatusInput, setPublishStatusInput] = useState<
+    ProjectPublishStatus | null
+  >(search.publishStatus ?? null);
+  const [startTimeInput, setStartTimeInput] = useState(search.startTime ?? "");
+  const [endTimeInput, setEndTimeInput] = useState(search.endTime ?? "");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Project>();
+
+  useEffect(() => {
+    setKeywordInput(search.name ?? "");
+    setPublishStatusInput(search.publishStatus ?? null);
+    setStartTimeInput(search.startTime ?? "");
+    setEndTimeInput(search.endTime ?? "");
+  }, [search.name, search.publishStatus, search.startTime, search.endTime]);
 
   const listQuery = useQuery(projectListQueryOptions(search));
   const list = listQuery.data?.list ?? [];
@@ -151,53 +166,124 @@ function ProjectListPage() {
         </Button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-3 shadow-sm">
-        <form
-          className="relative"
-          onSubmit={(event) => {
-            event.preventDefault();
-            applyFilter({ name: nameInput.trim() || undefined });
-          }}
-        >
-          <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="w-56 pl-8"
-            placeholder="搜索项目名称"
-            value={nameInput}
-            onChange={(event) => setNameInput(event.target.value)}
-          />
-        </form>
-
-        <Select
-          items={PUBLISH_STATUS_FILTER_ITEMS}
-          value={search.publishStatus ?? null}
-          onValueChange={(value) =>
-            applyFilter({ publishStatus: value ?? undefined })
+      <form
+        className="rounded-lg border bg-card p-4 shadow-sm"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (
+            startTimeInput &&
+            endTimeInput &&
+            startTimeInput > endTimeInput
+          ) {
+            toast.error("结束时间不能早于开始时间");
+            return;
           }
-        >
-          <SelectTrigger className="w-36">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PUBLISH_STATUS_FILTER_ITEMS.map((item) => (
-              <SelectItem key={item.value ?? "all"} value={item.value}>
-                {item.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          applyFilter({
+            name: keywordInput.trim() || undefined,
+            publishStatus: publishStatusInput ?? undefined,
+            startTime: startTimeInput || undefined,
+            endTime: endTimeInput || undefined,
+          });
+        }}
+      >
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="font-semibold">查询条件</h2>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setKeywordInput("");
+                setPublishStatusInput(null);
+                setStartTimeInput("");
+                setEndTimeInput("");
+                navigate({ search: { page: 1, pageSize: search.pageSize } });
+              }}
+            >
+              重置
+            </Button>
+            <Button type="submit">查询</Button>
+          </div>
+        </div>
 
-        <Button
-          variant="ghost"
-          className="text-muted-foreground hover:text-foreground"
-          onClick={() => {
-            setNameInput("");
-            navigate({ search: { page: 1, pageSize: search.pageSize } });
-          }}
-        >
-          重置
-        </Button>
-      </div>
+        <FieldGroup className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Field className="gap-1.5">
+            <FieldLabel
+              htmlFor="project-keyword"
+              className="text-xs text-muted-foreground"
+            >
+              关键字
+            </FieldLabel>
+            <div className="relative">
+              <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="project-keyword"
+                className="pl-8"
+                placeholder="请输入关键字"
+                value={keywordInput}
+                onChange={(event) => setKeywordInput(event.target.value)}
+              />
+            </div>
+          </Field>
+
+          <Field className="gap-1.5">
+            <FieldLabel
+              htmlFor="project-publish-status"
+              className="text-xs text-muted-foreground"
+            >
+              项目状态
+            </FieldLabel>
+            <Select
+              items={PUBLISH_STATUS_FILTER_ITEMS}
+              value={publishStatusInput}
+              onValueChange={(value) =>
+                setPublishStatusInput(value as ProjectPublishStatus | null)
+              }
+            >
+              <SelectTrigger id="project-publish-status" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PUBLISH_STATUS_FILTER_ITEMS.map((item) => (
+                  <SelectItem key={item.value ?? "all"} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+
+          <Field className="gap-1.5">
+            <FieldLabel
+              htmlFor="project-start-time"
+              className="text-xs text-muted-foreground"
+            >
+              开始时间
+            </FieldLabel>
+            <Input
+              id="project-start-time"
+              type="date"
+              value={startTimeInput}
+              onChange={(event) => setStartTimeInput(event.target.value)}
+            />
+          </Field>
+
+          <Field className="gap-1.5">
+            <FieldLabel
+              htmlFor="project-end-time"
+              className="text-xs text-muted-foreground"
+            >
+              结束时间
+            </FieldLabel>
+            <Input
+              id="project-end-time"
+              type="date"
+              value={endTimeInput}
+              onChange={(event) => setEndTimeInput(event.target.value)}
+            />
+          </Field>
+        </FieldGroup>
+      </form>
 
       <div className="rounded-lg border bg-card shadow-sm">
         <Table>

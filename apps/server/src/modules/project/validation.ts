@@ -76,7 +76,14 @@ export const SetProjectPublishStatusInput = z.object({
 export const ListProjectsInput = PageInput.extend({
   name: filter,
   publishStatus: PublishStatusEnum.optional(),
-});
+  // 列表日期筛选使用日期字符串，避免把浏览器本地日期误当成 UTC 时刻。
+  startTime: z.iso.date().optional(),
+  endTime: z.iso.date().optional(),
+}).refine(
+  (value) =>
+    !value.startTime || !value.endTime || value.startTime <= value.endTime,
+  { message: "结束时间不能早于开始时间", path: ["endTime"] },
+);
 
 // ---------------------------------------------------------------------------
 // 活动
