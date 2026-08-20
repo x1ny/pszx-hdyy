@@ -31,11 +31,7 @@ const optionalText = (label: string, max: number) =>
     .optional()
     .transform((value) => value || null);
 
-const optionalPattern = (
-  pattern: RegExp,
-  message: string,
-  max: number,
-) =>
+const optionalPattern = (pattern: RegExp, message: string, max: number) =>
   z
     .string()
     .trim()
@@ -109,7 +105,10 @@ const MemberFields = z.object({
     .string()
     .trim()
     .max(128, "邮箱过长")
-    .refine((value) => !value || z.email().safeParse(value).success, "请输入正确的邮箱")
+    .refine(
+      (value) => !value || z.email().safeParse(value).success,
+      "请输入正确的邮箱",
+    )
     .optional()
     .transform((value) => value || null),
   language: optionalText("语种", 32),
@@ -170,7 +169,9 @@ const relationFields = {
  * 值（backfill_from_* 永远由 ladder 自己写，客户端传不了）。
  */
 const ActivityEntryOrigin = z
-  .enum(["manual", "project_assign", "registration"], { error: "录入渠道不正确" })
+  .enum(["manual", "project_assign", "registration"], {
+    error: "录入渠道不正确",
+  })
   .default("manual");
 
 const SegmentEntryOrigin = z
@@ -185,10 +186,18 @@ const SegmentRoleEnum = z
 
 // --- 项目人员 ---
 
+/** 项目页把两种从活动链路补齐的来源合并成一个可读的筛选项。 */
+const ProjectMemberSourceFilter = z.enum(["manual", "import", "activity"], {
+  error: "汇总来源不正确",
+});
+
 export const ListProjectMembersInput = PageInput.extend({
   projectId: id,
   name: filter,
   companyPosition: filter,
+  sourceType: ProjectMemberSourceFilter.optional(),
+  // -1 表示没有关联活动；活动主键都是正数，不会与真实 id 冲突。
+  activityId: z.union([id, z.literal(-1)]).optional(),
 });
 
 export const AddProjectMembersInput = z.object({

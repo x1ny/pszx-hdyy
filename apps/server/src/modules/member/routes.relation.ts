@@ -1,4 +1,15 @@
-import { and, asc, count, eq, ilike, inArray, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  eq,
+  exists,
+  ilike,
+  inArray,
+  notExists,
+  or,
+  sql,
+} from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../../infra/db";
 import { toLimitOffset } from "../../shared/pagination";
@@ -15,12 +26,7 @@ import {
   ensureSegmentMembers,
   MemberLadderError,
 } from "./ladder";
-import {
-  activityMember,
-  member,
-  projectMember,
-  segmentMember,
-} from "./schema";
+import { activityMember, member, projectMember, segmentMember } from "./schema";
 import {
   AddActivityMembersInput,
   AddNewActivityMemberInput,
@@ -69,6 +75,7 @@ const identityFields = {
   gender: member.gender,
   companyPosition: member.companyPosition,
   mobile: member.mobile,
+  phone: member.phone,
   idType: member.idType,
   idNumber: member.idNumber,
   memberStatus: member.status,
@@ -82,15 +89,68 @@ export const projectMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
   .use(requireUser)
 
   .post("/list", jsonBody(ListProjectMembersInput), async (c) => {
-    const { projectId, name, companyPosition, page, pageSize } =
-      c.req.valid("json");
+    const {
+      projectId,
+      name,
+      companyPosition,
+      sourceType,
+      activityId,
+      page,
+      pageSize,
+    } = c.req.valid("json");
+
+    const keyword = name ? `%${name}%` : undefined;
+    const keywordFilter = keyword
+      ? or(
+          ilike(member.name, keyword),
+          ilike(member.mobile, keyword),
+          ilike(member.phone, keyword),
+        )
+      : undefined;
+
+    const sourceFilter =
+      sourceType === "activity"
+        ? inArray(projectMember.sourceType, [
+            "project_assign",
+            "registration",
+            "segment_reference",
+            "backfill_from_activity",
+            "backfill_from_segment",
+          ])
+        : sourceType
+          ? eq(projectMember.sourceType, sourceType)
+          : undefined;
+
+    const activityFilter =
+      activityId === -1
+        ? notExists(
+            db
+              .select({ id: activityMember.id })
+              .from(activityMember)
+              .where(eq(activityMember.projectMemberId, projectMember.id)),
+          )
+        : typeof activityId === "number"
+          ? exists(
+              db
+                .select({ id: activityMember.id })
+                .from(activityMember)
+                .where(
+                  and(
+                    eq(activityMember.projectMemberId, projectMember.id),
+                    eq(activityMember.activityId, activityId),
+                  ),
+                ),
+            )
+          : undefined;
 
     const where = and(
       eq(projectMember.projectId, projectId),
-      name ? ilike(member.name, `%${name}%`) : undefined,
+      keywordFilter,
       companyPosition
         ? ilike(member.companyPosition, `%${companyPosition}%`)
         : undefined,
+      sourceFilter,
+      activityFilter,
     );
 
     const { limit, offset } = toLimitOffset({ page, pageSize });
@@ -497,9 +557,21 @@ export const segmentMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
           // ⭐ 继承的兑现处：环节层这三列为 null 就取活动层的值。schema 里把
           // "继承"和"显式覆盖"分成 null / 有值两种状态，读取侧就必须 COALESCE
           // 回去，否则前端会看到一片空白然后自己去猜该显示什么。
-          source: sql<string | null>`coalesce(${segmentMember.source}, ${activityMember.source})`.as("source"),
-          groupName: sql<string | null>`coalesce(${segmentMember.groupName}, ${activityMember.groupName})`.as("group_name"),
-          ownerName: sql<string | null>`coalesce(${segmentMember.ownerName}, ${activityMember.ownerName})`.as("owner_name"),
+          source: sql<
+            string | null
+          >`coalesce(${segmentMember.source}, ${activityMember.source})`.as(
+            "source",
+          ),
+          groupName: sql<
+            string | null
+          >`coalesce(${segmentMember.groupName}, ${activityMember.groupName})`.as(
+            "group_name",
+          ),
+          ownerName: sql<
+            string | null
+          >`coalesce(${segmentMember.ownerName}, ${activityMember.ownerName})`.as(
+            "owner_name",
+          ),
 
           // 前端要区分"这个值是继承来的"和"这个环节自己填的"，才好在编辑弹窗里
           // 把继承态显示成灰色占位而不是已填值。

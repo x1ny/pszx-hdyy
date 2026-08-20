@@ -13,7 +13,6 @@ import {
   type ProjectMember,
   projectMemberKeys,
   projectMemberListQueryOptions,
-  RELATION_ORIGIN_LABELS,
   removeProjectMember,
 } from "#/features/member/relation-queries.ts";
 import { FilterActions, FilterBar } from "#/shared/components/filter-bar.tsx";
@@ -36,6 +35,14 @@ import {
   EmptyTitle,
 } from "#/shared/components/ui/empty.tsx";
 import { Input } from "#/shared/components/ui/input.tsx";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "#/shared/components/ui/select.tsx";
 import { Skeleton } from "#/shared/components/ui/skeleton.tsx";
 import {
   Table,
@@ -45,14 +52,44 @@ import {
   TableHeader,
   TableRow,
 } from "#/shared/components/ui/table.tsx";
+import { activityListQueryOptions } from "./-queries";
+
+const PROJECT_MEMBER_SOURCE_VALUES = ["activity", "import", "manual"] as const;
+type ProjectMemberSourceFilter = (typeof PROJECT_MEMBER_SOURCE_VALUES)[number];
+// 活动主键都是正数，用 -1 表示项目人员尚未分配活动，Select 也能保持单一数值类型。
+const UNASSIGNED_ACTIVITY = -1 as const;
+
+const PROJECT_MEMBER_SOURCE_FILTER_ITEMS = [
+  { value: null, label: "全部汇总来源" },
+  { value: "activity", label: "活动人员归集" },
+  { value: "import", label: "项目导入" },
+  { value: "manual", label: "项目手工新增" },
+] as const;
+
+const PROJECT_MEMBER_SOURCE_LABELS = {
+  manual: "项目手工新增",
+  import: "项目导入",
+  project_assign: "活动人员归集",
+  segment_reference: "活动人员归集",
+  registration: "活动人员归集",
+  backfill_from_activity: "活动人员归集",
+  backfill_from_segment: "活动人员归集",
+} as const satisfies Record<ProjectMember["sourceType"], string>;
 
 const SearchSchema = z.object({
   name: z.string().optional().catch(undefined),
+  sourceType: z.enum(PROJECT_MEMBER_SOURCE_VALUES).optional().catch(undefined),
+  activityId: z
+    .union([z.number().int().positive(), z.literal(UNASSIGNED_ACTIVITY)])
+    .optional()
+    .catch(undefined),
   page: z.number().int().min(1).default(1).catch(1),
   pageSize: z.number().int().min(1).max(100).default(10).catch(10),
 });
 
-export const Route = createFileRoute("/_authenticated/project/$projectId/members")({
+export const Route = createFileRoute(
+  "/_authenticated/project/$projectId/members",
+)({
   validateSearch: SearchSchema,
   component: ProjectMembersPage,
 });
@@ -75,18 +112,50 @@ function ProjectMembersPage() {
   const queryClient = useQueryClient();
 
   const [nameInput, setNameInput] = useState(search.name ?? "");
+  const [sourceInput, setSourceInput] =
+    useState<ProjectMemberSourceFilter | null>(search.sourceType ?? null);
+  const [activityInput, setActivityInput] = useState<number | null>(
+    search.activityId ?? null,
+  );
   const [pickerOpen, setPickerOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [removing, setRemoving] = useState<ProjectMember>();
 
   // URL 变了就把草稿拉回来对齐（后退、粘链接进来）。
-  useEffect(() => setNameInput(search.name ?? ""), [search.name]);
+  useEffect(() => {
+    setNameInput(search.name ?? "");
+    setSourceInput(search.sourceType ?? null);
+    setActivityInput(search.activityId ?? null);
+  }, [search.name, search.sourceType, search.activityId]);
+
+  const activityListQuery = useQuery(
+    activityListQueryOptions({ projectId, page: 1, pageSize: 100 }),
+  );
+  const activityFilterItems = [
+    { value: null, label: "全部关联活动" },
+    ...(activityListQuery.data?.list ?? []).map((activity) => ({
+      value: activity.id,
+      label: activity.name,
+    })),
+    { value: UNASSIGNED_ACTIVITY, label: "未分配活动" },
+  ] as const;
 
   const listQuery = useQuery(
     projectMemberListQueryOptions({ projectId, ...search }),
   );
   const list = listQuery.data?.list ?? [];
   const total = listQuery.data?.total ?? 0;
+
+  const applyFilter = () =>
+    navigate({
+      search: (prev) => ({
+        ...prev,
+        name: nameInput.trim() || undefined,
+        sourceType: sourceInput ?? undefined,
+        activityId: activityInput ?? undefined,
+        page: 1,
+      }),
+    });
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: projectMemberKeys.all });
@@ -148,29 +217,63 @@ function ProjectMembersPage() {
         </div>
       </div>
 
-      <FilterBar
-        onSubmit={() =>
-          navigate({
-            search: (prev) => ({
-              ...prev,
-              name: nameInput.trim() || undefined,
-              page: 1,
-            }),
-          })
-        }
-      >
+      <FilterBar onSubmit={applyFilter}>
         <div className="relative">
           <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            className="w-52 pl-8"
-            placeholder="搜索姓名"
+            id="project-members-keyword"
+            className="w-56 pl-8"
+            placeholder="姓名、联系方式"
             value={nameInput}
             onChange={(event) => setNameInput(event.target.value)}
           />
         </div>
+
+        <Select
+          items={PROJECT_MEMBER_SOURCE_FILTER_ITEMS}
+          value={sourceInput}
+          onValueChange={(value) =>
+            setSourceInput(value as ProjectMemberSourceFilter | null)
+          }
+        >
+          <SelectTrigger id="project-members-source" className="w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {PROJECT_MEMBER_SOURCE_FILTER_ITEMS.map((item) => (
+                <SelectItem key={item.value ?? "all"} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+
+        <Select
+          items={activityFilterItems}
+          value={activityInput}
+          onValueChange={(value) => setActivityInput(value as number | null)}
+        >
+          <SelectTrigger id="project-members-activity" className="w-52">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {activityFilterItems.map((item) => (
+                <SelectItem key={item.value ?? "all"} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+
         <FilterActions
           onReset={() => {
             setNameInput("");
+            setSourceInput(null);
+            setActivityInput(null);
             navigate({ search: { page: 1, pageSize: search.pageSize } });
           }}
         />
@@ -227,14 +330,17 @@ function ProjectMembersPage() {
                   <TableCell>
                     <div className="font-medium">{row.name}</div>
                     <div className="text-muted-foreground text-xs">
-                      {[row.companyPosition, row.mobile]
+                      {[
+                        row.companyPosition,
+                        [row.mobile, row.phone].filter(Boolean).join(" / "),
+                      ]
                         .filter(Boolean)
                         .join(" · ") || "-"}
                     </div>
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary" className="font-normal">
-                      {RELATION_ORIGIN_LABELS[row.sourceType]}
+                      {PROJECT_MEMBER_SOURCE_LABELS[row.sourceType]}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-center tabular-nums">
