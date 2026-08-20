@@ -20,8 +20,14 @@ import { XIcon } from "lucide-react"
 //    注意 **DialogContent 不再有内边距**，内容必须放进 DialogBody 才有
 //    `px-6 py-6`，否则会贴着弹窗边缘。
 //
-// 3. **DialogHeader 加 `pr-12`** 给右上角关闭按钮留位，标题长了不会被盖住；
-//    并接受可选的 `title`/`description` props（不传 children 时才生效）。
+// 3. **DialogHeader 加 `pr-12` + `min-h-16 justify-center`。** `pr-12` 给右上角
+//    关闭按钮留位，标题长了不会被盖住。`min-h-16 justify-center` 是为了让关闭
+//    按钮和标题对齐：关闭按钮是 `absolute top-4` 的 `size-8`，中心恒在距弹窗
+//    顶部 32px 处；而只有标题、没有 description 时，`py-4` + 一行 `leading-none`
+//    标题的头部只有 46px 高，标题中心在 23px——按钮明显偏低。撑到 64px 再把内容
+//    垂直居中，标题中心正好回到 32px。标题折行或带 description 时内容本来就超过
+//    64px，这两个类不生效，布局与原来一致。DialogHeader 还接受可选的
+//    `title`/`description` props（不传 children 时才生效）。
 //
 // 4. **DialogFooter 加 `border-t bg-popover`**，作为钉住的操作条。
 
@@ -111,7 +117,7 @@ function DialogHeader({
     <div
       data-slot="dialog-header"
       className={cn(
-        "flex shrink-0 flex-col gap-2 border-b px-6 py-4 pr-12",
+        "flex min-h-16 shrink-0 flex-col justify-center gap-2 border-b px-6 py-4 pr-12",
         className
       )}
       {...props}
