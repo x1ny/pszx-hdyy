@@ -34,10 +34,9 @@ import { fileAsset } from "../file/schema";
  * 发布状态：面向 H5 的展示总闸，由业务人员显式操作（"上架"/"下架"按钮），
  * 不是任何时间或其他状态推导出来的。
  *
- * "已下架"承担了这张表的删除语义——项目、活动都不做物理删除，下架就是
- * 删除：数据留痕，且不会让 activity.projectId、后续排位/资源/邀请函等
- * 大量下游外键跟着变成悬空引用。routes.ts 不应该暴露真正的 DELETE 接口，
- * 只暴露"设置发布状态"。
+ * "已下架"承担了已被使用项目的删除语义：数据留痕，且不会让
+ * activity.projectId、后续排位/资源/邀请函等大量下游外键变成悬空引用。
+ * 物理删除只对还没有活动或其他关联数据的项目开放，且不做级联删除。
  */
 export const PUBLISH_STATUSES = ["draft", "published", "delisted"] as const;
 export type PublishStatus = (typeof PUBLISH_STATUSES)[number];
@@ -115,10 +114,8 @@ export const activity = pgTable(
     // 唯一会被用到的过滤条件）。这不属于"不确定用不用得上，等实测"的
     // 默认不加索引原则，这里是确定用得上。
     //
-    // onDelete 特意不设 cascade：project 永远不做物理删除（下架代替
-    // 删除），如果哪天有人绕过应用层直接删 project 行，级联删空一整个
-    // 项目下的所有活动、进而删空活动下的人员/资源/排位，是灾难性的连锁
-    // 反应；宁可让那次误删因为外键约束失败而报错。
+    // onDelete 特意不设 cascade：物理删除项目只允许没有关联数据的项目，
+    // 已被引用的项目由外键阻止，避免误删活动及其下游数据。
     projectId: bigint("project_id", { mode: "number" })
       .notNull()
       .references(() => project.id),

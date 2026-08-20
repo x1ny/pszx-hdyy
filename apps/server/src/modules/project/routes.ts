@@ -43,6 +43,12 @@ const projectFields = {
   updatedAt: project.updatedAt,
 };
 
+/** 列表读取投影：活动数是派生值，不物化到 project 表。 */
+const projectListFields = {
+  ...projectFields,
+  activityCount: count(activity.id),
+};
+
 const activityFields = {
   id: activity.id,
   projectId: activity.projectId,
@@ -67,6 +73,19 @@ const activityFields = {
 const projectNotFound = () =>
   err({ code: "NOT_FOUND" as const, message: "项目不存在" });
 
+const validationError = (message: string) =>
+  err({ code: "VALIDATION_ERROR" as const, message });
+
+/** Drizzle 可能把 Postgres 的外键错误包在 cause 里，需要递归检查。 */
+const isForeignKeyViolation = (error: unknown): boolean => {
+  if (typeof error !== "object" || error === null) return false;
+  const { code, cause } = error as { code?: unknown; cause?: unknown };
+  return (
+    code === "23503" ||
+    (cause !== undefined && isForeignKeyViolation(cause))
+  );
+};
+
 const activityNotFound = () =>
   err({ code: "NOT_FOUND" as const, message: "活动不存在" });
 
@@ -79,7 +98,7 @@ const endOfFilterDay = (value: string) =>
 
 // 项目和活动挂在两个不同的前缀（/api/project、/api/activity）下，各自的
 // requireUser 因此也各自生效——不是同一条链，是两条并列的链，共享本文件
-// 只是因为两张表关系紧密、字段投影和"下架代替删除"的理由长得一样。
+// 只是因为两张表关系紧密、字段投影和删除保护的理由长得一样。
 export const projectRoutes = new Hono<{ Variables: AuthedVariables }>()
   .use(requireUser)
 
@@ -101,9 +120,26 @@ export const projectRoutes = new Hono<{ Variables: AuthedVariables }>()
     // 列表和总数互不依赖，并发发出去省一个往返。
     const [list, totalRows] = await Promise.all([
       db
-        .select(projectFields)
+        .select(projectListFields)
         .from(project)
+        .leftJoin(activity, eq(activity.projectId, project.id))
         .where(where)
+        .groupBy(
+          project.id,
+          project.name,
+          project.location,
+          project.startTime,
+          project.endTime,
+          project.totalBudget,
+          project.hostOrg,
+          project.organizerOrg,
+          project.supportOrg,
+          project.guidingOrg,
+          project.description,
+          project.publishStatus,
+          project.createdAt,
+          project.updatedAt,
+        )
         // 按 id 倒序，不按 updatedAt——排序键选一个不会因为编辑而变化的列，
         // 行才会待在原地，改一个字段不会把它弹到列表最前面。
         .orderBy(desc(project.id))
@@ -175,12 +211,45 @@ export const projectRoutes = new Hono<{ Variables: AuthedVariables }>()
 
       return row ? c.json(ok(row)) : c.json(projectNotFound());
     },
-  );
+  )
 
-// 故意没有 deleteProject 接口——项目一旦建成会被活动（进而被人员/资源/
-// 排位/邀请函）反向引用，物理删除要么级联炸掉一整棵树，要么留一堆
-// 悬空引用。"下架"（publishStatus = delisted）就是这张表的删除通道，
-// 效果一样（隐藏、数据留痕），但不会踩中上面任何一个坑。
+  .post("/delete", jsonBody(ProjectIdInput), async (c) => {
+    const { id } = c.req.valid("json");
+
+    const [relatedActivities] = await db
+      .select({ total: count() })
+      .from(activity)
+      .where(eq(activity.projectId, id));
+
+    if ((relatedActivities?.total ?? 0) > 0) {
+      return c.json(
+        validationError(
+          `该项目下有 ${relatedActivities?.total} 场活动，不能删除；如需隐藏请改为下架`,
+        ),
+      );
+    }
+
+    try {
+      const [row] = await db
+        .delete(project)
+        .where(eq(project.id, id))
+        .returning({ id: project.id });
+
+      return row ? c.json(ok(row)) : c.json(projectNotFound());
+    } catch (error) {
+      if (isForeignKeyViolation(error)) {
+        return c.json(
+          validationError(
+            "该项目已被其他业务数据引用，不能删除；如需隐藏请改为下架",
+          ),
+        );
+      }
+      throw error;
+    }
+  });
+
+// 删除接口只允许没有活动或其他外键引用的项目通过；已被使用的项目仍然用
+// "下架"（publishStatus = delisted）隐藏，避免级联删除活动及其下游数据。
 
 export const activityRoutes = new Hono<{ Variables: AuthedVariables }>()
   .use(requireUser)

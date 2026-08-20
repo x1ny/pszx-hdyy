@@ -174,7 +174,8 @@ export const projectMember = pgTable(
       .primaryKey()
       .generatedByDefaultAsIdentity(),
 
-    // onDelete 不设 cascade，理由同 activity.projectId：项目不做物理删除。
+    // onDelete 不设 cascade：项目删除只允许没有关联数据的项目，已被引用的
+    // 项目由外键阻止，避免误删项目人员关系。
     projectId: bigint("project_id", { mode: "number" })
       .notNull()
       .references(() => project.id),

@@ -4,6 +4,16 @@ import { FolderKanbanIcon, PlusIcon, SearchIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "#/shared/components/ui/alert-dialog.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import {
   Empty,
@@ -35,8 +45,10 @@ import { ProjectFormDialog } from "./-components/project-form-dialog";
 import {
   type Project,
   type ProjectFormValues,
+  type ProjectListItem,
   type ProjectPublishStatus,
   createProject,
+  deleteProject,
   projectKeys,
   projectListQueryOptions,
   setProjectPublishStatus,
@@ -90,7 +102,8 @@ function ProjectListPage() {
   const [startTimeInput, setStartTimeInput] = useState(search.startTime ?? "");
   const [endTimeInput, setEndTimeInput] = useState(search.endTime ?? "");
   const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<Project>();
+  const [editing, setEditing] = useState<ProjectListItem>();
+  const [pendingDelete, setPendingDelete] = useState<ProjectListItem>();
 
   useEffect(() => {
     setKeywordInput(search.name ?? "");
@@ -131,6 +144,19 @@ function ProjectListPage() {
     }) => setProjectPublishStatus(project.id, publishStatus),
     onSuccess: () => {
       toast.success("发布状态已更新");
+      invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (project: ProjectListItem) => deleteProject(project.id),
+    onSuccess: () => {
+      toast.success("删除成功");
+      setPendingDelete(undefined);
+      if (list.length === 1 && search.page > 1) {
+        navigate({ search: (prev) => ({ ...prev, page: prev.page - 1 }) });
+      }
       invalidate();
     },
     onError: (error) => toast.error(error.message),
@@ -293,6 +319,7 @@ function ProjectListPage() {
               <TableHead>项目地点</TableHead>
               <TableHead>时间范围</TableHead>
               <TableHead>总预算</TableHead>
+              <TableHead className="text-center">活动数</TableHead>
               <TableHead>发布状态</TableHead>
               <TableHead>创建时间</TableHead>
               <TableHead className="text-center">操作</TableHead>
@@ -303,7 +330,7 @@ function ProjectListPage() {
               Array.from({ length: 3 }, (_, index) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
                 <TableRow key={index}>
-                  {Array.from({ length: 7 }, (_, cell) => (
+                  {Array.from({ length: 8 }, (_, cell) => (
                     // biome-ignore lint/suspicious/noArrayIndexKey: 同上
                     <TableCell key={cell}>
                       <Skeleton className="h-5 w-full" />
@@ -313,7 +340,7 @@ function ProjectListPage() {
               ))
             ) : list.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7}>
+                <TableCell colSpan={8}>
                   <Empty className="border-0">
                     <EmptyHeader>
                       <EmptyMedia variant="icon">
@@ -347,6 +374,9 @@ function ProjectListPage() {
                   </TableCell>
                   <TableCell className="tabular-nums">
                     {formatBudget(project.totalBudget)}
+                  </TableCell>
+                  <TableCell className="text-center tabular-nums">
+                    {project.activityCount}
                   </TableCell>
                   <TableCell>
                     <StatusSelect
@@ -382,6 +412,14 @@ function ProjectListPage() {
                         }}
                       >
                         修改
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setPendingDelete(project)}
+                      >
+                        删除
                       </Button>
                     </div>
                   </TableCell>
@@ -449,6 +487,35 @@ function ProjectListPage() {
         }}
         onSubmit={(values) => saveMutation.mutate(values)}
       />
+
+      <AlertDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(undefined);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除该项目？</AlertDialogTitle>
+            <AlertDialogDescription>
+              「{pendingDelete?.name}」将被永久删除。已有活动或其他业务数据引用的项目不能删除，
+              请改为下架。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deleteMutation.isPending}
+              onClick={() =>
+                pendingDelete && deleteMutation.mutate(pendingDelete)
+              }
+            >
+              删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

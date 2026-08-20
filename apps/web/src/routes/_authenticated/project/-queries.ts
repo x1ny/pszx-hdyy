@@ -9,6 +9,9 @@ import { type ApiData, api, unwrap } from "#/shared/lib/api";
 export type Project = ApiData<
   InferResponseType<typeof api.api.project.get.$post>
 >;
+export type ProjectListItem = ApiData<
+  InferResponseType<typeof api.api.project.list.$post>
+>["list"][number];
 export type ProjectPublishStatus = Project["publishStatus"];
 
 export type ProjectFilters = InferRequestType<
@@ -108,6 +111,9 @@ export const setProjectPublishStatus = (
   unwrap(
     api.api.project.setPublishStatus.$post({ json: { id, publishStatus } }),
   );
+
+export const deleteProject = (id: number) =>
+  unwrap(api.api.project.delete.$post({ json: { id } }));
 
 export const createActivity = (values: ActivityFormValues) =>
   unwrap(api.api.activity.create.$post({ json: values }));
