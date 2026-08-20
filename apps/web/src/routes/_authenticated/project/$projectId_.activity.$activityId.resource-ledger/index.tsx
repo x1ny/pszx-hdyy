@@ -21,6 +21,9 @@ import {
 } from "#/features/resource/labels.ts";
 import {
   type ActivityResource,
+  type ResourceStatus,
+  type ResourceType,
+  type TransportScene,
   activityResourceDetailQueryOptions,
   activityResourceKeys,
   activityResourceListQueryOptions,
@@ -31,6 +34,7 @@ import {
   setResourceStatus,
   updateResource,
 } from "#/features/resource/queries.ts";
+import { FilterActions, FilterBar } from "#/shared/components/filter-bar.tsx";
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button, buttonVariants } from "#/shared/components/ui/button.tsx";
 import {
@@ -121,9 +125,25 @@ function ResourceLedgerTab() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<number>();
   const [memberResourceId, setMemberResourceId] = useState<number>();
-  // 名称搜索本地暂存，回车或点"搜索"才写进 URL——每敲一个字母 push 一条
-  // history 的话，后退键就废了。
+  // 筛选控件全部先落在草稿 state 上，点「查询」才写进 URL——下拉也一样，
+  // 全站统一成一种触发方式（见 filter-bar.tsx）。
   const [keywordDraft, setKeywordDraft] = useState(search.keyword ?? "");
+  const [resourceTypeDraft, setResourceTypeDraft] = useState<ResourceType | null>(
+    search.resourceType ?? null,
+  );
+  const [transportSceneDraft, setTransportSceneDraft] =
+    useState<TransportScene | null>(search.transportScene ?? null);
+  const [statusDraft, setStatusDraft] = useState<ResourceStatus | null>(
+    search.status ?? null,
+  );
+
+  // URL 变了就把草稿拉回来对齐（后退、粘链接进来、从汇总页带 demandId 跳过来）。
+  useEffect(() => {
+    setKeywordDraft(search.keyword ?? "");
+    setResourceTypeDraft(search.resourceType ?? null);
+    setTransportSceneDraft(search.transportScene ?? null);
+    setStatusDraft(search.status ?? null);
+  }, [search.keyword, search.resourceType, search.transportScene, search.status]);
 
   const filters = {
     activityId,
@@ -256,21 +276,30 @@ function ResourceLedgerTab() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-end justify-between gap-3 rounded-lg border bg-card p-4 shadow-sm">
+      <FilterBar
+        className="justify-between gap-3 p-4"
+        onSubmit={() =>
+          setFilter({
+            resourceType: resourceTypeDraft ?? undefined,
+            // 类型不是用车时把用车场景一起清掉，否则会筛出空列表
+            transportScene:
+              resourceTypeDraft === "transport"
+                ? (transportSceneDraft ?? undefined)
+                : undefined,
+            status: statusDraft ?? undefined,
+            keyword: keywordDraft.trim() || undefined,
+          })
+        }
+      >
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1.5">
             <span className="text-muted-foreground text-xs">资源类型</span>
             {/* items 必传，否则 SelectValue 渲染的是原始枚举值 */}
             <Select
               items={RESOURCE_TYPE_FILTER_ITEMS}
-              value={search.resourceType ?? null}
+              value={resourceTypeDraft}
               onValueChange={(value) =>
-                setFilter({
-                  resourceType: value ?? undefined,
-                  // 换成非用车类型时把用车场景一起清掉，否则会筛出空列表
-                  transportScene:
-                    value === "transport" ? search.transportScene : undefined,
-                })
+                setResourceTypeDraft(value as ResourceType | null)
               }
             >
               <SelectTrigger className="w-32">
@@ -286,14 +315,16 @@ function ResourceLedgerTab() {
             </Select>
           </div>
 
-          {search.resourceType === "transport" && (
+          {/* 跟着草稿显隐而不是跟着 URL：不然选了「用车」得先点查询，场景那一栏
+              才肯出来，用户会以为这个组合筛不了。 */}
+          {resourceTypeDraft === "transport" && (
             <div className="flex flex-col gap-1.5">
               <span className="text-muted-foreground text-xs">用车场景</span>
               <Select
                 items={TRANSPORT_SCENE_FILTER_ITEMS}
-                value={search.transportScene ?? null}
+                value={transportSceneDraft}
                 onValueChange={(value) =>
-                  setFilter({ transportScene: value ?? undefined })
+                  setTransportSceneDraft(value as TransportScene | null)
                 }
               >
                 <SelectTrigger className="w-32">
@@ -314,8 +345,10 @@ function ResourceLedgerTab() {
             <span className="text-muted-foreground text-xs">状态</span>
             <Select
               items={RESOURCE_STATUS_FILTER_ITEMS}
-              value={search.status ?? null}
-              onValueChange={(value) => setFilter({ status: value ?? undefined })}
+              value={statusDraft}
+              onValueChange={(value) =>
+                setStatusDraft(value as ResourceStatus | null)
+              }
             >
               <SelectTrigger className="w-28">
                 <SelectValue />
@@ -336,29 +369,23 @@ function ResourceLedgerTab() {
             </span>
             <Input
               className="w-56"
-              placeholder="回车搜索"
+              placeholder="名称 / 地点 / 车辆 / 司机"
               value={keywordDraft}
               onChange={(event) => setKeywordDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  setFilter({ keyword: keywordDraft || undefined });
-                }
-              }}
             />
           </div>
 
-          <Button
-            variant="ghost"
-            className="text-muted-foreground hover:text-foreground"
-            onClick={() => {
+          <FilterActions
+            onReset={() => {
               setKeywordDraft("");
+              setResourceTypeDraft(null);
+              setTransportSceneDraft(null);
+              setStatusDraft(null);
               navigate({
                 search: () => ({ page: 1, pageSize: search.pageSize }),
               });
             }}
-          >
-            重置
-          </Button>
+          />
         </div>
 
         <div className="flex items-center gap-2">
@@ -369,7 +396,11 @@ function ResourceLedgerTab() {
           >
             返回资源需求
           </Link>
+          {/* 显式 type="button"：筛选栏现在是 <form>，而原生 <button> 在表单里
+              默认就是 submit。Base UI 的 Button 已经默认补了 type="button"（见
+              internals/use-button），但那是它的实现细节，不该指望它兜底。 */}
           <Button
+            type="button"
             onClick={() => {
               setEditingId(undefined);
               setFormOpen(true);
@@ -379,7 +410,7 @@ function ResourceLedgerTab() {
             新增资源安排
           </Button>
         </div>
-      </div>
+      </FilterBar>
 
       <div className="rounded-lg border bg-card shadow-sm">
         <Table>

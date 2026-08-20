@@ -212,6 +212,7 @@ apps/web/src/
 └── shared/                        不认识任何业务
     ├── components/
     │   ├── ui/…                   shadcn registry，原样
+    │   ├── filter-bar.tsx         表格筛选栏 + 「查询/重置」按钮组，全站统一走它
     │   ├── not-found.tsx
     │   └── page-placeholder.tsx
     ├── hooks/use-mobile.ts
@@ -346,6 +347,12 @@ apps/web/src/
 `apps/web` 里用 `#/*` 指向 `apps/web/src/*`（`package.json` 的 `imports` + `tsconfig.json` 的 `paths` 两处都要有）。
 
 **`apps/server` 里只用相对路径导入。** `tsconfig` 的 `paths` 是整个 program 级别的，`apps/web` 通过 `import type` 把服务端源码拉进自己的 program 后，会拿 web 的 `#/*` 去解析服务端文件里的 `#/`，直接解析错。相对路径没这个问题。
+
+## 表格筛选
+
+**全站只有一种筛选交互：改控件只改本地草稿，点蓝色「查询」才生效。** 没有"选完下拉立刻刷新"的页面，弹窗里的选人表格也一样。统一走 `shared/components/filter-bar.tsx` 的 `<FilterBar>` + `<FilterActions>`，不要在页面里自己拼这两颗按钮。细节和范例见 [docs/crud-page-guide.md](docs/crud-page-guide.md) 的「筛选栏统一走 `<FilterBar>`」。
+
+例外只有一个：分页的「每页 N 条」不算筛选，选完立即生效。
 
 ## 404 与错误处理
 

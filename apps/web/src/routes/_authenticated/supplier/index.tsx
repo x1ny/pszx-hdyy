@@ -11,9 +11,10 @@ import {
   TruckIcon,
   Users2Icon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { FilterActions, FilterBar } from "#/shared/components/filter-bar.tsx";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,8 +55,10 @@ import { cn } from "#/shared/lib/utils.ts";
 import { SupplierDetailDialog } from "./-components/supplier-detail-dialog";
 import { SupplierFormDialog } from "./-components/supplier-form-dialog";
 import {
+  type ServiceCategory,
   type Supplier,
   type SupplierFormValues,
+  type SupplierStatus,
   createSupplier,
   deleteSupplier,
   setSupplierStatus,
@@ -122,13 +125,30 @@ function SupplierPage() {
   const navigate = Route.useNavigate();
   const queryClient = useQueryClient();
 
-  // 名称是唯一的自由输入项，用本地 state 暂存、回车或点「筛选」才写进 URL ——
-  // 每敲一个字母都 push 一条 history 的话，后退键就废了。
+  // 筛选控件全部先落在本地草稿 state 上，点「查询」才写进 URL——不只是输入框，
+  // 下拉也一样（见 filter-bar.tsx 的注释：全站统一成一种触发方式）。顺带解决了
+  // 「每敲一个字母都 push 一条 history、后退键作废」这个老问题。
   const [nameInput, setNameInput] = useState(search.name ?? "");
+  const [categoryInput, setCategoryInput] = useState<ServiceCategory | null>(
+    search.serviceCategory ?? null,
+  );
+  const [cityInput, setCityInput] = useState<string | null>(search.city ?? null);
+  const [statusInput, setStatusInput] = useState<SupplierStatus | null>(
+    search.status ?? null,
+  );
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Supplier>();
   const [detail, setDetail] = useState<Supplier>();
   const [pendingDelete, setPendingDelete] = useState<Supplier>();
+
+  // URL 变了就把草稿拉回来对齐：浏览器后退、点重置、或者直接粘一个带参数的链接
+  // 进来时，筛选栏显示的必须是这次真正生效的条件，不能停在上一次的草稿上。
+  useEffect(() => {
+    setNameInput(search.name ?? "");
+    setCategoryInput(search.serviceCategory ?? null);
+    setCityInput(search.city ?? null);
+    setStatusInput(search.status ?? null);
+  }, [search.name, search.serviceCategory, search.city, search.status]);
 
   const listQuery = useQuery(supplierListQueryOptions(search));
   const citiesQuery = useQuery(supplierCitiesQueryOptions());
@@ -248,14 +268,17 @@ function SupplierPage() {
         />
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-3 shadow-sm">
-        <form
-          className="relative"
-          onSubmit={(event) => {
-            event.preventDefault();
-            applyFilter({ name: nameInput.trim() || undefined });
-          }}
-        >
+      <FilterBar
+        onSubmit={() =>
+          applyFilter({
+            name: nameInput.trim() || undefined,
+            serviceCategory: categoryInput ?? undefined,
+            city: cityInput ?? undefined,
+            status: statusInput ?? undefined,
+          })
+        }
+      >
+        <div className="relative">
           <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="w-56 pl-8"
@@ -263,13 +286,13 @@ function SupplierPage() {
             value={nameInput}
             onChange={(event) => setNameInput(event.target.value)}
           />
-        </form>
+        </div>
 
         <Select
           items={CATEGORY_FILTER_ITEMS}
-          value={search.serviceCategory ?? null}
+          value={categoryInput}
           onValueChange={(value) =>
-            applyFilter({ serviceCategory: value ?? undefined })
+            setCategoryInput(value as ServiceCategory | null)
           }
         >
           <SelectTrigger className="w-40">
@@ -286,8 +309,8 @@ function SupplierPage() {
 
         <Select
           items={cityItems}
-          value={search.city ?? null}
-          onValueChange={(value) => applyFilter({ city: value ?? undefined })}
+          value={cityInput}
+          onValueChange={(value) => setCityInput(value as string | null)}
         >
           <SelectTrigger className="w-36">
             <SelectValue />
@@ -303,8 +326,10 @@ function SupplierPage() {
 
         <Select
           items={STATUS_FILTER_ITEMS}
-          value={search.status ?? null}
-          onValueChange={(value) => applyFilter({ status: value ?? undefined })}
+          value={statusInput}
+          onValueChange={(value) =>
+            setStatusInput(value as SupplierStatus | null)
+          }
         >
           <SelectTrigger className="w-32">
             <SelectValue />
@@ -318,20 +343,18 @@ function SupplierPage() {
           </SelectContent>
         </Select>
 
-        {/* ghost 变体本身不设文字色，继承的是 --foreground（近黑）。这里叠一层
-            text-muted-foreground：重置是次要动作，不该跟下面的蓝色行操作抢注意力，
-            但也不能是黑的——纯黑文字在按钮上会被当成普通正文，看不出是可点的。 */}
-        <Button
-          variant="ghost"
-          className="text-muted-foreground hover:text-foreground"
-          onClick={() => {
+        {/* 草稿要显式清一遍，不能只靠上面那个 useEffect：用户输了字还没点查询就点
+            重置时，URL 上本来就是空的，effect 的依赖不变、不会重跑。 */}
+        <FilterActions
+          onReset={() => {
             setNameInput("");
+            setCategoryInput(null);
+            setCityInput(null);
+            setStatusInput(null);
             navigate({ search: { page: 1, pageSize: search.pageSize } });
           }}
-        >
-          重置
-        </Button>
-      </div>
+        />
+      </FilterBar>
 
       <div className="rounded-lg border bg-card shadow-sm">
         <Table>

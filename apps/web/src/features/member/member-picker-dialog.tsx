@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { SearchIcon, UsersRoundIcon } from "lucide-react";
 import { useEffect, useState } from "react";
+import { FilterActions } from "#/shared/components/filter-bar.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import { Checkbox } from "#/shared/components/ui/checkbox.tsx";
 import {
@@ -176,9 +177,9 @@ export function MemberPickerDialog({
                 onChange={(event) => setKeyword(event.target.value)}
               />
             </div>
-            <Button type="submit" variant="outline">
-              搜索
-            </Button>
+            {/* 弹窗里的选人表格也是表格筛选，触发方式和按钮样式跟列表页一致；
+                只有一个关键字条件，不需要重置。 */}
+            <FilterActions />
           </form>
 
           <div className="rounded-lg border">

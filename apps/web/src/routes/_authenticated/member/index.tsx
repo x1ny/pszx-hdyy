@@ -4,6 +4,7 @@ import { PlusIcon, SearchIcon, UsersRoundIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { FilterActions, FilterBar } from "#/shared/components/filter-bar.tsx";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,6 +46,7 @@ import { MemberFormDialog } from "./-components/member-form-dialog";
 import {
   type Member,
   type MemberFormValues,
+  type MemberStatus,
   createMember,
   deleteMember,
   memberKeys,
@@ -93,16 +95,21 @@ function MemberPage() {
   const queryClient = useQueryClient();
   const [nameInput, setNameInput] = useState(search.name ?? "");
   const [positionInput, setPositionInput] = useState(search.companyPosition ?? "");
+  const [statusInput, setStatusInput] = useState<MemberStatus | null>(
+    search.status ?? null,
+  );
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Member>();
   const [detail, setDetail] = useState<Member>();
   const [pendingDelete, setPendingDelete] = useState<Member>();
 
+  // URL 变了就把草稿拉回来对齐（后退、粘链接进来）。
   useEffect(() => setNameInput(search.name ?? ""), [search.name]);
   useEffect(
     () => setPositionInput(search.companyPosition ?? ""),
     [search.companyPosition],
   );
+  useEffect(() => setStatusInput(search.status ?? null), [search.status]);
 
   const listQuery = useQuery(memberListQueryOptions(search));
   const list = listQuery.data?.list ?? [];
@@ -184,15 +191,14 @@ function MemberPage() {
         </Button>
       </div>
 
-      <form
-        className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-3 shadow-sm"
-        onSubmit={(event) => {
-          event.preventDefault();
+      <FilterBar
+        onSubmit={() =>
           applyFilter({
             name: nameInput.trim() || undefined,
             companyPosition: positionInput.trim() || undefined,
-          });
-        }}
+            status: statusInput ?? undefined,
+          })
+        }
       >
         <div className="relative">
           <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -211,8 +217,8 @@ function MemberPage() {
         />
         <Select
           items={STATUS_FILTER_ITEMS}
-          value={search.status ?? null}
-          onValueChange={(value) => applyFilter({ status: value ?? undefined })}
+          value={statusInput}
+          onValueChange={(value) => setStatusInput(value as MemberStatus | null)}
         >
           <SelectTrigger className="w-32">
             <SelectValue />
@@ -225,22 +231,15 @@ function MemberPage() {
             ))}
           </SelectContent>
         </Select>
-        <button type="submit" className="sr-only" tabIndex={-1} aria-hidden="true">
-          应用筛选
-        </button>
-        <Button
-          type="button"
-          variant="ghost"
-          className="text-muted-foreground hover:text-foreground"
-          onClick={() => {
+        <FilterActions
+          onReset={() => {
             setNameInput("");
             setPositionInput("");
+            setStatusInput(null);
             navigate({ search: { page: 1, pageSize: search.pageSize } });
           }}
-        >
-          重置
-        </Button>
-      </form>
+        />
+      </FilterBar>
 
       <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
         <Table className="min-w-[1220px]">

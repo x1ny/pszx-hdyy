@@ -14,6 +14,7 @@ import {
   previewInvitationTemplate,
 } from "#/features/invitation/queries";
 import { activityMemberListQueryOptions } from "#/features/member/relation-queries";
+import { FilterActions } from "#/shared/components/filter-bar.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import { Checkbox } from "#/shared/components/ui/checkbox.tsx";
 import {
@@ -220,20 +221,25 @@ function GeneratePage() {
               </span>
             </div>
             <form
-              className="relative"
+              className="flex items-center gap-2"
               onSubmit={(event) => {
                 event.preventDefault();
                 setNameFilter(nameInput.trim() || undefined);
                 setPage(1);
               }}
             >
-              <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                className="w-48 pl-8"
-                placeholder="搜索姓名"
-                value={nameInput}
-                onChange={(event) => setNameInput(event.target.value)}
-              />
+              <div className="relative">
+                <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="w-48 pl-8"
+                  placeholder="搜索姓名"
+                  value={nameInput}
+                  onChange={(event) => setNameInput(event.target.value)}
+                />
+              </div>
+              {/* 卡片头里的一条内嵌筛选，不套 FilterBar 的边框和底色，但触发方式
+                  和按钮样式跟列表页保持一致。这里没有别的条件，不需要重置。 */}
+              <FilterActions />
             </form>
           </div>
 

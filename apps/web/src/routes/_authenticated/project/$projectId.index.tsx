@@ -5,9 +5,10 @@ import {
   PlusIcon,
   SearchIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { FilterActions, FilterBar } from "#/shared/components/filter-bar.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import {
   Empty,
@@ -40,6 +41,8 @@ import {
 import { StatusSelect } from "./list";
 import {
   type Activity,
+  type ActivityType,
+  type ProjectPublishStatus,
   activityKeys,
   activityListQueryOptions,
   createActivity,
@@ -108,8 +111,20 @@ function ProjectActivityListPage() {
   const queryClient = useQueryClient();
 
   const [nameInput, setNameInput] = useState(search.name ?? "");
+  const [activityTypeInput, setActivityTypeInput] = useState<ActivityType | null>(
+    search.activityType ?? null,
+  );
+  const [publishStatusInput, setPublishStatusInput] =
+    useState<ProjectPublishStatus | null>(search.publishStatus ?? null);
   const [activityFormOpen, setActivityFormOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity>();
+
+  // URL 变了就把草稿拉回来对齐（后退、粘链接进来）。
+  useEffect(() => {
+    setNameInput(search.name ?? "");
+    setActivityTypeInput(search.activityType ?? null);
+    setPublishStatusInput(search.publishStatus ?? null);
+  }, [search.name, search.activityType, search.publishStatus]);
 
   const activityListQuery = useQuery(
     activityListQueryOptions({ ...search, projectId }),
@@ -188,14 +203,16 @@ function ProjectActivityListPage() {
         </Button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-3 shadow-sm">
-        <form
-          className="relative"
-          onSubmit={(event) => {
-            event.preventDefault();
-            applyFilter({ name: nameInput.trim() || undefined });
-          }}
-        >
+      <FilterBar
+        onSubmit={() =>
+          applyFilter({
+            name: nameInput.trim() || undefined,
+            activityType: activityTypeInput ?? undefined,
+            publishStatus: publishStatusInput ?? undefined,
+          })
+        }
+      >
+        <div className="relative">
           <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="w-56 pl-8"
@@ -203,13 +220,13 @@ function ProjectActivityListPage() {
             value={nameInput}
             onChange={(event) => setNameInput(event.target.value)}
           />
-        </form>
+        </div>
 
         <Select
           items={ACTIVITY_TYPE_FILTER_ITEMS}
-          value={search.activityType ?? null}
+          value={activityTypeInput}
           onValueChange={(value) =>
-            applyFilter({ activityType: value ?? undefined })
+            setActivityTypeInput(value as ActivityType | null)
           }
         >
           <SelectTrigger className="w-36">
@@ -226,9 +243,9 @@ function ProjectActivityListPage() {
 
         <Select
           items={PUBLISH_STATUS_FILTER_ITEMS}
-          value={search.publishStatus ?? null}
+          value={publishStatusInput}
           onValueChange={(value) =>
-            applyFilter({ publishStatus: value ?? undefined })
+            setPublishStatusInput(value as ProjectPublishStatus | null)
           }
         >
           <SelectTrigger className="w-36">
@@ -243,17 +260,15 @@ function ProjectActivityListPage() {
           </SelectContent>
         </Select>
 
-        <Button
-          variant="ghost"
-          className="text-muted-foreground hover:text-foreground"
-          onClick={() => {
+        <FilterActions
+          onReset={() => {
             setNameInput("");
+            setActivityTypeInput(null);
+            setPublishStatusInput(null);
             navigate({ search: { page: 1, pageSize: search.pageSize } });
           }}
-        >
-          重置
-        </Button>
-      </div>
+        />
+      </FilterBar>
 
       <div className="rounded-lg border bg-card shadow-sm">
         <Table>

@@ -4,6 +4,7 @@ import { FolderKanbanIcon, PlusIcon, SearchIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { FilterActions, FilterBar } from "#/shared/components/filter-bar.tsx";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -192,10 +193,11 @@ function ProjectListPage() {
         </Button>
       </div>
 
-      <form
-        className="rounded-lg border bg-card p-4 shadow-sm"
-        onSubmit={(event) => {
-          event.preventDefault();
+      {/* 这一页的筛选项多，排成两行的卡片而不是一条横栏：flex-col + items-stretch
+          把 FilterBar 默认的横排改成竖排，其余（边框/内边距/提交行为）照旧。 */}
+      <FilterBar
+        className="flex-col items-stretch gap-4 p-4"
+        onSubmit={() => {
           if (
             startTimeInput &&
             endTimeInput &&
@@ -214,25 +216,18 @@ function ProjectListPage() {
       >
         <div className="flex items-center justify-between gap-4">
           <h2 className="font-semibold">查询条件</h2>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setKeywordInput("");
-                setPublishStatusInput(null);
-                setStartTimeInput("");
-                setEndTimeInput("");
-                navigate({ search: { page: 1, pageSize: search.pageSize } });
-              }}
-            >
-              重置
-            </Button>
-            <Button type="submit">查询</Button>
-          </div>
+          <FilterActions
+            onReset={() => {
+              setKeywordInput("");
+              setPublishStatusInput(null);
+              setStartTimeInput("");
+              setEndTimeInput("");
+              navigate({ search: { page: 1, pageSize: search.pageSize } });
+            }}
+          />
         </div>
 
-        <FieldGroup className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <FieldGroup className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Field className="gap-1.5">
             <FieldLabel
               htmlFor="project-keyword"
@@ -309,7 +304,7 @@ function ProjectListPage() {
             />
           </Field>
         </FieldGroup>
-      </form>
+      </FilterBar>
 
       <div className="rounded-lg border bg-card shadow-sm">
         <Table>

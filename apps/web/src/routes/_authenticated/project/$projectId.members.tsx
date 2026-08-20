@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { PlusIcon, SearchIcon, UsersRoundIcon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { MemberPickerDialog } from "#/features/member/member-picker-dialog.tsx";
@@ -16,6 +16,7 @@ import {
   RELATION_ORIGIN_LABELS,
   removeProjectMember,
 } from "#/features/member/relation-queries.ts";
+import { FilterActions, FilterBar } from "#/shared/components/filter-bar.tsx";
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import {
@@ -77,6 +78,9 @@ function ProjectMembersPage() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [removing, setRemoving] = useState<ProjectMember>();
+
+  // URL 变了就把草稿拉回来对齐（后退、粘链接进来）。
+  useEffect(() => setNameInput(search.name ?? ""), [search.name]);
 
   const listQuery = useQuery(
     projectMemberListQueryOptions({ projectId, ...search }),
@@ -144,18 +148,16 @@ function ProjectMembersPage() {
         </div>
       </div>
 
-      <form
-        className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-3 shadow-sm"
-        onSubmit={(event) => {
-          event.preventDefault();
+      <FilterBar
+        onSubmit={() =>
           navigate({
             search: (prev) => ({
               ...prev,
               name: nameInput.trim() || undefined,
               page: 1,
             }),
-          });
-        }}
+          })
+        }
       >
         <div className="relative">
           <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -166,21 +168,13 @@ function ProjectMembersPage() {
             onChange={(event) => setNameInput(event.target.value)}
           />
         </div>
-        <Button type="submit" variant="outline">
-          查询
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          className="text-muted-foreground hover:text-foreground"
-          onClick={() => {
+        <FilterActions
+          onReset={() => {
             setNameInput("");
             navigate({ search: { page: 1, pageSize: search.pageSize } });
           }}
-        >
-          重置
-        </Button>
-      </form>
+        />
+      </FilterBar>
 
       <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
         <Table className="min-w-[900px]">

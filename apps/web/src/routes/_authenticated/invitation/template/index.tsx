@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { MailPlusIcon, PlusIcon, SearchIcon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import {
@@ -13,6 +13,7 @@ import {
 import {
   type InvitationTemplate,
   type InvitationTemplateFormValues,
+  type InvitationTemplateStatus,
   createInvitationTemplate,
   deleteInvitationTemplate,
   getInvitationTemplate,
@@ -21,6 +22,7 @@ import {
   setInvitationTemplateStatus,
   updateInvitationTemplate,
 } from "#/features/invitation/queries";
+import { FilterActions, FilterBar } from "#/shared/components/filter-bar.tsx";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -91,10 +93,19 @@ function TemplatePage() {
   const queryClient = useQueryClient();
 
   const [nameInput, setNameInput] = useState(search.name ?? "");
+  const [statusInput, setStatusInput] = useState<InvitationTemplateStatus | null>(
+    search.status ?? null,
+  );
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<InvitationTemplate>();
   const [previewFileId, setPreviewFileId] = useState<string>();
   const [pendingDelete, setPendingDelete] = useState<InvitationTemplate>();
+
+  // URL 变了就把草稿拉回来对齐（后退、粘链接进来）。
+  useEffect(() => {
+    setNameInput(search.name ?? "");
+    setStatusInput(search.status ?? null);
+  }, [search.name, search.status]);
 
   const listQuery = useQuery(invitationTemplateListQueryOptions(search));
   const list = listQuery.data?.list ?? [];
@@ -185,14 +196,15 @@ function TemplatePage() {
         </Button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-3 shadow-sm">
-        <form
-          className="relative"
-          onSubmit={(event) => {
-            event.preventDefault();
-            applyFilter({ name: nameInput.trim() || undefined });
-          }}
-        >
+      <FilterBar
+        onSubmit={() =>
+          applyFilter({
+            name: nameInput.trim() || undefined,
+            status: statusInput ?? undefined,
+          })
+        }
+      >
+        <div className="relative">
           <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="w-56 pl-8"
@@ -200,12 +212,14 @@ function TemplatePage() {
             value={nameInput}
             onChange={(event) => setNameInput(event.target.value)}
           />
-        </form>
+        </div>
 
         <Select
           items={STATUS_FILTER_ITEMS}
-          value={search.status ?? null}
-          onValueChange={(value) => applyFilter({ status: value ?? undefined })}
+          value={statusInput}
+          onValueChange={(value) =>
+            setStatusInput(value as InvitationTemplateStatus | null)
+          }
         >
           <SelectTrigger className="w-32">
             <SelectValue />
@@ -219,17 +233,14 @@ function TemplatePage() {
           </SelectContent>
         </Select>
 
-        <Button
-          variant="ghost"
-          className="text-muted-foreground hover:text-foreground"
-          onClick={() => {
+        <FilterActions
+          onReset={() => {
             setNameInput("");
+            setStatusInput(null);
             navigate({ search: { page: 1, pageSize: search.pageSize } });
           }}
-        >
-          重置
-        </Button>
-      </div>
+        />
+      </FilterBar>
 
       <div className="rounded-lg border bg-card shadow-sm">
         <Table>

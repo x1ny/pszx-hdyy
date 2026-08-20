@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ClipboardListIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import {
   DEMAND_HANDLING_LABELS,
@@ -17,10 +18,12 @@ import {
 import {
   type DemandStatus,
   type ResourceDemand,
+  type ResourceType,
   resourceDemandListQueryOptions,
 } from "#/features/resource/queries.ts";
+import { FilterActions, FilterBar } from "#/shared/components/filter-bar.tsx";
 import { Badge } from "#/shared/components/ui/badge.tsx";
-import { Button, buttonVariants } from "#/shared/components/ui/button.tsx";
+import { buttonVariants } from "#/shared/components/ui/button.tsx";
 import { Checkbox } from "#/shared/components/ui/checkbox.tsx";
 import {
   Empty,
@@ -92,8 +95,28 @@ function ResourceSummaryTab() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
 
+  // 筛选控件全部先落在草稿 state 上，点「查询」才写进 URL——这一页的筛选虽然是
+  // 前端算的（不发请求），交互也跟其它列表页保持一致，见 filter-bar.tsx。
+  const [resourceTypeDraft, setResourceTypeDraft] = useState<ResourceType | null>(
+    search.resourceType ?? null,
+  );
+  const [statusDraft, setStatusDraft] = useState<DemandStatus | null>(
+    search.status ?? null,
+  );
+  const [includeVoidedDraft, setIncludeVoidedDraft] = useState(
+    search.includeVoidedSegment,
+  );
+
+  // URL 变了就把草稿拉回来对齐（后退、粘链接进来）。
+  useEffect(() => {
+    setResourceTypeDraft(search.resourceType ?? null);
+    setStatusDraft(search.status ?? null);
+    setIncludeVoidedDraft(search.includeVoidedSegment);
+  }, [search.resourceType, search.status, search.includeVoidedSegment]);
+
   const demandQuery = useQuery(resourceDemandListQueryOptions(activityId));
 
+  // hooks 全部在这条早退之前声明，别往下挪。
   if (demandQuery.isPending) return <Skeleton className="h-96 w-full" />;
 
   const all = demandQuery.data?.list ?? [];
@@ -145,16 +168,25 @@ function ResourceSummaryTab() {
         />
       </div>
 
-      <div className="flex flex-wrap items-end justify-between gap-3 rounded-lg border bg-card p-4 shadow-sm">
+      <FilterBar
+        className="justify-between gap-3 p-4"
+        onSubmit={() =>
+          setFilter({
+            resourceType: resourceTypeDraft ?? undefined,
+            status: statusDraft ?? undefined,
+            includeVoidedSegment: includeVoidedDraft,
+          })
+        }
+      >
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1.5">
             <span className="text-muted-foreground text-xs">资源类型</span>
             {/* items 必传，否则 SelectValue 渲染的是原始枚举值 */}
             <Select
               items={RESOURCE_TYPE_FILTER_ITEMS}
-              value={search.resourceType ?? null}
+              value={resourceTypeDraft}
               onValueChange={(value) =>
-                setFilter({ resourceType: value ?? undefined })
+                setResourceTypeDraft(value as ResourceType | null)
               }
             >
               <SelectTrigger className="w-36">
@@ -174,8 +206,10 @@ function ResourceSummaryTab() {
             <span className="text-muted-foreground text-xs">配置状态</span>
             <Select
               items={DEMAND_STATUS_FILTER_ITEMS}
-              value={search.status ?? null}
-              onValueChange={(value) => setFilter({ status: value ?? undefined })}
+              value={statusDraft}
+              onValueChange={(value) =>
+                setStatusDraft(value as DemandStatus | null)
+              }
             >
               <SelectTrigger className="w-36">
                 <SelectValue />
@@ -192,28 +226,24 @@ function ResourceSummaryTab() {
 
           <label className="flex h-9 cursor-pointer items-center gap-2 text-muted-foreground text-sm">
             <Checkbox
-              checked={search.includeVoidedSegment}
-              onCheckedChange={(checked) =>
-                setFilter({ includeVoidedSegment: !!checked })
-              }
+              checked={includeVoidedDraft}
+              onCheckedChange={(checked) => setIncludeVoidedDraft(!!checked)}
             />
             含作废环节
+            {/* 隐藏条数说的是**当前生效**的筛选结果，所以读 search 不读草稿 */}
             {voidedSegmentCount > 0 && !search.includeVoidedSegment && (
               <span className="text-xs">（{voidedSegmentCount} 项已隐藏）</span>
             )}
           </label>
 
-          {(search.resourceType || search.status) && (
-            <Button
-              variant="ghost"
-              className="text-muted-foreground hover:text-foreground"
-              onClick={() =>
-                setFilter({ resourceType: undefined, status: undefined })
-              }
-            >
-              重置
-            </Button>
-          )}
+          <FilterActions
+            onReset={() => {
+              setResourceTypeDraft(null);
+              setStatusDraft(null);
+              setIncludeVoidedDraft(false);
+              navigate({ search: {} });
+            }}
+          />
         </div>
 
         <Link
@@ -223,7 +253,7 @@ function ResourceSummaryTab() {
         >
           进入资源台账
         </Link>
-      </div>
+      </FilterBar>
 
       <div className="rounded-lg border bg-card shadow-sm">
         <Table>

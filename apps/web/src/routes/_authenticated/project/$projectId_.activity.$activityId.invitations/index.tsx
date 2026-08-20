@@ -10,6 +10,7 @@ import {
   invitationBatchListQueryOptions,
   saveBlob,
 } from "#/features/invitation/queries";
+import { FilterActions, FilterBar } from "#/shared/components/filter-bar.tsx";
 import { Button, buttonVariants } from "#/shared/components/ui/button.tsx";
 import {
   Empty,
@@ -95,15 +96,13 @@ function InvitationsPage() {
         </Link>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-3 shadow-sm">
-        <form
-          className="relative"
-          onSubmit={(event) => {
-            event.preventDefault();
-            setRecipientName(keywordInput.trim() || undefined);
-            setPage(1);
-          }}
-        >
+      <FilterBar
+        onSubmit={() => {
+          setRecipientName(keywordInput.trim() || undefined);
+          setPage(1);
+        }}
+      >
+        <div className="relative">
           <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="w-56 pl-8"
@@ -111,19 +110,15 @@ function InvitationsPage() {
             value={keywordInput}
             onChange={(event) => setKeywordInput(event.target.value)}
           />
-        </form>
-        <Button
-          variant="ghost"
-          className="text-muted-foreground hover:text-foreground"
-          onClick={() => {
+        </div>
+        <FilterActions
+          onReset={() => {
             setKeywordInput("");
             setRecipientName(undefined);
             setPage(1);
           }}
-        >
-          重置
-        </Button>
-      </div>
+        />
+      </FilterBar>
 
       <div className="rounded-lg border bg-card shadow-sm">
         <Table>

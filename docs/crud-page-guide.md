@@ -129,8 +129,51 @@ export const Route = createFileRoute("/_authenticated/foo/")({
 - zod v4 直接当 `validateSearch` 用，不需要 `@tanstack/zod-adapter`。
 - **每个字段都要 `.catch(...)`**：别人手改 URL 传乱七八糟的值时，页面要降级成"全部/第一页"而不是崩掉。
 - 链接可分享、可收藏，浏览器后退能回到上一组筛选条件——这是不用 `useState` 的真实理由，不是装饰性的架构洁癖。
-- 名称这类自由输入框例外：本地 `useState` 暂存，回车或点"筛选"才写进 URL。每敲一个字母都 push 一条 history 的话，后退键就废了。
 - **改任何筛选条件都要把 `page` 重置成 1。** 停留在第 5 页、筛选结果只有 2 页数据的话，页面会看起来"筛没了"。
+
+### 筛选栏统一走 `<FilterBar>`：攒草稿，点「查询」才生效
+
+`shared/components/filter-bar.tsx` 导出 `FilterBar`（一个带边框底色的 `<form>`）和
+`FilterActions`（蓝色「查询」+ ghost「重置」）。**所有**表格筛选都用这一对，包括
+弹窗里的选人表格。
+
+```tsx
+const [nameInput, setNameInput] = useState(search.name ?? "");
+const [statusInput, setStatusInput] = useState<FooStatus | null>(search.status ?? null);
+
+// URL 变了就把草稿拉回来对齐（后退、粘链接进来）
+useEffect(() => {
+  setNameInput(search.name ?? "");
+  setStatusInput(search.status ?? null);
+}, [search.name, search.status]);
+
+<FilterBar
+  onSubmit={() =>
+    applyFilter({ name: nameInput.trim() || undefined, status: statusInput ?? undefined })
+  }
+>
+  <Input value={nameInput} onChange={(e) => setNameInput(e.target.value)} />
+  <Select value={statusInput} onValueChange={(v) => setStatusInput(v as FooStatus | null)}>…</Select>
+  <FilterActions
+    onReset={() => {
+      setNameInput("");
+      setStatusInput(null);
+      navigate({ search: { page: 1, pageSize: search.pageSize } });
+    }}
+  />
+</FilterBar>
+```
+
+- **每一个筛选控件都绑草稿 state，不绑 `search`。** 下拉不再 `onValueChange` 直接
+  `applyFilter`。混着来最难用：同一条筛选栏里下拉一改就刷新、输入框却要回车，用户
+  没法从外观判断哪个控件是哪种脾气，只能靠试。统一之后那颗蓝色按钮就是唯一的触发点。
+- 顺带的好处：改三个条件原来是三次往返、三条 history，现在是一次。自由输入框也不再
+  每敲一个字母 push 一条 history。
+- **`onReset` 里要显式把草稿清一遍，不能只靠 `useEffect`。** 用户输了字还没点查询就点
+  重置时，URL 上本来就是空的，effect 的依赖不变、不会重跑，输入框会留着上一次的字。
+- 分页的「每页 N 条」不算筛选，保持选完立即生效。
+- 筛选栏是 `<form>` 了，**里面任何不是「查询」的按钮都要写 `type="button"`**（Base UI
+  的 `Button` 恰好默认补了 `type="button"`，但别指望它兜底）。
 
 ### 表单用 TanStack Form，不用 react-hook-form
 
@@ -220,6 +263,10 @@ export const CATEGORY_BADGE_CLASS = {
 - 正常操作（详情/修改/启用停用）：`variant="ghost" className="text-primary hover:text-primary"`
 - 危险操作（删除）：`variant="ghost" className="text-destructive hover:text-destructive"`
 - 次要操作（重置筛选）：`variant="ghost" className="text-muted-foreground hover:text-foreground"`
+
+筛选栏的「查询」是例外，用默认的 `variant="default"`（实心蓝）：它是整条筛选栏唯一的
+触发点，视觉权重要压得住一排输入框。这两颗按钮都由 `FilterActions` 统一渲染，页面里
+不要自己拼——拼一次就会出现一个 outline 版的「查询」。
 
 `link` 变体（`text-primary`，已去掉默认下划线）目前没在用，但留着——纯文字链接场景直接用它，不用再手写颜色。
 
