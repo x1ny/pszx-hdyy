@@ -92,7 +92,7 @@ const batchFields = {
    */
   recordCount: sql<number>`(
     select count(*)::int from ${invitationRecord}
-    where ${invitationRecord.batchId} = ${invitationBatch.id}
+    where ${eq(invitationRecord.batchId, invitationBatch.id)}
   )`,
 };
 

@@ -109,12 +109,12 @@ export const projectMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
           // 这两句相关子查询就是那个决定的兑现处。
           activityCount: sql<number>`(
             select count(*)::int from ${activityMember}
-            where ${activityMember.projectMemberId} = ${projectMember.id}
+            where ${eq(activityMember.projectMemberId, projectMember.id)}
           )`.as("activity_count"),
           latestActivityName: sql<string | null>`(
             select ${activity.name} from ${activityMember}
             join ${activity} on ${activity.id} = ${activityMember.activityId}
-            where ${activityMember.projectMemberId} = ${projectMember.id}
+            where ${eq(activityMember.projectMemberId, projectMember.id)}
             order by ${activity.startTime} desc
             limit 1
           )`.as("latest_activity_name"),
@@ -282,7 +282,7 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
           // 列表上直接给"参与了几个环节"，运营才看得出谁还没分配环节。
           segmentCount: sql<number>`(
             select count(*)::int from ${segmentMember}
-            where ${segmentMember.activityMemberId} = ${activityMember.id}
+            where ${eq(segmentMember.activityMemberId, activityMember.id)}
           )`.as("segment_count"),
         })
         .from(activityMember)

@@ -47,12 +47,24 @@ const memberFields = {
  * 额外定义一整套回写时机（活动人员新增要不要加？活动下架算不算？移除回退
  * 吗？），文档一条都没定义，而现在这一列本来就恒为 0——趁关系表刚建，把它
  * 换成派生值最便宜。接口字段名保持不变，前端不用动。
+ *
+ * ⚠️ 关联条件必须写成 `eq(...)`，**不能**写回看着更直白的
+ * `${activityMember.memberId} = ${member.id}`。drizzle 的 buildSelection 在
+ * 单表查询（外层没有 join）下，会把 select 字段里顶层的 Column 片段统统降级成
+ * 不带表名的裸列名，这句于是被渲染成 `where "member_id" = "id"`——在子查询里
+ * 这两个名字都先匹配到 activity_member（它自己就有 id 列），关联整个断掉，
+ * count 退化成一个与外层无关的常数（activity_member 里 id = member_id 的行数），
+ * 结果就是每个人显示的活动数完全一样，没参加过活动的人也显示非零。
+ * `eq()` 返回的是嵌套 SQL 片段，那层 map 不递归进去，列名因此保住
+ * `"activity_member"."member_id" = "member"."id"` 的全限定形式。
+ * 见 routes.test.ts 里钉住这条的用例——`export` 只是为了让那个用例拿到同一份
+ * 投影，别的模块不要复用它。
  */
-const memberReadFields = {
+export const memberReadFields = {
   ...memberFields,
   activityCount: sql<number>`(
     select count(*)::int from ${activityMember}
-    where ${activityMember.memberId} = ${member.id}
+    where ${eq(activityMember.memberId, member.id)}
   )`.as("activity_count"),
 };
 
