@@ -24,11 +24,11 @@ import { activityDetailQueryOptions } from "../-queries";
 import { AgendaLineDialog } from "./-components/agenda-line-dialog";
 import { AgendaTimeline } from "./-components/agenda-timeline";
 import { SegmentDetailDialog } from "./-components/segment-detail-dialog";
-import { SegmentMembersDialog } from "./-components/segment-members-dialog";
 import {
   SegmentFormDialog,
   type SegmentFormSubmitValues,
 } from "./-components/segment-form-dialog";
+import { SegmentMembersDialog } from "./-components/segment-members-dialog";
 import { SegmentTable } from "./-components/segment-table";
 import {
   type AgendaLine,
@@ -310,8 +310,12 @@ function AgendaTab() {
 
         <div className="flex flex-wrap items-center gap-2">
           {search.view === "list" && (
-            <label className="flex cursor-pointer items-center gap-2 text-muted-foreground text-sm">
+            <label
+              htmlFor="include-voided"
+              className="flex cursor-pointer items-center gap-2 text-muted-foreground text-sm"
+            >
               <Checkbox
+                id="include-voided"
                 checked={search.includeVoided}
                 onCheckedChange={(checked) =>
                   navigate({
@@ -390,6 +394,10 @@ function AgendaTab() {
         onManageMembers={(segment) => {
           setDetail(undefined);
           setMemberSegment(segment);
+        }}
+        onManageDemands={(segment) => {
+          setDetail(undefined);
+          setDemandSegment(segment);
         }}
       />
 

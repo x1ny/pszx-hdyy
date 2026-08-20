@@ -34,12 +34,14 @@ export function SegmentDetailDialog({
   onOpenChange,
   onEdit,
   onManageMembers,
+  onManageDemands,
 }: {
   segment?: Segment;
   lines: AgendaLine[];
   onOpenChange: (open: boolean) => void;
   onEdit: (segment: Segment) => void;
   onManageMembers: (segment: Segment) => void;
+  onManageDemands: (segment: Segment) => void;
 }) {
   const line = segment
     ? lines.find((candidate) => candidate.id === segment.agendaLineId)
@@ -117,6 +119,14 @@ export function SegmentDetailDialog({
                   onClick={() => onManageMembers(segment)}
                 >
                   环节人员
+                </Button>
+              )}
+              {segment.status === "active" && (
+                <Button
+                  variant="outline"
+                  onClick={() => onManageDemands(segment)}
+                >
+                  资源需求
                 </Button>
               )}
               <Button onClick={() => onEdit(segment)}>修改环节</Button>
