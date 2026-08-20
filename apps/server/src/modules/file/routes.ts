@@ -1,9 +1,9 @@
-import { zValidator } from "@hono/zod-validator";
 import { bodyLimit } from "hono/body-limit";
 import { Hono } from "hono";
 import { fileMaxSizeBytes } from "../../infra/file-config";
 import { contentDisposition } from "../../shared/content-disposition";
 import { err, ok } from "../../shared/result";
+import { validate } from "../../shared/validate";
 import { findFileForRead, storeUploadedFile } from "./service";
 import { FileParams, FileQuery, UploadFileInput } from "./validation";
 
@@ -25,7 +25,7 @@ export const fileRoutes = new Hono().post(
       maxSize: maxUploadBodyBytes,
       onError: (c) => c.json(uploadTooLarge()),
     }),
-    zValidator("form", UploadFileInput, (result, c) => {
+    validate("form", UploadFileInput, (result, c) => {
       if (!result.success) {
         return c.json(
           validationError(result.error.issues[0]?.message ?? "上传参数不正确"),
@@ -48,12 +48,12 @@ export const fileRoutes = new Hono().post(
   )
   .get(
     "/:fileId",
-    zValidator("param", FileParams, (result, c) => {
+    validate("param", FileParams, (result, c) => {
       if (!result.success) {
         return c.json(validationError("文件 ID 格式不正确"));
       }
     }),
-    zValidator("query", FileQuery, (result, c) => {
+    validate("query", FileQuery, (result, c) => {
       if (!result.success) {
         return c.json(validationError("download 参数不正确"));
       }

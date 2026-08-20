@@ -13,3 +13,6 @@ dist-ssr
 .vinxi
 __unconfig*
 todos.json
+
+# 接口文档的线上副本，由 `bun run build` 生成（见 scripts/gen-api-docs.ts）
+apps/web/public/docs/

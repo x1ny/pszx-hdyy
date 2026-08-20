@@ -1,6 +1,13 @@
 {
   "extends": "../tsconfig.base.json",
-  "include": ["./dev.ts", "./release.ts", "./build-push.ts", "./deploy-test.ts", "./deploy-test.config.ts"],
+  "include": [
+    "./dev.ts",
+    "./release.ts",
+    "./build-push.ts",
+    "./deploy-test.ts",
+    "./deploy-test.config.ts",
+    "./gen-api-docs.ts"
+  ],
   "compilerOptions": {
     "types": ["bun", "node"]
   }

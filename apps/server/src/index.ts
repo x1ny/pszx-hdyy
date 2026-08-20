@@ -84,7 +84,10 @@ app.use("*", sessionMiddleware);
 // (or lack of one, see file below) only ever scopes to its own prefix —
 // it can't leak onto routes registered elsewhere in this chain regardless
 // of ordering.
-const routes = app
+// 导出是给 `scripts/gen-api-docs.ts` 用的：文档生成器 import 这个实例、读
+// `app.routes`，接口清单就永远等于真正注册的路由。运行时入口仍然是下面的
+// default export，这里多一个具名导出不改变任何行为。
+export const routes = app
   .route("/api/example", exampleRoutes)
   .route("/api/supplier", supplierRoutes)
   // 报价附件是 supplier 模块下的子资源，按约定另占一个前缀（理由写在
