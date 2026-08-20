@@ -100,3 +100,29 @@ export const formatDateTime = (iso: string | null | undefined) =>
  */
 export const maskPhone = (phone: string) =>
   phone.length < 7 ? phone : `${phone.slice(0, 3)}****${phone.slice(-4)}`;
+
+// ---------------------------------------------------------------------------
+// 报价附件
+// ---------------------------------------------------------------------------
+
+const FILE_SIZE_UNITS = ["B", "KB", "MB", "GB"] as const;
+
+/** 二进制单位（1024）。文件管理器显示的是这套，跟用户在本机看到的对得上。 */
+export const formatFileSize = (bytes: number) => {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+
+  const exponent = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    FILE_SIZE_UNITS.length - 1,
+  );
+  const value = bytes / 1024 ** exponent;
+
+  // 字节数不显示小数（"1.0 B" 很怪），其余保留一位。
+  return `${exponent === 0 ? value : value.toFixed(1)} ${FILE_SIZE_UNITS[exponent]}`;
+};
+
+/** 附件名里的扩展名，用来在图标位上标一眼「这是什么文件」。 */
+export const fileExtension = (fileName: string) => {
+  const dot = fileName.lastIndexOf(".");
+  return dot > 0 ? fileName.slice(dot + 1).toUpperCase().slice(0, 4) : "文件";
+};

@@ -128,7 +128,11 @@ export const supplierRoutes = new Hono<{ Variables: AuthedVariables }>()
   .post("/delete", jsonBody(SupplierIdInput), async (c) => {
     // 物理删除。旧库的 del_flag 去掉了：它和 status(enabled/disabled) 是同一
     // 张表上的两套「删除」语义，必然长歪，而 status 本来就是停用通道。
-    // 等哪天有别的表引用 supplier_id，再回来加 deletedAt 软删。
+    //
+    // supplier_quote 是目前唯一引用 supplier_id 的表，它挂的是 cascade：删供应商
+    // 会连带删掉它名下的报价附件**记录**（file_asset 和磁盘上的文件都还在）。
+    // 前端的删除确认弹窗要把这件事说出来，别让人以为只是删了一行联系方式。
+    // 等出现第二张引用表、或者「删错了要能找回来」成为真需求，再回来加 deletedAt。
     const [row] = await db
       .delete(supplier)
       .where(eq(supplier.id, c.req.valid("json").id))

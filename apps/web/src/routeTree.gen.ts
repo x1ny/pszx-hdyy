@@ -23,6 +23,7 @@ import { Route as AuthenticatedSystemUserRouteImport } from './routes/_authentic
 import { Route as AuthenticatedInvitationTemplateIndexRouteImport } from './routes/_authenticated/invitation/template/index'
 import { Route as AuthenticatedProjectProjectIdIndexRouteImport } from './routes/_authenticated/project/$projectId.index'
 import { Route as AuthenticatedProjectProjectIdMembersRouteImport } from './routes/_authenticated/project/$projectId.members'
+import { Route as AuthenticatedSupplierSupplierIdQuoteRouteImport } from './routes/_authenticated/supplier/$supplierId.quote'
 import { Route as AuthenticatedProjectProjectIdActivityActivityIdRouteImport } from './routes/_authenticated/project/$projectId_.activity.$activityId'
 import { Route as AuthenticatedProjectProjectIdActivityActivityIdIndexRouteImport } from './routes/_authenticated/project/$projectId_.activity.$activityId.index'
 import { Route as AuthenticatedProjectProjectIdActivityActivityIdConfigRouteImport } from './routes/_authenticated/project/$projectId_.activity.$activityId.config'
@@ -111,6 +112,12 @@ const AuthenticatedProjectProjectIdMembersRoute =
     id: '/members',
     path: '/members',
     getParentRoute: () => AuthenticatedProjectProjectIdRoute,
+  } as any)
+const AuthenticatedSupplierSupplierIdQuoteRoute =
+  AuthenticatedSupplierSupplierIdQuoteRouteImport.update({
+    id: '/supplier/$supplierId/quote',
+    path: '/supplier/$supplierId/quote',
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedProjectProjectIdActivityActivityIdRoute =
   AuthenticatedProjectProjectIdActivityActivityIdRouteImport.update({
@@ -209,6 +216,7 @@ export interface FileRoutesByFullPath {
   '/member/': typeof AuthenticatedMemberIndexRoute
   '/supplier/': typeof AuthenticatedSupplierIndexRoute
   '/project/$projectId/members': typeof AuthenticatedProjectProjectIdMembersRoute
+  '/supplier/$supplierId/quote': typeof AuthenticatedSupplierSupplierIdQuoteRoute
   '/invitation/template/': typeof AuthenticatedInvitationTemplateIndexRoute
   '/project/$projectId/': typeof AuthenticatedProjectProjectIdIndexRoute
   '/project/$projectId/activity/$activityId': typeof AuthenticatedProjectProjectIdActivityActivityIdRouteWithChildren
@@ -235,6 +243,7 @@ export interface FileRoutesByTo {
   '/member': typeof AuthenticatedMemberIndexRoute
   '/supplier': typeof AuthenticatedSupplierIndexRoute
   '/project/$projectId/members': typeof AuthenticatedProjectProjectIdMembersRoute
+  '/supplier/$supplierId/quote': typeof AuthenticatedSupplierSupplierIdQuoteRoute
   '/invitation/template': typeof AuthenticatedInvitationTemplateIndexRoute
   '/project/$projectId': typeof AuthenticatedProjectProjectIdIndexRoute
   '/project/$projectId/activity/$activityId/config': typeof AuthenticatedProjectProjectIdActivityActivityIdConfigRoute
@@ -263,6 +272,7 @@ export interface FileRoutesById {
   '/_authenticated/member/': typeof AuthenticatedMemberIndexRoute
   '/_authenticated/supplier/': typeof AuthenticatedSupplierIndexRoute
   '/_authenticated/project/$projectId/members': typeof AuthenticatedProjectProjectIdMembersRoute
+  '/_authenticated/supplier/$supplierId/quote': typeof AuthenticatedSupplierSupplierIdQuoteRoute
   '/_authenticated/invitation/template/': typeof AuthenticatedInvitationTemplateIndexRoute
   '/_authenticated/project/$projectId/': typeof AuthenticatedProjectProjectIdIndexRoute
   '/_authenticated/project/$projectId_/activity/$activityId': typeof AuthenticatedProjectProjectIdActivityActivityIdRouteWithChildren
@@ -292,6 +302,7 @@ export interface FileRouteTypes {
     | '/member/'
     | '/supplier/'
     | '/project/$projectId/members'
+    | '/supplier/$supplierId/quote'
     | '/invitation/template/'
     | '/project/$projectId/'
     | '/project/$projectId/activity/$activityId'
@@ -318,6 +329,7 @@ export interface FileRouteTypes {
     | '/member'
     | '/supplier'
     | '/project/$projectId/members'
+    | '/supplier/$supplierId/quote'
     | '/invitation/template'
     | '/project/$projectId'
     | '/project/$projectId/activity/$activityId/config'
@@ -345,6 +357,7 @@ export interface FileRouteTypes {
     | '/_authenticated/member/'
     | '/_authenticated/supplier/'
     | '/_authenticated/project/$projectId/members'
+    | '/_authenticated/supplier/$supplierId/quote'
     | '/_authenticated/invitation/template/'
     | '/_authenticated/project/$projectId/'
     | '/_authenticated/project/$projectId_/activity/$activityId'
@@ -466,6 +479,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/project/$projectId/members'
       preLoaderRoute: typeof AuthenticatedProjectProjectIdMembersRouteImport
       parentRoute: typeof AuthenticatedProjectProjectIdRoute
+    }
+    '/_authenticated/supplier/$supplierId/quote': {
+      id: '/_authenticated/supplier/$supplierId/quote'
+      path: '/supplier/$supplierId/quote'
+      fullPath: '/supplier/$supplierId/quote'
+      preLoaderRoute: typeof AuthenticatedSupplierSupplierIdQuoteRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/project/$projectId_/activity/$activityId': {
       id: '/_authenticated/project/$projectId_/activity/$activityId'
@@ -626,6 +646,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedSystemUserRoute: typeof AuthenticatedSystemUserRoute
   AuthenticatedMemberIndexRoute: typeof AuthenticatedMemberIndexRoute
   AuthenticatedSupplierIndexRoute: typeof AuthenticatedSupplierIndexRoute
+  AuthenticatedSupplierSupplierIdQuoteRoute: typeof AuthenticatedSupplierSupplierIdQuoteRoute
   AuthenticatedInvitationTemplateIndexRoute: typeof AuthenticatedInvitationTemplateIndexRoute
   AuthenticatedProjectProjectIdActivityActivityIdRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdRouteWithChildren
 }
@@ -640,6 +661,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedSystemUserRoute: AuthenticatedSystemUserRoute,
   AuthenticatedMemberIndexRoute: AuthenticatedMemberIndexRoute,
   AuthenticatedSupplierIndexRoute: AuthenticatedSupplierIndexRoute,
+  AuthenticatedSupplierSupplierIdQuoteRoute:
+    AuthenticatedSupplierSupplierIdQuoteRoute,
   AuthenticatedInvitationTemplateIndexRoute:
     AuthenticatedInvitationTemplateIndexRoute,
   AuthenticatedProjectProjectIdActivityActivityIdRoute:

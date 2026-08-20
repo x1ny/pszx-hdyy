@@ -60,3 +60,23 @@ export const ListSuppliersInput = PageInput.extend({
   city: filter,
   status: SupplierStatusEnum.optional(),
 });
+
+// ---------------------------------------------------------------------------
+// 报价信息（子资源，接口挂在 /api/supplierQuote/*）
+// ---------------------------------------------------------------------------
+
+const fileId = z.uuid({ error: "文件 ID 格式不正确" });
+
+/**
+ * 不分页。一个供应商的报价附件是个位数到几十份，`{list,total}` 那套在这里
+ * 只是多一个前端要维护的分页状态；真出现上百份再改成 PageInput.extend。
+ */
+export const ListSupplierQuotesInput = z.object({ supplierId: id });
+
+/** 文件先经 `/api/file/upload` 落地，这里只把它挂到供应商名下。 */
+export const CreateSupplierQuoteInput = z.object({
+  supplierId: id,
+  fileId,
+});
+
+export const SupplierQuoteIdInput = z.object({ id });

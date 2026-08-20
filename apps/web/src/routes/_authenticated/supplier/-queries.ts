@@ -34,6 +34,7 @@ export const supplierKeys = {
   all: ["supplier"] as const,
   list: (filters: SupplierFilters) =>
     [...supplierKeys.all, "list", filters] as const,
+  detail: (id: number) => [...supplierKeys.all, "detail", id] as const,
   cities: () => [...supplierKeys.all, "cities"] as const,
 };
 
@@ -43,6 +44,16 @@ export const supplierListQueryOptions = (filters: SupplierFilters) =>
     queryFn: () => unwrap(api.api.supplier.list.$post({ json: filters })),
     // 翻页/改筛选时先展示上一页数据，避免表格整体塌成骨架屏再弹回来。
     placeholderData: keepPreviousData,
+  });
+
+/**
+ * 报价页要在标题上写供应商名字，但它可能是被直接粘贴 URL 打开的——那时候
+ * 列表根本没加载过，拿不到那一行。所以单独走一次 get，不从列表缓存里捞。
+ */
+export const supplierDetailQueryOptions = (id: number) =>
+  queryOptions({
+    queryKey: supplierKeys.detail(id),
+    queryFn: () => unwrap(api.api.supplier.get.$post({ json: { id } })),
   });
 
 export const supplierStatsQueryOptions = () =>
@@ -71,3 +82,33 @@ export const deleteSupplier = (id: number) =>
 
 export const setSupplierStatus = (id: number, status: SupplierStatus) =>
   unwrap(api.api.supplier.setStatus.$post({ json: { id, status } }));
+
+// ---------------------------------------------------------------------------
+// 报价信息
+// ---------------------------------------------------------------------------
+
+/** 列表返回的是数组本身（服务端刻意没分页），取 [number] 拿到单行。 */
+export type SupplierQuote = ApiData<
+  InferResponseType<typeof api.api.supplierQuote.list.$post>
+>[number];
+
+export const supplierQuoteKeys = {
+  all: ["supplierQuote"] as const,
+  list: (supplierId: number) =>
+    [...supplierQuoteKeys.all, "list", supplierId] as const,
+};
+
+export const supplierQuoteListQueryOptions = (supplierId: number) =>
+  queryOptions({
+    queryKey: supplierQuoteKeys.list(supplierId),
+    queryFn: () =>
+      unwrap(api.api.supplierQuote.list.$post({ json: { supplierId } })),
+  });
+
+export const createSupplierQuote = (input: {
+  supplierId: number;
+  fileId: string;
+}) => unwrap(api.api.supplierQuote.create.$post({ json: input }));
+
+export const deleteSupplierQuote = (id: number) =>
+  unwrap(api.api.supplierQuote.delete.$post({ json: { id } }));

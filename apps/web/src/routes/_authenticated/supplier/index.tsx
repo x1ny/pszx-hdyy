@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Building2Icon,
   CircleCheckIcon,
@@ -25,7 +25,7 @@ import {
   AlertDialogTitle,
 } from "#/shared/components/ui/alert-dialog.tsx";
 import { Badge } from "#/shared/components/ui/badge.tsx";
-import { Button } from "#/shared/components/ui/button.tsx";
+import { Button, buttonVariants } from "#/shared/components/ui/button.tsx";
 import {
   Empty,
   EmptyDescription,
@@ -417,6 +417,21 @@ function SupplierPage() {
                       >
                         详情
                       </Button>
+                      {/* 报价信息是整页跳转，所以是 <Link> 而不是 Button：中键/
+                          右键要能在新标签页打开，这是原生 <a> 才有的行为。套一层
+                          buttonVariants 保持和相邻按钮同一套尺寸与配色。
+                          排在「详情」后面：它和详情同属「看这家供应商」，跟着
+                          「修改/停用/删除」那三个写操作分开。 */}
+                      <Link
+                        to="/supplier/$supplierId/quote"
+                        params={{ supplierId: String(supplier.id) }}
+                        className={cn(
+                          buttonVariants({ variant: "ghost", size: "sm" }),
+                          "text-primary hover:text-primary",
+                        )}
+                      >
+                        报价信息
+                      </Link>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -533,8 +548,11 @@ function SupplierPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>确认删除该供应商？</AlertDialogTitle>
+            {/* 明说会连带删掉报价附件：supplier_quote 挂的是 cascade，不写出来
+                的话，用户以为只是删了一条联系方式。 */}
             <AlertDialogDescription>
-              「{pendingDelete?.name}」将被永久删除，该操作不可恢复。
+              「{pendingDelete?.name}
+              」及其名下的报价文件记录将被永久删除，该操作不可恢复。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

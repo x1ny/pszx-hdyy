@@ -18,6 +18,7 @@ import {
   resourceDemandRoutes,
 } from "./modules/resource/routes";
 import { supplierRoutes } from "./modules/supplier/routes";
+import { supplierQuoteRoutes } from "./modules/supplier/routes.quote";
 import { err } from "./shared/result";
 
 const app = new Hono<{ Variables: Variables }>();
@@ -86,6 +87,9 @@ app.use("*", sessionMiddleware);
 const routes = app
   .route("/api/example", exampleRoutes)
   .route("/api/supplier", supplierRoutes)
+  // 报价附件是 supplier 模块下的子资源，按约定另占一个前缀（理由写在
+  // modules/supplier/routes.quote.ts 的文件头注释里）。
+  .route("/api/supplierQuote", supplierQuoteRoutes)
   .route("/api/member", memberRoutes)
   // 人员分层的三层关系各占一个前缀。它们和 /api/member 同属 modules/member
   // （三张关系表 + 补齐链路必须跟主档待在一个模块，否则 BR-DEV-026 的跨层
