@@ -333,6 +333,30 @@ export const activityRoutes = new Hono<{ Variables: AuthedVariables }>()
     return row ? c.json(ok(row)) : c.json(activityNotFound());
   })
 
+  .post("/delete", jsonBody(ActivityIdInput), async (c) => {
+    const { id } = c.req.valid("json");
+
+    try {
+      // activity_media 按表定义级联删除关联记录；其余下游业务表不设级联，
+      // 由数据库外键保护议程、人员、资源和邀请函等已有业务数据。
+      const [row] = await db
+        .delete(activity)
+        .where(eq(activity.id, id))
+        .returning({ id: activity.id });
+
+      return row ? c.json(ok(row)) : c.json(activityNotFound());
+    } catch (error) {
+      if (isForeignKeyViolation(error)) {
+        return c.json(
+          validationError(
+            "该活动已被议程、人员、资源或邀请函等业务数据引用，不能删除；如需隐藏请改为下架",
+          ),
+        );
+      }
+      throw error;
+    }
+  })
+
   .post(
     "/setPublishStatus",
     jsonBody(SetActivityPublishStatusInput),
@@ -381,5 +405,6 @@ export const activityRoutes = new Hono<{ Variables: AuthedVariables }>()
     },
   );
 
-// 同样故意没有 deleteActivity 接口——理由同 project，活动接下来会被
-// 人员分层/报名/资源/排位/邀请函大量反向引用。"下架"是删除通道。
+// 活动物理删除只开放给没有下游引用的活动；activity_media 会按表定义级联
+// 删除关联记录，其余人员/议程/资源/邀请函外键会阻止删除，避免误删历史业务数据。
+// 已有引用的活动请用 publishStatus = "delisted" 隐藏。

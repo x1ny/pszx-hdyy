@@ -34,9 +34,9 @@ import { fileAsset } from "../file/schema";
  * 发布状态：面向 H5 的展示总闸，由业务人员显式操作（"上架"/"下架"按钮），
  * 不是任何时间或其他状态推导出来的。
  *
- * "已下架"承担了已被使用项目的删除语义：数据留痕，且不会让
+ * "已下架"承担了已被使用项目或活动的删除语义：数据留痕，且不会让
  * activity.projectId、后续排位/资源/邀请函等大量下游外键变成悬空引用。
- * 物理删除只对还没有活动或其他关联数据的项目开放，且不做级联删除。
+ * 物理删除只对没有下游关联数据的项目或活动开放，且不做业务数据级联删除。
  */
 export const PUBLISH_STATUSES = ["draft", "published", "delisted"] as const;
 export type PublishStatus = (typeof PUBLISH_STATUSES)[number];

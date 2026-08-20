@@ -121,6 +121,9 @@ export const createActivity = (values: ActivityFormValues) =>
 export const updateActivity = (values: UpdateActivityValues) =>
   unwrap(api.api.activity.update.$post({ json: values }));
 
+export const deleteActivity = (id: number) =>
+  unwrap(api.api.activity.delete.$post({ json: { id } }));
+
 export const setActivityPublishStatus = (
   id: number,
   publishStatus: ProjectPublishStatus,

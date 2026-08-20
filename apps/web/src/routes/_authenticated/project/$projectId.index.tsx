@@ -9,7 +9,20 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { FilterActions, FilterBar } from "#/shared/components/filter-bar.tsx";
-import { Button } from "#/shared/components/ui/button.tsx";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "#/shared/components/ui/alert-dialog.tsx";
+import {
+  Button,
+  buttonVariants,
+} from "#/shared/components/ui/button.tsx";
 import {
   Empty,
   EmptyDescription,
@@ -34,6 +47,7 @@ import {
   TableHeader,
   TableRow,
 } from "#/shared/components/ui/table.tsx";
+import { cn } from "#/shared/lib/utils.ts";
 import {
   ActivityFormDialog,
   type ActivityFormSubmitValues,
@@ -46,6 +60,7 @@ import {
   activityKeys,
   activityListQueryOptions,
   createActivity,
+  deleteActivity,
   setActivityPublishStatus,
   updateActivity,
 } from "./-queries";
@@ -118,6 +133,7 @@ function ProjectActivityListPage() {
     useState<ProjectPublishStatus | null>(search.publishStatus ?? null);
   const [activityFormOpen, setActivityFormOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Activity>();
+  const [pendingDelete, setPendingDelete] = useState<Activity>();
 
   // URL 变了就把草稿拉回来对齐（后退、粘链接进来）。
   useEffect(() => {
@@ -167,6 +183,20 @@ function ProjectActivityListPage() {
     }) => setActivityPublishStatus(activity.id, publishStatus),
     onSuccess: () => {
       toast.success("发布状态已更新");
+      invalidateActivities();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (activity: Activity) => deleteActivity(activity.id),
+    onSuccess: () => {
+      toast.success("删除成功");
+      setPendingDelete(undefined);
+      // 删掉当前页最后一条时退回上一页，否则会停在一张空表上。
+      if (list.length === 1 && search.page > 1) {
+        navigate({ search: (prev) => ({ ...prev, page: prev.page - 1 }) });
+      }
       invalidateActivities();
     },
     onError: (error) => toast.error(error.message),
@@ -287,7 +317,7 @@ function ProjectActivityListPage() {
               Array.from({ length: 3 }, (_, index) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
                 <TableRow key={index}>
-                  {Array.from({ length: 8 }, (_, cell) => (
+                  {Array.from({ length: 6 }, (_, cell) => (
                     // biome-ignore lint/suspicious/noArrayIndexKey: 同上
                     <TableCell key={cell}>
                       <Skeleton className="h-5 w-full" />
@@ -297,7 +327,7 @@ function ProjectActivityListPage() {
               ))
             ) : list.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8}>
+                <TableCell colSpan={6}>
                   <Empty className="border-0">
                     <EmptyHeader>
                       <EmptyMedia variant="icon">
@@ -360,17 +390,40 @@ function ProjectActivityListPage() {
                         这两个芯片，两处口径要一致——只在其中一处留着，用户会
                         以为另一处漏了。字段、接口和编辑表单都还在。 */}
                     <TableCell className="text-center whitespace-nowrap">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-primary hover:text-primary"
-                        onClick={() => {
-                          setEditingActivity(activity);
-                          setActivityFormOpen(true);
-                        }}
-                      >
-                        修改
-                      </Button>
+                      <div className="inline-flex items-center gap-1">
+                        <Link
+                          to="/project/$projectId/activity/$activityId"
+                          params={{
+                            projectId: projectIdParam,
+                            activityId: String(activity.id),
+                          }}
+                          className={cn(
+                            buttonVariants({ variant: "ghost", size: "sm" }),
+                            "text-primary hover:text-primary",
+                          )}
+                        >
+                          详情
+                        </Link>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-primary hover:text-primary"
+                          onClick={() => {
+                            setEditingActivity(activity);
+                            setActivityFormOpen(true);
+                          }}
+                        >
+                          修改
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setPendingDelete(activity)}
+                        >
+                          删除
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
               ))
@@ -443,6 +496,35 @@ function ProjectActivityListPage() {
         }}
         onSubmit={(values) => saveActivityMutation.mutate(values)}
       />
+
+      <AlertDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(undefined);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除该活动？</AlertDialogTitle>
+            <AlertDialogDescription>
+              「{pendingDelete?.name}」将被永久删除。已有议程、人员、资源或邀请函等业务数据引用的活动不能删除，
+              请改为下架。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deleteMutation.isPending}
+              onClick={() =>
+                pendingDelete && deleteMutation.mutate(pendingDelete)
+              }
+            >
+              删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
