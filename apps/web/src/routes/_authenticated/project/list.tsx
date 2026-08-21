@@ -19,7 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "#/shared/components/ui/alert-dialog.tsx";
-import { Button } from "#/shared/components/ui/button.tsx";
+import { Button, buttonVariants } from "#/shared/components/ui/button.tsx";
 import {
   Empty,
   EmptyDescription,
@@ -406,6 +406,16 @@ function ProjectListPage() {
                   </TableCell>
                   <TableCell className="text-center whitespace-nowrap">
                     <div className="inline-flex items-center gap-1">
+                      <Link
+                        to="/project/$projectId"
+                        params={{ projectId: String(project.id) }}
+                        className={cn(
+                          buttonVariants({ variant: "ghost", size: "sm" }),
+                          "text-primary hover:text-primary",
+                        )}
+                      >
+                        详情
+                      </Link>
                       <Button
                         variant="ghost"
                         size="sm"
