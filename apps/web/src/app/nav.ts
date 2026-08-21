@@ -1,5 +1,6 @@
 import type { LinkProps } from "@tanstack/react-router";
 import {
+  Building2,
   FolderKanban,
   LayoutDashboard,
   type LucideIcon,
@@ -36,6 +37,16 @@ export const navMain: NavItem[] = [
   },
   { title: "供应商管理", icon: Truck, to: "/supplier" },
   { title: "人员管理", icon: UsersRound, to: "/member" },
+  /**
+   * 场地是**唯一**进全局菜单的排位相关页面，而且不套折叠分组。
+   *
+   * 原型建了一个「排位管理」一级菜单，下挂场地库、排位方案列表、排位确认三项。
+   * 那个信息架构不采纳：后两项都必须带活动上下文才能工作，放全局菜单里，用户的
+   * 第一步永远是「先选一个活动」。它们进活动详情的标签页——判据和邀请函模块
+   * 一样（模板留全局、生成和记录进活动详情）。理由记在
+   * docs/场地排位底层设计.md §2.1。
+   */
+  { title: "场地管理", icon: Building2, to: "/venue" },
   /**
    * 只剩模板一项，所以不套折叠分组。
    *

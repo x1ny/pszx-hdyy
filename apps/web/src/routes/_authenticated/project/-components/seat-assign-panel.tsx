@@ -1,0 +1,208 @@
+import { useQuery } from "@tanstack/react-query";
+import {
+  Loader2Icon,
+  SearchIcon,
+  UserMinusIcon,
+  UserPlusIcon,
+  UsersIcon,
+} from "lucide-react";
+import { useState } from "react";
+import { Badge } from "#/shared/components/ui/badge.tsx";
+import { Button } from "#/shared/components/ui/button.tsx";
+import { Input } from "#/shared/components/ui/input.tsx";
+import { cn } from "#/shared/lib/utils.ts";
+import {
+  type PlanAssignmentRow,
+  type PlanSeatRow,
+  seatingCandidatesQueryOptions,
+} from "../-venue-queries";
+
+/**
+ * 排位画布右侧的人员面板。
+ *
+ * 这是**第二条写路径**（docs/场地排位底层设计.md §3.2）：它只调 assign /
+ * unassign，一次都不碰画布保存。旧系统把两条揉成一条，于是每拖动一个座位都在
+ * 重写全部人员绑定——那正是这份设计要避免的。
+ *
+ * 候选人来自两处，界面上不分栏：已经是本环节人员的直接排；只是活动人员的，
+ * 排上去时系统自动补一条环节人员再建分配（§8）。用户不需要知道这个区别，
+ * 但系统必须表达它——所以 `segmentMemberId` 为空的走另一个接口。
+ */
+export function SeatAssignPanel({
+  planId,
+  seat,
+  assignment,
+  readOnly,
+  pending,
+  onAssign,
+  onAssignActivityMember,
+  onUnassign,
+}: {
+  planId: number;
+  seat: PlanSeatRow | null;
+  assignment: PlanAssignmentRow | null;
+  readOnly: boolean;
+  pending: boolean;
+  onAssign: (segmentMemberId: number) => void;
+  onAssignActivityMember: (activityMemberId: number) => void;
+  onUnassign: () => void;
+}) {
+  const [keyword, setKeyword] = useState("");
+
+  const candidatesQuery = useQuery({
+    ...seatingCandidatesQueryOptions(planId, keyword || undefined),
+    enabled: seat !== null && !readOnly,
+  });
+
+  if (!seat) {
+    return (
+      <Shell>
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+          <UsersIcon className="size-8 opacity-40" />
+          <p className="text-sm">选中一个位置</p>
+          <p className="text-xs">点画布上的座位，这里就能给它排人。</p>
+        </div>
+      </Shell>
+    );
+  }
+
+  return (
+    <Shell>
+      <div>
+        <div className="flex items-center gap-2">
+          <h3 className="font-medium text-sm">位置 {seat.label}</h3>
+          {!seat.enabled && (
+            <Badge
+              variant="outline"
+              className="border-border bg-muted text-muted-foreground"
+            >
+              本环节停用
+            </Badge>
+          )}
+          {seat.rank === "vip" && (
+            <Badge
+              variant="outline"
+              className="border-warning/30 bg-warning/10 text-warning-foreground"
+            >
+              重要
+            </Badge>
+          )}
+        </div>
+        <p className="text-muted-foreground text-xs">
+          {assignment ? "已排人，可换人或解除" : "还没有人"}
+        </p>
+      </div>
+
+      {assignment && (
+        <div className="flex items-center justify-between gap-2 rounded-lg border bg-muted/40 p-3">
+          <div className="min-w-0">
+            <div className="truncate font-medium text-sm">
+              {assignment.memberName}
+            </div>
+            <p className="truncate text-muted-foreground text-xs">
+              {assignment.companyPosition || "未填写单位职务"}
+            </p>
+          </div>
+          {!readOnly && (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={pending}
+              className="shrink-0 text-destructive hover:text-destructive"
+              onClick={onUnassign}
+            >
+              <UserMinusIcon />
+              解除
+            </Button>
+          )}
+        </div>
+      )}
+
+      {readOnly ? (
+        <p className="text-muted-foreground text-xs">
+          方案已作废，不能再改排位。
+        </p>
+      ) : !seat.enabled ? (
+        <p className="text-muted-foreground text-xs">
+          这个位置本环节停用了，要排人先在画布上把它重新启用。
+        </p>
+      ) : (
+        <>
+          <div className="relative">
+            <SearchIcon className="-translate-y-1/2 absolute top-1/2 left-3 size-4 text-muted-foreground" />
+            <Input
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              placeholder="搜索姓名或手机号"
+              className="pl-9"
+            />
+          </div>
+
+          {candidatesQuery.isLoading ? (
+            <div className="flex justify-center py-6 text-muted-foreground">
+              <Loader2Icon className="size-4 animate-spin" />
+            </div>
+          ) : candidatesQuery.data?.list.length ? (
+            <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
+              {candidatesQuery.data.list.map((person) => {
+                const taken = person.takenSeatLabel;
+                const isHere =
+                  assignment?.segmentMemberId === person.segmentMemberId;
+                return (
+                  <button
+                    key={person.activityMemberId}
+                    type="button"
+                    disabled={pending || isHere}
+                    onClick={() =>
+                      person.segmentMemberId
+                        ? onAssign(person.segmentMemberId)
+                        : onAssignActivityMember(person.activityMemberId)
+                    }
+                    className={cn(
+                      "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                      isHere
+                        ? "cursor-default bg-primary/10 text-primary"
+                        : "cursor-pointer hover:bg-muted",
+                      pending && "opacity-60",
+                    )}
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate">{person.name}</div>
+                      <p className="truncate text-muted-foreground text-xs">
+                        {person.companyPosition || person.mobile || "—"}
+                      </p>
+                    </div>
+                    {/* 已占座的人不藏起来：让人看见"他已经在 A3"比让他凭空
+                        消失有用，点一下就是换座。 */}
+                    {isHere ? (
+                      <span className="shrink-0 text-xs">当前</span>
+                    ) : taken ? (
+                      <span className="shrink-0 text-muted-foreground text-xs">
+                        在 {taken}
+                      </span>
+                    ) : (
+                      <UserPlusIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="py-6 text-center text-muted-foreground text-xs">
+              没有匹配的人员。人员来自本活动的活动人员，去「活动人员」里先加。
+            </p>
+          )}
+        </>
+      )}
+    </Shell>
+  );
+}
+
+/** 固定宽度，跟区域属性面板一致——切换选中时外框不跳。 */
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <aside className="flex w-72 shrink-0 flex-col gap-3 overflow-hidden rounded-lg border bg-card p-4 shadow-sm">
+      {children}
+    </aside>
+  );
+}

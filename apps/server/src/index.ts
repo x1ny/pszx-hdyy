@@ -17,8 +17,11 @@ import {
   activityResourceRoutes,
   resourceDemandRoutes,
 } from "./modules/resource/routes";
+import { seatingRoutes } from "./modules/seating/routes";
 import { supplierRoutes } from "./modules/supplier/routes";
 import { supplierQuoteRoutes } from "./modules/supplier/routes.quote";
+import { venueRoutes } from "./modules/venue/routes";
+import { activityVenueRoutes } from "./modules/venue/routes.activity";
 import { err } from "./shared/result";
 
 const app = new Hono<{ Variables: Variables }>();
@@ -115,6 +118,15 @@ export const routes = app
   // 投影失焦。
   .route("/api/resourceDemand", resourceDemandRoutes)
   .route("/api/activityResource", activityResourceRoutes)
+  // 场地三层，依赖方向严格单向（docs/场地排位底层设计.md §2）：
+  //   venue         跨活动复用的场地库，不知道后两者的存在
+  //   activityVenue 活动从场地库拷贝下来的一份空间，归 venue 模块，不认识排位
+  //   seating       环节排位，只读上面两层 + member + agenda
+  // 反过来任何一条都不允许——venue 加了对 seating 的依赖，场地库就再也不能
+  // 独立使用了。
+  .route("/api/venue", venueRoutes)
+  .route("/api/activityVenue", activityVenueRoutes)
+  .route("/api/seating", seatingRoutes)
   // 只读的配置完整性视图，没有自己的表——它把环节、人员、资源几个模块的
   // 现状聚合成一张体检表。放在最后注册，因为它依赖上面所有模块。
   .route("/api/activityConfig", activityConfigRoutes);
