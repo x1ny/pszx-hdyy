@@ -1,6 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { CalendarRangeIcon } from "lucide-react";
+import { CalendarRangeIcon, RouteIcon } from "lucide-react";
+import {
+  memberTripListQueryOptions,
+  type Trip,
+} from "#/features/trip/queries.ts";
+import { TRANSPORT_MODE_LABELS } from "#/features/trip/utils.ts";
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import {
   Dialog,
@@ -28,11 +33,11 @@ import {
 import type { Member, MemberParticipation } from "../-queries";
 import { memberParticipationQueryOptions } from "../-queries";
 import {
-  MEMBER_STATUS_CHIP,
-  MEMBER_STATUS_LABELS,
   formatDateRange,
   formatDateTime,
   formatDateTimeRange,
+  MEMBER_STATUS_CHIP,
+  MEMBER_STATUS_LABELS,
 } from "../-utils";
 
 /**
@@ -133,6 +138,10 @@ export function MemberDetailDialog({
               <Section title="参与信息">
                 <ParticipationList memberId={member.id} />
               </Section>
+
+              <Section title="行程信息">
+                <TripInformation memberId={member.id} />
+              </Section>
             </DialogBody>
           </>
         )}
@@ -142,7 +151,11 @@ export function MemberDetailDialog({
 }
 
 function StatusBadge({ status }: { status: Member["status"] }) {
-  return <Badge className={MEMBER_STATUS_CHIP[status]}>{MEMBER_STATUS_LABELS[status]}</Badge>;
+  return (
+    <Badge className={MEMBER_STATUS_CHIP[status]}>
+      {MEMBER_STATUS_LABELS[status]}
+    </Badge>
+  );
 }
 
 function Section({
@@ -176,7 +189,9 @@ const groupIndex = (index: number) =>
  * id 可能不存在的类型。渲染在 `member &&` 里面的子组件天然拿得到确定的 id。
  */
 function ParticipationList({ memberId }: { memberId: number }) {
-  const { data, isPending } = useQuery(memberParticipationQueryOptions(memberId));
+  const { data, isPending } = useQuery(
+    memberParticipationQueryOptions(memberId),
+  );
 
   if (isPending) {
     return (
@@ -291,6 +306,130 @@ function ProjectGroup({
           </Table>
         </div>
       )}
+    </div>
+  );
+}
+
+/** 人员详情里的行程按项目分组，位置紧跟参与信息。 */
+function TripInformation({ memberId }: { memberId: number }) {
+  const { data, isPending } = useQuery(memberTripListQueryOptions(memberId));
+
+  if (isPending) {
+    return (
+      <div className="flex flex-col gap-2">
+        <Skeleton className="h-9 w-full" />
+        <Skeleton className="h-9 w-full" />
+      </div>
+    );
+  }
+
+  const list = data?.list ?? [];
+  if (list.length === 0) {
+    return (
+      <Empty className="rounded-lg border border-dashed py-8">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <RouteIcon />
+          </EmptyMedia>
+          <EmptyTitle>这个人还没有行程信息</EmptyTitle>
+        </EmptyHeader>
+      </Empty>
+    );
+  }
+
+  const groups = new Map<
+    number,
+    { projectId: number; projectName: string; trips: Trip[] }
+  >();
+  for (const trip of list) {
+    const group = groups.get(trip.projectId);
+    if (group) group.trips.push(trip);
+    else {
+      groups.set(trip.projectId, {
+        projectId: trip.projectId,
+        projectName: trip.projectName,
+        trips: [trip],
+      });
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {[...groups.values()].map((group, index) => (
+        <TripProjectGroup key={group.projectId} group={group} index={index} />
+      ))}
+    </div>
+  );
+}
+
+function TripProjectGroup({
+  group,
+  index,
+}: {
+  group: { projectId: number; projectName: string; trips: Trip[] };
+  index: number;
+}) {
+  return (
+    <div className="overflow-hidden rounded-lg border">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b bg-muted/40 px-4 py-2.5">
+        <span className="font-medium text-sm">
+          （{groupIndex(index)}）项目名称：{group.projectName}
+        </span>
+        <span className="text-muted-foreground text-xs">
+          共 {group.trips.length} 条行程
+        </span>
+      </div>
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader className="bg-transparent">
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="w-12">序号</TableHead>
+              <TableHead className="min-w-32">关联活动</TableHead>
+              <TableHead className="min-w-28">关联环节</TableHead>
+              <TableHead className="min-w-24">交通方式</TableHead>
+              <TableHead className="min-w-28">航班/车次</TableHead>
+              <TableHead className="min-w-40">出发时间</TableHead>
+              <TableHead className="min-w-40">到达时间</TableHead>
+              <TableHead className="min-w-28">出发地</TableHead>
+              <TableHead className="min-w-28">目的地</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {group.trips.map((trip, rowIndex) => (
+              <TableRow key={trip.id}>
+                <TableCell className="text-muted-foreground tabular-nums">
+                  {rowIndex + 1}
+                </TableCell>
+                <TableCell className="font-medium">
+                  <Link
+                    className="text-primary hover:underline"
+                    params={{
+                      activityId: String(trip.activityId),
+                      projectId: String(trip.projectId),
+                    }}
+                    to="/project/$projectId/activity/$activityId/trip"
+                  >
+                    {trip.activityName}
+                  </Link>
+                </TableCell>
+                <TableCell>{trip.segmentName || "-"}</TableCell>
+                <TableCell>
+                  {TRANSPORT_MODE_LABELS[trip.transportMode]}
+                </TableCell>
+                <TableCell>{trip.serviceNumber || "-"}</TableCell>
+                <TableCell className="whitespace-nowrap tabular-nums">
+                  {formatDateTime(trip.departureTime)}
+                </TableCell>
+                <TableCell className="whitespace-nowrap tabular-nums">
+                  {formatDateTime(trip.arrivalTime)}
+                </TableCell>
+                <TableCell>{trip.departureLocation}</TableCell>
+                <TableCell>{trip.destination}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

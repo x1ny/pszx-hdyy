@@ -19,6 +19,7 @@ import { activitySegment } from "../agenda/schema";
 import { type AuthedVariables, requireUser } from "../auth";
 import { activity } from "../project/schema";
 import { activityResource, resourceMemberBinding } from "../resource/schema";
+import { memberTrip } from "../trip/schema";
 import {
   createMemberInTx,
   ensureActivityMembers,
@@ -421,13 +422,13 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
    * 移除前的受影响清单。BR-DEV-029 要求"展示影响清单并二次确认"——清单由这个
    * 接口出，前端拿到什么就展示什么，不许自己拼文案。
    *
-   * 目前有环节关系和资源服务绑定两项。排位、邀请函的模块建表后往这里加，
+   * 目前有环节关系、资源服务绑定和人员行程三项。排位、邀请函的模块建表后往这里加，
    * 前端不用改——它渲染的是这个接口返回的列表。
    */
   .post("/impact", jsonBody(RelationIdInput), async (c) => {
     const id = c.req.valid("json").id;
 
-    const [segments, resources] = await Promise.all([
+    const [segments, resources, trips] = await Promise.all([
       db
         .select({ id: segmentMember.id, name: activitySegment.name })
         .from(segmentMember)
@@ -452,6 +453,16 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
         )
         .where(eq(resourceMemberBinding.activityMemberId, id))
         .orderBy(asc(activityResource.id)),
+
+      db
+        .select({
+          id: memberTrip.id,
+          departureLocation: memberTrip.departureLocation,
+          destination: memberTrip.destination,
+        })
+        .from(memberTrip)
+        .where(eq(memberTrip.activityMemberId, id))
+        .orderBy(asc(memberTrip.departureTime), asc(memberTrip.id)),
     ]);
 
     return c.json(
@@ -467,6 +478,13 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
             label: "资源服务绑定",
             names: resources.map((r) => r.name),
           },
+          {
+            kind: "trip" as const,
+            label: "人员行程",
+            names: trips.map(
+              (trip) => `${trip.departureLocation} → ${trip.destination}`,
+            ),
+          },
         ].filter((item) => item.names.length > 0),
       }),
     );
@@ -475,24 +493,31 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
   .post("/remove", jsonBody(RemoveActivityMemberInput), async (c) => {
     const { id, cascade } = c.req.valid("json");
 
-    const [[relatedSegments], [relatedBindings]] = await Promise.all([
-      db
-        .select({ total: count() })
-        .from(segmentMember)
-        .where(eq(segmentMember.activityMemberId, id)),
-      db
-        .select({ total: count() })
-        .from(resourceMemberBinding)
-        .where(eq(resourceMemberBinding.activityMemberId, id)),
-    ]);
+    const [[relatedSegments], [relatedBindings], [relatedTrips]] =
+      await Promise.all([
+        db
+          .select({ total: count() })
+          .from(segmentMember)
+          .where(eq(segmentMember.activityMemberId, id)),
+        db
+          .select({ total: count() })
+          .from(resourceMemberBinding)
+          .where(eq(resourceMemberBinding.activityMemberId, id)),
+        db
+          .select({ total: count() })
+          .from(memberTrip)
+          .where(eq(memberTrip.activityMemberId, id)),
+      ]);
     const segmentCount = relatedSegments?.total ?? 0;
     const bindingCount = relatedBindings?.total ?? 0;
+    const tripCount = relatedTrips?.total ?? 0;
 
-    if ((segmentCount > 0 || bindingCount > 0) && !cascade) {
+    if ((segmentCount > 0 || bindingCount > 0 || tripCount > 0) && !cascade) {
       // 不是错误，是要求前端走一遍 /impact + 二次确认再回来。
       const parts = [
         segmentCount > 0 ? `${segmentCount} 个环节` : null,
         bindingCount > 0 ? `${bindingCount} 项资源服务安排` : null,
+        tripCount > 0 ? `${tripCount} 条行程` : null,
       ].filter(Boolean);
       return c.json(
         validationError(`该人员已关联 ${parts.join("、")}，请确认是否一并解除`),
@@ -512,6 +537,10 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
         await tx
           .delete(resourceMemberBinding)
           .where(eq(resourceMemberBinding.activityMemberId, id));
+      }
+
+      if (tripCount > 0) {
+        await tx.delete(memberTrip).where(eq(memberTrip.activityMemberId, id));
       }
 
       const [deleted] = await tx

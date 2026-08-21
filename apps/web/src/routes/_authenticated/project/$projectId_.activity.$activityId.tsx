@@ -41,15 +41,25 @@ export const Route = createFileRoute(
 const TABS = [
   { to: "/project/$projectId/activity/$activityId", label: "活动概览" },
   { to: "/project/$projectId/activity/$activityId/config", label: "配置总览" },
-  { to: "/project/$projectId/activity/$activityId/agenda", label: "议程 / 环节" },
+  {
+    to: "/project/$projectId/activity/$activityId/agenda",
+    label: "议程 / 环节",
+  },
   { to: "/project/$projectId/activity/$activityId/venue", label: "场地空间" },
-  { to: "/project/$projectId/activity/$activityId/resources", label: "资源需求" },
+  {
+    to: "/project/$projectId/activity/$activityId/resources",
+    label: "资源需求",
+  },
   {
     to: "/project/$projectId/activity/$activityId/resource-ledger",
     label: "资源台账",
   },
   { to: "/project/$projectId/activity/$activityId/members", label: "活动人员" },
-  { to: "/project/$projectId/activity/$activityId/invitations", label: "邀请函" },
+  { to: "/project/$projectId/activity/$activityId/trip", label: "行程管理" },
+  {
+    to: "/project/$projectId/activity/$activityId/invitations",
+    label: "邀请函",
+  },
   { to: "/project/$projectId/activity/$activityId/seating", label: "排位" },
 ] as const;
 
@@ -63,10 +73,16 @@ const TABS = [
 function businessStatus(start: string, end: string) {
   const now = Date.now();
   if (now < new Date(start).getTime()) {
-    return { label: "未开始", chip: "border-border bg-muted text-muted-foreground" };
+    return {
+      label: "未开始",
+      chip: "border-border bg-muted text-muted-foreground",
+    };
   }
   if (now > new Date(end).getTime()) {
-    return { label: "已结束", chip: "border-border bg-muted text-muted-foreground" };
+    return {
+      label: "已结束",
+      chip: "border-border bg-muted text-muted-foreground",
+    };
   }
   return {
     label: "进行中",
@@ -110,7 +126,10 @@ function ActivityDetailLayout() {
             </h1>
             <Badge
               variant="outline"
-              className={cn("border", PUBLISH_STATUS_CHIP[activity.publishStatus])}
+              className={cn(
+                "border",
+                PUBLISH_STATUS_CHIP[activity.publishStatus],
+              )}
             >
               {PUBLISH_STATUS_LABELS[activity.publishStatus]}
             </Badge>
@@ -128,8 +147,9 @@ function ActivityDetailLayout() {
             </Badge>
           </div>
           <p className="text-muted-foreground text-sm">
-            {activity.projectName} · {ACTIVITY_TYPE_LABELS[activity.activityType]}{" "}
-            · {activity.location || "未填写地点"} ·{" "}
+            {activity.projectName} ·{" "}
+            {ACTIVITY_TYPE_LABELS[activity.activityType]} ·{" "}
+            {activity.location || "未填写地点"} ·{" "}
             {formatDateTime(activity.startTime)} 至{" "}
             {formatDateTime(activity.endTime)}
           </p>
@@ -146,7 +166,10 @@ function ActivityDetailLayout() {
             <Link
               key={tab.to}
               to={tab.to}
-              params={{ projectId: projectIdParam, activityId: activityIdParam }}
+              params={{
+                projectId: projectIdParam,
+                activityId: activityIdParam,
+              }}
               className={cn(
                 "shrink-0 whitespace-nowrap border-b-2 px-3 py-2.5 font-medium text-sm transition-colors",
                 isActive

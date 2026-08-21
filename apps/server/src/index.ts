@@ -19,6 +19,7 @@ import {
 } from "./modules/resource/routes";
 import { supplierRoutes } from "./modules/supplier/routes";
 import { supplierQuoteRoutes } from "./modules/supplier/routes.quote";
+import { tripRoutes } from "./modules/trip/routes";
 import { err } from "./shared/result";
 
 const app = new Hono<{ Variables: Variables }>();
@@ -115,6 +116,7 @@ export const routes = app
   // 投影失焦。
   .route("/api/resourceDemand", resourceDemandRoutes)
   .route("/api/activityResource", activityResourceRoutes)
+  .route("/api/trip", tripRoutes)
   // 只读的配置完整性视图，没有自己的表——它把环节、人员、资源几个模块的
   // 现状聚合成一张体检表。放在最后注册，因为它依赖上面所有模块。
   .route("/api/activityConfig", activityConfigRoutes);
