@@ -146,7 +146,9 @@ export const member = pgTable(
      */
     uniqueIndex("uk_member_id_document")
       .on(table.idType, table.idNumber)
-      .where(sql`${table.idType} is not null and ${table.idNumber} is not null`),
+      .where(
+        sql`${table.idType} is not null and ${table.idNumber} is not null`,
+      ),
   ],
 );
 
@@ -378,7 +380,9 @@ export const segmentMember = pgTable(
 
     // ⭐ 同 activity_member.projectMemberId：链条向上闭合，移除活动人员时
     // 数据库拦住残留的环节关系。
-    activityMemberId: bigint("activity_member_id", { mode: "number" }).notNull(),
+    activityMemberId: bigint("activity_member_id", {
+      mode: "number",
+    }).notNull(),
 
     memberId: bigint("member_id", { mode: "number" }).notNull(),
 
@@ -452,5 +456,9 @@ export const segmentMember = pgTable(
       ],
       name: "fk_segment_member_activity_member",
     }),
+
+    // 给 modules/seating 的 seat_assignment 复合外键当靶子，保证一条分配指向的
+    // 人和它指向的方案属于同一个环节。同 uk_segment_id_activity 那套做法。
+    unique("uk_segment_member_id_segment").on(table.id, table.segmentId),
   ],
 );
