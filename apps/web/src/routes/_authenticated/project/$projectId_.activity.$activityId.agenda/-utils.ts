@@ -151,7 +151,9 @@ export type TimelineBlock = {
   segment: Segment;
   leftPct: number;
   widthPct: number;
-  /** 结束时间越过当天 24:00，块被轴尾截断，卡片上要标注 */
+  /** 环节从前一天延续过来：当天看到的开头不是它真正的开始时间 */
+  continuesFromPrevDay: boolean;
+  /** 环节还要延续到后面：当天看到的结尾不是它真正的结束时间 */
   continuesNextDay: boolean;
 };
 
@@ -168,23 +170,86 @@ export type TimelineDay = {
   label: string;
   ticks: TimelineTick[];
   lanes: TimelineLane[];
+  /** 当天轴上画出来的块数，跨日环节的续接段也算一块 */
+  segmentCount: number;
+  /** 其中从前一天续过来的块数，用来在日卡片上把"当天新开始"和"续接"分开说 */
+  carryOverCount: number;
   /** 跨议程线的时间重叠区块，纯视觉提示，不是业务字段 */
   bands: { leftPct: number; widthPct: number; count: number }[];
 };
 
 const MINUTE = 60_000;
 const HALF_HOUR = 30 * MINUTE;
-const DAY = 24 * 60 * MINUTE;
 /** 只有一个 20 分钟环节时，别把它拉成占满整条轴 */
 const MIN_SPAN = 2 * 60 * MINUTE;
+/**
+ * 一个环节最多摊开成多少张日卡片。超出活动范围只提示不阻断，万一录进来一个
+ * 跨半年的环节，不能真画出 180 张卡片。截断处的块仍然带 `continuesNextDay`，
+ * 加上卡片上写的是真实结束时间，界面上看得出来"还没完"。
+ */
+const MAX_SPAN_DAYS = 31;
 
-type DayItem = { segment: Segment; startMs: number; endMs: number };
+type DayItem = {
+  segment: Segment;
+  /** 该块所属自然日的零点 */
+  dayStartMs: number;
+  /** 裁剪到当天之内的可见区间，块的位置和宽度按它算 */
+  visibleStartMs: number;
+  visibleEndMs: number;
+  continuesFromPrevDay: boolean;
+  continuesNextDay: boolean;
+};
 
 const tickStep = (span: number) => {
   if (span <= 6 * 60 * MINUTE) return HALF_HOUR;
   if (span <= 12 * 60 * MINUTE) return 60 * MINUTE;
   return 2 * 60 * MINUTE;
 };
+
+/** 按本地日历取次日零点，而不是加 86_400_000——有夏令时的时区加不出零点。 */
+const nextLocalDay = (dayStartMs: number) => {
+  const date = new Date(dayStartMs);
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate() + 1,
+  ).getTime();
+};
+
+/**
+ * 把一个环节摊成「它覆盖的每个自然日各一块」。
+ *
+ * 单日环节摊出来还是一块；8/20 20:00 → 8/22 09:00 摊成三块：8/20 的
+ * 20:00–24:00、8/21 的整天、8/22 的 00:00–09:00。三块指向同一个 segment，
+ * 由 continuesFromPrevDay / continuesNextDay 表达「这天看到的只是其中一段」。
+ */
+function expandSegmentDays(segment: Segment): DayItem[] {
+  const startMs = new Date(segment.startTime).getTime();
+  const endMs = new Date(segment.endTime).getTime();
+
+  const items: DayItem[] = [];
+  let dayStartMs = startOfLocalDay(new Date(startMs));
+
+  for (let index = 0; index < MAX_SPAN_DAYS; index += 1) {
+    const dayEndMs = nextLocalDay(dayStartMs);
+
+    items.push({
+      segment,
+      dayStartMs,
+      visibleStartMs: Math.max(startMs, dayStartMs),
+      visibleEndMs: Math.min(endMs, dayEndMs),
+      continuesFromPrevDay: startMs < dayStartMs,
+      continuesNextDay: endMs > dayEndMs,
+    });
+
+    // `<=` 而不是 `<`：结束时间正好压在零点的环节到此为止，不要在次日再摊出
+    // 一个零宽的续接块。
+    if (endMs <= dayEndMs) break;
+    dayStartMs = dayEndMs;
+  }
+
+  return items;
+}
 
 /**
  * 由已保存的环节推导议程时间轴。BR-DEV-031：时间轴不是独立保存对象，
@@ -199,6 +264,11 @@ const tickStep = (span: number) => {
  *    撑轨道宽度（`calculateTrackWidth`），改了百分比刻度线就对不上了；
  *    这里块宽严格按时间比例，太窄的靠 `min-width` + 轨道横向滚动解决。
  *
+ * 分组口径是**环节覆盖的自然日**，不是它开始的那一天：跨日环节在它经过的
+ * 每一天都要画出来（中间的整天铺满，末日画到真实结束时间），否则续接日的
+ * 泳道看上去是空的，运营会往一个已经被占住的时段里排新环节。同理，只被
+ * 跨日环节覆盖、当天没有新环节开始的日子也要出卡片。
+ *
  * 时区：按**浏览器本地时区**分自然日。活动表没有场地时区字段，跨时区协作时
  * 不同人看到的分组可能差一天——已知边界，见 modules/agenda/schema.ts 的注释。
  */
@@ -212,16 +282,12 @@ export function buildAgendaTimeline(
 
   const groups = new Map<string, DayItem[]>();
   for (const segment of active) {
-    const start = new Date(segment.startTime);
-    const key = localDayKey(start);
-    const item: DayItem = {
-      segment,
-      startMs: start.getTime(),
-      endMs: new Date(segment.endTime).getTime(),
-    };
-    const bucket = groups.get(key);
-    if (bucket) bucket.push(item);
-    else groups.set(key, [item]);
+    for (const item of expandSegmentDays(segment)) {
+      const key = localDayKey(new Date(item.dayStartMs));
+      const bucket = groups.get(key);
+      if (bucket) bucket.push(item);
+      else groups.set(key, [item]);
+    }
   }
 
   const lineOrder = new Map(lines.map((line, index) => [line.id, index]));
@@ -229,17 +295,14 @@ export function buildAgendaTimeline(
   return [...groups.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, items]) => {
-      const dayStart = startOfLocalDay(new Date(items[0].startMs));
-      const dayEnd = dayStart + DAY;
+      const dayStart = items[0].dayStartMs;
+      const dayEnd = nextLocalDay(dayStart);
 
-      // 轴范围：当天环节的最早开始 ~ 最晚结束（跨日的截到当天 24:00），
-      // 向外取整到半小时。取整基于当天零点而不是 epoch——后者在非整点
-      // 时区偏移下会算歪。
-      const rawStart = Math.min(...items.map((item) => item.startMs));
-      const rawEnd = Math.min(
-        Math.max(...items.map((item) => item.endMs)),
-        dayEnd,
-      );
+      // 轴范围：当天可见区间的最早开始 ~ 最晚结束，向外取整到半小时。取整
+      // 基于当天零点而不是 epoch——后者在非整点时区偏移下会算歪。续接段是从
+      // 零点起算的，所以有环节续过来的那天，轴自然就从 00:00 开始。
+      const rawStart = Math.min(...items.map((item) => item.visibleStartMs));
+      const rawEnd = Math.max(...items.map((item) => item.visibleEndMs));
 
       let axisStart =
         dayStart + Math.floor((rawStart - dayStart) / HALF_HOUR) * HALF_HOUR;
@@ -282,15 +345,22 @@ export function buildAgendaTimeline(
         .flatMap(([lineId, laneItems]) => {
           const line = lines.find((candidate) => candidate.id === lineId);
           if (!line) return [];
-          return [{ line, rows: packRows(laneItems, dayEnd, pct) }];
+          return [{ line, rows: packRows(laneItems, pct) }];
         });
+
+      // 计数按真正画出来的块走而不是按 items：挂在已删议程线上的脏数据会被
+      // 上面的 flatMap 丢掉，卡片上的数字不能把它算进去。
+      const drawn = lanes.flatMap((lane) => lane.rows.flat());
 
       return {
         key,
         label: dayFormat.format(new Date(dayStart)),
         ticks,
         lanes,
-        bands: buildBands(items, dayEnd, pct),
+        segmentCount: drawn.length,
+        carryOverCount: drawn.filter((block) => block.continuesFromPrevDay)
+          .length,
+        bands: buildBands(items, pct),
       };
     });
 }
@@ -302,31 +372,33 @@ export function buildAgendaTimeline(
  */
 function packRows(
   items: DayItem[],
-  dayEnd: number,
   pct: (ms: number) => number,
 ): TimelineBlock[][] {
   const sorted = [...items].sort(
-    (a, b) => a.startMs - b.startMs || a.segment.id - b.segment.id,
+    (a, b) =>
+      a.visibleStartMs - b.visibleStartMs || a.segment.id - b.segment.id,
   );
 
   const rows: { endMs: number; blocks: TimelineBlock[] }[] = [];
 
   for (const item of sorted) {
-    const clampedEnd = Math.min(item.endMs, dayEnd);
     const block: TimelineBlock = {
       segment: item.segment,
-      leftPct: pct(item.startMs),
+      leftPct: pct(item.visibleStartMs),
       // 零时长环节宽度就是 0，靠 CSS min-width 撑出可点击的宽度。
-      widthPct: Math.max(pct(clampedEnd) - pct(item.startMs), 0),
-      continuesNextDay: item.endMs > dayEnd,
+      widthPct: Math.max(pct(item.visibleEndMs) - pct(item.visibleStartMs), 0),
+      continuesFromPrevDay: item.continuesFromPrevDay,
+      continuesNextDay: item.continuesNextDay,
     };
 
-    const row = rows.find((candidate) => item.startMs >= candidate.endMs);
+    const row = rows.find(
+      (candidate) => item.visibleStartMs >= candidate.endMs,
+    );
     if (row) {
       row.blocks.push(block);
-      row.endMs = Math.max(row.endMs, clampedEnd);
+      row.endMs = Math.max(row.endMs, item.visibleEndMs);
     } else {
-      rows.push({ endMs: clampedEnd, blocks: [block] });
+      rows.push({ endMs: item.visibleEndMs, blocks: [block] });
     }
   }
 
@@ -339,13 +411,12 @@ function packRows(
  *
  * 要求至少两条**不同的议程线**才算并行——同一条线上的重叠是上面那个降级
  * 分支处理的脏数据，不该被标成"并行"。
+ *
+ * 吃的是摊到当天的可见区间，所以从前一天续过来的环节压住了当天新开的环节
+ * 时，一样会被标成并行。
  */
-function buildBands(
-  items: DayItem[],
-  dayEnd: number,
-  pct: (ms: number) => number,
-) {
-  const sorted = [...items].sort((a, b) => a.startMs - b.startMs);
+function buildBands(items: DayItem[], pct: (ms: number) => number) {
+  const sorted = [...items].sort((a, b) => a.visibleStartMs - b.visibleStartMs);
   const bands: { leftPct: number; widthPct: number; count: number }[] = [];
 
   let cluster: DayItem[] = [];
@@ -354,11 +425,8 @@ function buildBands(
   const flush = () => {
     const lineIds = new Set(cluster.map((item) => item.segment.agendaLineId));
     if (cluster.length > 1 && lineIds.size > 1) {
-      const start = Math.min(...cluster.map((item) => item.startMs));
-      const end = Math.min(
-        Math.max(...cluster.map((item) => item.endMs)),
-        dayEnd,
-      );
+      const start = Math.min(...cluster.map((item) => item.visibleStartMs));
+      const end = Math.max(...cluster.map((item) => item.visibleEndMs));
       bands.push({
         leftPct: pct(start),
         widthPct: Math.max(pct(end) - pct(start), 0),
@@ -369,9 +437,9 @@ function buildBands(
   };
 
   for (const item of sorted) {
-    if (cluster.length > 0 && item.startMs >= clusterEnd) flush();
+    if (cluster.length > 0 && item.visibleStartMs >= clusterEnd) flush();
     cluster.push(item);
-    clusterEnd = Math.max(clusterEnd, Math.min(item.endMs, dayEnd));
+    clusterEnd = Math.max(clusterEnd, item.visibleEndMs);
   }
   flush();
 

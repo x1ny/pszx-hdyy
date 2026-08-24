@@ -11,7 +11,7 @@ import { cn } from "#/shared/lib/utils.ts";
 import type { PlanStatus } from "../../-venue-queries";
 import type { Segment } from "../-queries";
 import {
-  formatTime,
+  formatSegmentRange,
   lineLabel,
   SEGMENT_TYPE_LABELS,
   type TimelineDay,
@@ -62,13 +62,9 @@ export function AgendaTimeline({
           <div className="flex items-center justify-between border-b px-4 py-2.5">
             <span className="font-medium text-sm">{day.label}</span>
             <span className="text-muted-foreground text-xs">
-              {day.lanes.length} 条议程线 ·{" "}
-              {day.lanes.reduce(
-                (total, lane) =>
-                  total + lane.rows.reduce((sum, row) => sum + row.length, 0),
-                0,
-              )}{" "}
-              个环节
+              {day.lanes.length} 条议程线 · {day.segmentCount} 个环节
+              {day.carryOverCount > 0 &&
+                ` · 含 ${day.carryOverCount} 个跨日续接`}
               {day.bands.length > 0 && ` · ${day.bands.length} 处并行`}
             </span>
           </div>
@@ -135,12 +131,20 @@ export function AgendaTimeline({
                                 key={segment.id}
                                 type="button"
                                 onClick={() => onSelect(segment)}
-                                aria-label={`${segment.name}，${formatTime(segment.startTime)} 至 ${formatTime(segment.endTime)}`}
+                                aria-label={`${segment.name}，${formatSegmentRange(segment)}${block.continuesFromPrevDay ? "，从前一天延续" : ""}`}
+                                title={`${segment.name} ${formatSegmentRange(segment)}`}
                                 className={cn(
                                   "absolute inset-y-0 flex min-w-28 cursor-pointer flex-col justify-center overflow-hidden rounded-md border px-1.5 py-1.5 text-left transition-colors",
                                   lane.line.lineType === "main"
                                     ? "border-primary/25 bg-primary/10 hover:bg-primary/15"
                                     : "border-chart-2/25 bg-chart-2/10 hover:bg-chart-2/15",
+                                  // 跨日环节被自然日切开：切口那侧不收圆角、加一道粗边，
+                                  // 一眼能看出这块是"从昨天接进来 / 还要往明天走"，
+                                  // 而不是当天独立的一个完整环节
+                                  block.continuesFromPrevDay &&
+                                    "rounded-l-none border-l-4",
+                                  block.continuesNextDay &&
+                                    "rounded-r-none border-r-4",
                                 )}
                                 style={{
                                   left: `${block.leftPct}%`,
@@ -148,12 +152,18 @@ export function AgendaTimeline({
                                 }}
                               >
                                 <span className="truncate font-medium text-xs leading-4">
+                                  {block.continuesFromPrevDay && (
+                                    <span className="mr-1 rounded-sm bg-muted px-1 py-px font-normal text-[10px] text-muted-foreground">
+                                      接上日
+                                    </span>
+                                  )}
                                   {segment.name}
                                 </span>
+                                {/* 始终写环节的真实起止：跨日时 formatSegmentRange
+                                    会带上结束日期，所以每一天看到的时间信息一致，
+                                    也不会再出现跨两天却标"次日"的错 */}
                                 <span className="truncate text-[11px] text-muted-foreground leading-4 tabular-nums">
-                                  {formatTime(segment.startTime)} -{" "}
-                                  {formatTime(segment.endTime)}
-                                  {block.continuesNextDay && " 次日"}
+                                  {formatSegmentRange(segment)}
                                 </span>
                                 <span className="truncate text-[11px] text-muted-foreground leading-4">
                                   {SEGMENT_TYPE_LABELS[segment.segmentType]}

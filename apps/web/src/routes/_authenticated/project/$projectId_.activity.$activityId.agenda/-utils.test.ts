@@ -133,18 +133,97 @@ describe("buildAgendaTimeline", () => {
     }
   });
 
-  it("跨日环节挂在开始日，块被当天 24:00 截断并标记", () => {
+  it("跨日环节在它覆盖的每一天都画出来，中间的整天铺满", () => {
+    // 9/18 22:00 → 9/20 09:00：三天各画一块，三块指向同一个环节
     const days = buildAgendaTimeline(
       [MAIN],
-      [segment(1, "2026-09-18 22:00", "2026-09-19 01:00")],
+      [segment(1, "2026-09-18 22:00", "2026-09-20 09:00")],
+    );
+
+    expect(days.map((day) => day.key)).toEqual([
+      "2026-09-18",
+      "2026-09-19",
+      "2026-09-20",
+    ]);
+
+    const blocks = days.map((day) => day.lanes[0].rows[0][0]);
+    expect(new Set(blocks.map((block) => block.segment.id)).size).toBe(1);
+
+    // 首日：右侧被自然日切开
+    expect(blocks[0].continuesFromPrevDay).toBe(false);
+    expect(blocks[0].continuesNextDay).toBe(true);
+    expect(blocks[0].leftPct + blocks[0].widthPct).toBeCloseTo(100, 5);
+
+    // 中间日：两侧都被切开，轴从 00:00 起，块铺满全天
+    expect(blocks[1].continuesFromPrevDay).toBe(true);
+    expect(blocks[1].continuesNextDay).toBe(true);
+    expect(days[1].ticks[0].label).toBe("00:00");
+    expect(blocks[1].leftPct).toBe(0);
+    expect(blocks[1].widthPct).toBeCloseTo(100, 5);
+
+    // 末日：从 00:00 接进来，画到真实结束时间
+    expect(blocks[2].continuesFromPrevDay).toBe(true);
+    expect(blocks[2].continuesNextDay).toBe(false);
+    expect(blocks[2].leftPct).toBe(0);
+    expect(days[2].carryOverCount).toBe(1);
+  });
+
+  it("只被跨日环节覆盖、当天没有新环节开始的日子照样出卡片", () => {
+    const days = buildAgendaTimeline(
+      [MAIN, FORUM_A],
+      [
+        segment(2, "2026-09-18 20:00", "2026-09-20 08:00"),
+        segment(1, "2026-09-20 09:00", "2026-09-20 10:00"),
+      ],
+    );
+
+    // 9/19 没有任何环节"开始"，但分论坛 A 那天是被整天占住的
+    expect(days.map((day) => day.key)).toEqual([
+      "2026-09-18",
+      "2026-09-19",
+      "2026-09-20",
+    ]);
+    expect(days[1].lanes).toHaveLength(1);
+    expect(days[1].lanes[0].line.id).toBe(2);
+    expect(days[1].segmentCount).toBe(1);
+    expect(days[1].carryOverCount).toBe(1);
+  });
+
+  it("结束时间正好压在零点时，次日不再多出一个零宽的续接块", () => {
+    const days = buildAgendaTimeline(
+      [MAIN],
+      [segment(1, "2026-09-18 20:00", "2026-09-19 00:00")],
     );
 
     expect(days).toHaveLength(1);
     expect(days[0].key).toBe("2026-09-18");
+    expect(days[0].lanes[0].rows[0][0].continuesNextDay).toBe(false);
+  });
 
-    const block = days[0].lanes[0].rows[0][0];
-    expect(block.continuesNextDay).toBe(true);
-    expect(block.leftPct + block.widthPct).toBeCloseTo(100, 5);
+  it("从前一天续过来的环节压住当天的环节，一样算并行", () => {
+    const days = buildAgendaTimeline(
+      [MAIN, FORUM_A],
+      [
+        segment(2, "2026-09-18 20:00", "2026-09-19 12:00"),
+        segment(1, "2026-09-19 10:00", "2026-09-19 11:00"),
+      ],
+    );
+
+    expect(days[1].key).toBe("2026-09-19");
+    expect(days[1].bands).toHaveLength(1);
+    expect(days[1].bands[0].count).toBe(2);
+    expect(days[1].segmentCount).toBe(2);
+    expect(days[1].carryOverCount).toBe(1);
+  });
+
+  it("异常长的跨日环节最多摊 31 天，截断处仍然标成没结束", () => {
+    const days = buildAgendaTimeline(
+      [MAIN],
+      [segment(1, "2026-09-01 09:00", "2026-12-01 09:00")],
+    );
+
+    expect(days).toHaveLength(31);
+    expect(days[30].lanes[0].rows[0][0].continuesNextDay).toBe(true);
   });
 
   it("零时长环节宽度为 0 但仍然出现在轴上（可见性交给 CSS min-width）", () => {

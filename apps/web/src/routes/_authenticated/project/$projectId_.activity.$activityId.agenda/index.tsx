@@ -328,7 +328,7 @@ function AgendaTab() {
         <StatTile
           label="覆盖天数"
           value={timeline.length}
-          hint="按环节开始日期分组"
+          hint="按环节覆盖日期分组，跨日环节每天都算"
         />
         <StatTile
           label="资源需求待办"
