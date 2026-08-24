@@ -102,17 +102,21 @@ export function AgendaTimeline({
                   </div>
 
                   <div className="relative flex-1">
-                    {/* 并行区块：跨议程线的时间重叠，纯视觉提示 */}
-                    {day.bands.map((band) => (
-                      <div
-                        key={`band-${band.leftPct}-${band.widthPct}`}
-                        className="pointer-events-none absolute inset-y-0 rounded-sm bg-primary/5"
-                        style={{
-                          left: `${band.leftPct}%`,
-                          width: `${band.widthPct}%`,
-                        }}
-                      />
-                    ))}
+                    {/* 并行区块只画在线路真正参与重叠的时间段；没有环节的线路
+                        保持空白，不能用日级色带制造出“空环节”。 */}
+                    {day.bands
+                      .flatMap((band) => band.laneRanges)
+                      .filter((range) => range.lineId === lane.line.id)
+                      .map((range) => (
+                        <div
+                          key={`band-${range.leftPct}-${range.widthPct}`}
+                          className="pointer-events-none absolute inset-y-0 rounded-sm bg-primary/5"
+                          style={{
+                            left: `${range.leftPct}%`,
+                            width: `${range.widthPct}%`,
+                          }}
+                        />
+                      ))}
                     {day.ticks.map((tick) => (
                       <div
                         key={`grid-${tick.leftPct}`}

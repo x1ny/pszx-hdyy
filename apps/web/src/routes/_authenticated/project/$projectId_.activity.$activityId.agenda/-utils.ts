@@ -165,6 +165,19 @@ export type TimelineLane = {
 
 export type TimelineTick = { label: string; leftPct: number };
 
+export type TimelineBand = {
+  /** 整个连续并行区间，用于统计“一处并行”的范围。 */
+  leftPct: number;
+  widthPct: number;
+  /** 该并行区间曾参与的议程线数量。 */
+  count: number;
+  /**
+   * 各议程线真正参与并行的区间。同一条线可能中途退出后再次加入，所以可能
+   * 有多段；渲染时只把对应线的这些区间画到它自己的泳道里。
+   */
+  laneRanges: { lineId: number; leftPct: number; widthPct: number }[];
+};
+
 export type TimelineDay = {
   key: string;
   label: string;
@@ -174,8 +187,8 @@ export type TimelineDay = {
   segmentCount: number;
   /** 其中从前一天续过来的块数，用来在日卡片上把"当天新开始"和"续接"分开说 */
   carryOverCount: number;
-  /** 跨议程线的时间重叠区块，纯视觉提示，不是业务字段 */
-  bands: { leftPct: number; widthPct: number; count: number }[];
+  /** 跨议程线的真实时间重叠区块，纯视觉提示，不是业务字段 */
+  bands: TimelineBand[];
 };
 
 const MINUTE = 60_000;
@@ -407,41 +420,93 @@ function packRows(
 
 /**
  * 并行区块：BR-DEV-031B 要求"由系统根据时间重叠和议程线自动推导，不作为
- * 业务必填字段"。只用来画一条背景色带做视觉提示，不落库。
+ * 业务必填字段"。只用来画背景色带做视觉提示，不落库。
  *
  * 要求至少两条**不同的议程线**才算并行——同一条线上的重叠是上面那个降级
  * 分支处理的脏数据，不该被标成"并行"。
  *
  * 吃的是摊到当天的可见区间，所以从前一天续过来的环节压住了当天新开的环节
  * 时，一样会被标成并行。
+ *
+ * 不能直接拿一组相交环节的最早开始和最晚结束画色带：一个跨日长环节只和
+ * 短环节重叠一小时，那样会把剩余十几个小时也误画成并行。这里先按所有起止
+ * 边界切出“当前至少两条线同时存在”的精确片段，再把连续且仍有共同参与线的
+ * 片段合成一处并行；每条泳道最后只拿自己真正参与的区间。
  */
 function buildBands(items: DayItem[], pct: (ms: number) => number) {
-  const sorted = [...items].sort((a, b) => a.visibleStartMs - b.visibleStartMs);
-  const bands: { leftPct: number; widthPct: number; count: number }[] = [];
+  const boundaries = [
+    ...new Set(
+      items.flatMap((item) =>
+        item.visibleEndMs > item.visibleStartMs
+          ? [item.visibleStartMs, item.visibleEndMs]
+          : [],
+      ),
+    ),
+  ].sort((a, b) => a - b);
 
-  let cluster: DayItem[] = [];
-  let clusterEnd = Number.NEGATIVE_INFINITY;
-
-  const flush = () => {
-    const lineIds = new Set(cluster.map((item) => item.segment.agendaLineId));
-    if (cluster.length > 1 && lineIds.size > 1) {
-      const start = Math.min(...cluster.map((item) => item.visibleStartMs));
-      const end = Math.max(...cluster.map((item) => item.visibleEndMs));
-      bands.push({
-        leftPct: pct(start),
-        widthPct: Math.max(pct(end) - pct(start), 0),
-        count: cluster.length,
-      });
-    }
-    cluster = [];
+  type ParallelSlice = {
+    startMs: number;
+    endMs: number;
+    lineIds: number[];
   };
 
-  for (const item of sorted) {
-    if (cluster.length > 0 && item.visibleStartMs >= clusterEnd) flush();
-    cluster.push(item);
-    clusterEnd = Math.max(clusterEnd, item.visibleEndMs);
-  }
-  flush();
+  const slices: ParallelSlice[] = [];
+  for (let index = 0; index < boundaries.length - 1; index += 1) {
+    const startMs = boundaries[index];
+    const endMs = boundaries[index + 1];
+    const lineIds = [
+      ...new Set(
+        items
+          .filter(
+            (item) =>
+              item.visibleStartMs < endMs && item.visibleEndMs > startMs,
+          )
+          .map((item) => item.segment.agendaLineId),
+      ),
+    ].sort((a, b) => a - b);
 
-  return bands;
+    if (lineIds.length > 1) slices.push({ startMs, endMs, lineIds });
+  }
+
+  const regions: ParallelSlice[][] = [];
+  for (const slice of slices) {
+    const current = regions[regions.length - 1];
+    const previous = current?.[current.length - 1];
+    const staysConnected =
+      previous?.endMs === slice.startMs &&
+      previous.lineIds.some((lineId) => slice.lineIds.includes(lineId));
+
+    if (current && staysConnected) current.push(slice);
+    else regions.push([slice]);
+  }
+
+  return regions.map((region): TimelineBand => {
+    const laneRanges = new Map<number, { startMs: number; endMs: number }[]>();
+
+    for (const slice of region) {
+      for (const lineId of slice.lineIds) {
+        const ranges = laneRanges.get(lineId) ?? [];
+        const previous = ranges[ranges.length - 1];
+        if (previous?.endMs === slice.startMs) previous.endMs = slice.endMs;
+        else ranges.push({ startMs: slice.startMs, endMs: slice.endMs });
+        laneRanges.set(lineId, ranges);
+      }
+    }
+
+    const startMs = region[0].startMs;
+    const endMs = region[region.length - 1].endMs;
+
+    return {
+      leftPct: pct(startMs),
+      widthPct: Math.max(pct(endMs) - pct(startMs), 0),
+      count: laneRanges.size,
+      laneRanges: [...laneRanges.entries()].flatMap(([lineId, ranges]) =>
+        ranges.map((range) => ({
+          lineId,
+          leftPct: pct(range.startMs),
+          widthPct: Math.max(pct(range.endMs) - pct(range.startMs), 0),
+        })),
+      ),
+    };
+  });
 }

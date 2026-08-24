@@ -44,6 +44,7 @@ const segment = (
 const MAIN = line(1, "main", null);
 const FORUM_A = line(2, "parallel", "分论坛 A", 1);
 const FORUM_B = line(3, "parallel", "分论坛 B", 2);
+const FORUM_C = line(4, "parallel", "分论坛 C", 3);
 
 describe("buildAgendaTimeline", () => {
   it("没有正常环节时返回空数组", () => {
@@ -94,6 +95,36 @@ describe("buildAgendaTimeline", () => {
     expect(days[0].lanes.map((lane) => lane.line.id)).toEqual([1, 2, 3]);
     expect(days[0].bands).toHaveLength(1);
     expect(days[0].bands[0].count).toBe(3);
+  });
+
+  it("并行带只覆盖真实交集，并且只归属实际参与的议程线", () => {
+    const days = buildAgendaTimeline(
+      [MAIN, FORUM_A, FORUM_B, FORUM_C],
+      [
+        // 复现测试截图：11:00 的两条短线形成第一处并行。
+        segment(2, "2026-09-18 11:00", "2026-09-18 12:00"),
+        segment(3, "2026-09-18 11:00", "2026-09-18 12:00"),
+        // 跨日长环节只在 16:23–18:00 和主线重叠，不能把 15:58–24:00
+        // 整段铺到所有泳道。
+        segment(4, "2026-09-18 15:58", "2026-09-19 21:03"),
+        segment(1, "2026-09-18 16:23", "2026-09-18 18:00"),
+      ],
+    );
+
+    expect(days[0].bands).toHaveLength(2);
+
+    const earlyBand = days[0].bands[0];
+    expect(earlyBand.laneRanges.map((range) => range.lineId)).toEqual([2, 3]);
+
+    const lateBand = days[0].bands[1];
+    expect(lateBand.laneRanges.map((range) => range.lineId)).toEqual([1, 4]);
+
+    // 当天时间轴为 11:00–24:00，共 780 分钟；真实交集从 16:23 开始，
+    // 持续到 18:00（97 分钟）。
+    expect(lateBand.leftPct).toBeCloseTo((323 / 780) * 100, 5);
+    expect(lateBand.widthPct).toBeCloseTo((97 / 780) * 100, 5);
+    expect(lateBand.laneRanges[0].leftPct).toBeCloseTo(lateBand.leftPct, 5);
+    expect(lateBand.laneRanges[0].widthPct).toBeCloseTo(lateBand.widthPct, 5);
   });
 
   it("不同议程线的时间重叠算并行，同一条线的重叠不算", () => {
