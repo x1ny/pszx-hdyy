@@ -31,6 +31,23 @@ export const ACTIVITY_VENUE_STATUS_CHIP = {
 } as const satisfies Record<ActivityVenueStatus, string>;
 
 /**
+ * 活动内新画的区域没有场地区域出处，服务端会把 `sourceZoneId` 留空。
+ *
+ * 这列不是带 `onDelete: "set null"` 的外键，因此 `null` 只表示“本活动新建”，
+ * 不能被解释成“来源已删除”。把判断收在这里并用测试钉死，避免只看可空字段名
+ * 又把两个完全不同的状态混在一起。
+ */
+export function formatActivityZoneOrigin(
+  venueName: string,
+  zoneName: string,
+  sourceZoneId: number | null,
+) {
+  return `${venueName} / ${zoneName}${
+    sourceZoneId === null ? "（本活动新建）" : ""
+  }`;
+}
+
+/**
  * 排位状态。**五个展示态，只有四个落库**——"未配置"是环节开了排位开关但还
  * 没有方案行的派生结论，接口那边 `plan` 是 null（docs/场地排位底层设计.md §7）。
  */

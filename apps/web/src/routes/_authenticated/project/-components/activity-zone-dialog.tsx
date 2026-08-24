@@ -26,6 +26,7 @@ import type {
 } from "../-venue-queries";
 import {
   ACTIVITY_VENUE_STATUS_LABELS,
+  formatActivityZoneOrigin,
   ZONE_PURPOSE_LABELS,
   ZONE_PURPOSE_VALUES,
 } from "../-venue-utils";
@@ -100,15 +101,17 @@ export function ActivityZoneDialog({
           )}
 
           <Field>
-            <FieldLabel htmlFor="zone-source">来源场地区域</FieldLabel>
+            <FieldLabel htmlFor="zone-source">区域来源</FieldLabel>
             <Input
               id="zone-source"
               readOnly
               value={
                 zone
-                  ? `${venueName} / ${zone.name}${
-                      zone.sourceZoneId === null ? "（来源已删除）" : ""
-                    }`
+                  ? formatActivityZoneOrigin(
+                      venueName,
+                      zone.name,
+                      zone.sourceZoneId,
+                    )
                   : ""
               }
               className="text-muted-foreground"

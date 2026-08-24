@@ -410,7 +410,11 @@ export const activityVenueZone = pgTable(
     // 区域"这个最常用的查询不必 join 一次场地表。
     activityId: bigint("activity_id", { mode: "number" }).notNull(),
 
-    /** 出处，可空。同 sourceVenueId，只是标记，不参与读取。 */
+    /**
+     * 出处标记，不参与读取，也故意不设外键。导入区域记源区域 id；在活动空间内
+     * 新画的区域留空。源区域之后被删除不会改这一列，因此 `null` 不能解释成
+     * “来源已删除”。
+     */
     sourceZoneId: bigint("source_zone_id", { mode: "number" }),
 
     /**
