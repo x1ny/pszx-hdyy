@@ -4,6 +4,7 @@ import { PlusIcon, SearchIcon, UsersRoundIcon } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { MemberDetailDialog } from "#/features/member/member-detail-dialog.tsx";
 import { MemberPickerDialog } from "#/features/member/member-picker-dialog.tsx";
 import { MemberQuickCreateDialog } from "#/features/member/member-quick-create-dialog.tsx";
 import {
@@ -686,6 +687,7 @@ function ActivityMemberDetailDialog({
 
 function ActivityMemberDetailContent({ id }: { id: number }) {
   const detailQuery = useQuery(activityMemberDetailQueryOptions(id));
+  const [masterMemberId, setMasterMemberId] = useState<number>();
 
   if (detailQuery.isPending) {
     return (
@@ -719,7 +721,18 @@ function ActivityMemberDetailContent({ id }: { id: number }) {
 
   return (
     <DialogBody className="flex flex-col gap-4">
-      <DetailCard action="查看主档" title="人员主档摘要">
+      <DetailCard
+        action={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setMasterMemberId(detail.memberId)}
+          >
+            查看主档
+          </Button>
+        }
+        title="人员主档摘要"
+      >
         <dl className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
           <DetailField label="姓名">{displayValue(detail.name)}</DetailField>
           <DetailField label="性别">{displayValue(detail.gender)}</DetailField>
@@ -746,7 +759,7 @@ function ActivityMemberDetailContent({ id }: { id: number }) {
         </dl>
       </DetailCard>
 
-      <DetailCard action="编辑关系" title="当前活动关系">
+      <DetailCard title="当前活动关系">
         <dl className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
           <DetailField label="来源">{displayValue(detail.source)}</DetailField>
           <DetailField label="分组">
@@ -767,9 +780,16 @@ function ActivityMemberDetailContent({ id }: { id: number }) {
         </dl>
       </DetailCard>
 
-      <DetailCard action="调整" title="环节参与">
+      <DetailCard title="环节参与">
         <SegmentParticipationTable detail={detail} />
       </DetailCard>
+
+      <MemberDetailDialog
+        memberId={masterMemberId}
+        onOpenChange={(open) => {
+          if (!open) setMasterMemberId(undefined);
+        }}
+      />
     </DialogBody>
   );
 }
@@ -780,20 +800,14 @@ function DetailCard({
   children,
 }: {
   title: string;
-  action: string;
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <Card size="sm" className="shrink-0">
       <CardHeader className="border-b">
         <CardTitle>{title}</CardTitle>
-        {/* 原型中的详情内操作本期只保留位置，不接跳转或编辑逻辑。禁用态能明确
-            表达“暂不可用”，也避免一个看似可点击、实际无响应的按钮。 */}
-        <CardAction>
-          <Button variant="outline" size="sm" disabled>
-            {action}
-          </Button>
-        </CardAction>
+        {action && <CardAction>{action}</CardAction>}
       </CardHeader>
       <CardContent>{children}</CardContent>
     </Card>

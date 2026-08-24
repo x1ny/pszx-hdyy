@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { CalendarRangeIcon, RouteIcon } from "lucide-react";
+import { CalendarRangeIcon, RouteIcon, UserRoundIcon } from "lucide-react";
 import {
   memberTripListQueryOptions,
   type Trip,
@@ -30,15 +30,19 @@ import {
   TableHeader,
   TableRow,
 } from "#/shared/components/ui/table.tsx";
-import type { Member, MemberParticipation } from "../-queries";
-import { memberParticipationQueryOptions } from "../-queries";
+import {
+  type Member,
+  type MemberParticipation,
+  memberDetailQueryOptions,
+  memberParticipationQueryOptions,
+} from "./queries.ts";
 import {
   formatDateRange,
   formatDateTime,
   formatDateTimeRange,
   MEMBER_STATUS_CHIP,
   MEMBER_STATUS_LABELS,
-} from "../-utils";
+} from "./utils.ts";
 
 /**
  * 字段区一行放两组「标签 / 值」。
@@ -52,20 +56,30 @@ const FIELD_GRID =
 
 type MemberDetailDialogProps = {
   member?: Member;
+  memberId?: number;
   onOpenChange: (open: boolean) => void;
 };
 
 export function MemberDetailDialog({
-  member,
+  member: providedMember,
+  memberId,
   onOpenChange,
 }: MemberDetailDialogProps) {
+  const requestedId = providedMember?.id ?? memberId ?? 0;
+  const memberQuery = useQuery({
+    ...memberDetailQueryOptions(requestedId),
+    enabled: providedMember === undefined && memberId !== undefined,
+  });
+  const member = providedMember ?? memberQuery.data;
+  const isOpen = providedMember !== undefined || memberId !== undefined;
+
   return (
-    <Dialog open={!!member} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
       {/* 原来的 lg（32rem）装不下参与信息里那张 7 列的活动表，横向滚动条会
           常驻。宽度跟着内容走，上半部分的字段区同时改成一行两组（FIELD_GRID），
           不然拉宽之后单列字段区看着更空。 */}
       <DialogContent className="sm:max-w-5xl">
-        {member && (
+        {member ? (
           <>
             <DialogHeader>
               <div className="flex items-center gap-3">
@@ -144,9 +158,42 @@ export function MemberDetailDialog({
               </Section>
             </DialogBody>
           </>
+        ) : (
+          <MemberDetailFallback isError={memberQuery.isError} />
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function MemberDetailFallback({ isError }: { isError: boolean }) {
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>人员主档</DialogTitle>
+        <DialogDescription>
+          {isError ? "人员信息加载失败，请关闭后重试。" : "正在加载人员信息。"}
+        </DialogDescription>
+      </DialogHeader>
+      <DialogBody>
+        {isError ? (
+          <Empty className="rounded-lg border border-dashed py-10">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <UserRoundIcon />
+              </EmptyMedia>
+              <EmptyTitle>人员主档加载失败</EmptyTitle>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-36 w-full" />
+            <Skeleton className="h-36 w-full" />
+          </div>
+        )}
+      </DialogBody>
+    </>
   );
 }
 

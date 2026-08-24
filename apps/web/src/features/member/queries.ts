@@ -14,13 +14,21 @@ export type Member = ApiData<
 >;
 export type MemberStatus = Member["status"];
 
+export type MemberParticipation = ApiData<
+  InferResponseType<typeof api.api.member.participation.$post>
+>["list"][number];
+
 export type MemberFilters = InferRequestType<
   typeof api.api.member.list.$post
 >["json"];
 
 export const memberKeys = {
   all: ["member"] as const,
-  list: (filters: MemberFilters) => [...memberKeys.all, "list", filters] as const,
+  list: (filters: MemberFilters) =>
+    [...memberKeys.all, "list", filters] as const,
+  detail: (id: number) => [...memberKeys.all, "detail", id] as const,
+  participation: (id: number) =>
+    [...memberKeys.all, "participation", id] as const,
 };
 
 export const memberListQueryOptions = (filters: MemberFilters) =>
@@ -28,4 +36,17 @@ export const memberListQueryOptions = (filters: MemberFilters) =>
     queryKey: memberKeys.list(filters),
     queryFn: () => unwrap(api.api.member.list.$post({ json: filters })),
     placeholderData: keepPreviousData,
+  });
+
+export const memberDetailQueryOptions = (id: number) =>
+  queryOptions({
+    queryKey: memberKeys.detail(id),
+    queryFn: () => unwrap(api.api.member.get.$post({ json: { id } })),
+  });
+
+/** 人员主档详情里的“参与信息”：按项目分组的活动参与列表。 */
+export const memberParticipationQueryOptions = (id: number) =>
+  queryOptions({
+    queryKey: memberKeys.participation(id),
+    queryFn: () => unwrap(api.api.member.participation.$post({ json: { id } })),
   });

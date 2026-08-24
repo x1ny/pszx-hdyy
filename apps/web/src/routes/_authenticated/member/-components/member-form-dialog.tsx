@@ -1,6 +1,10 @@
 import { useForm } from "@tanstack/react-form";
 import { LoaderCircleIcon } from "lucide-react";
 import { z } from "zod";
+import {
+  MEMBER_STATUS_LABELS,
+  MEMBER_STATUS_VALUES,
+} from "#/features/member/utils.ts";
 import { Button } from "#/shared/components/ui/button.tsx";
 import {
   Dialog,
@@ -31,8 +35,6 @@ import {
   MEMBER_GENDER_VALUES,
   MEMBER_ID_TYPE_LABELS,
   MEMBER_ID_TYPE_VALUES,
-  MEMBER_STATUS_LABELS,
-  MEMBER_STATUS_VALUES,
 } from "../-utils";
 
 const MemberFormSchema = z

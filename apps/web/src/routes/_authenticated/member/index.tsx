@@ -4,6 +4,14 @@ import { PlusIcon, SearchIcon, UsersRoundIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { MemberDetailDialog } from "#/features/member/member-detail-dialog.tsx";
+import {
+  formatDateTime,
+  MEMBER_STATUS_CHIP,
+  MEMBER_STATUS_DOT,
+  MEMBER_STATUS_LABELS,
+  MEMBER_STATUS_VALUES,
+} from "#/features/member/utils.ts";
 import {
   FilterActions,
   FilterBar,
@@ -45,27 +53,19 @@ import {
   TableRow,
 } from "#/shared/components/ui/table.tsx";
 import { cn } from "#/shared/lib/utils.ts";
-import { MemberDetailDialog } from "./-components/member-detail-dialog";
 import { MemberFormDialog } from "./-components/member-form-dialog";
 import {
+  createMember,
+  deleteMember,
   type Member,
   type MemberFormValues,
   type MemberStatus,
-  createMember,
-  deleteMember,
   memberKeys,
   memberListQueryOptions,
   setMemberStatus,
   updateMember,
 } from "./-queries";
-import {
-  MEMBER_STATUS_CHIP,
-  MEMBER_STATUS_DOT,
-  MEMBER_STATUS_LABELS,
-  MEMBER_STATUS_VALUES,
-  formatDateTime,
-  maskPhone,
-} from "./-utils";
+import { maskPhone } from "./-utils";
 
 const MemberSearchSchema = z.object({
   name: z.string().optional().catch(undefined),
@@ -98,7 +98,9 @@ function MemberPage() {
   const navigate = Route.useNavigate();
   const queryClient = useQueryClient();
   const [nameInput, setNameInput] = useState(search.name ?? "");
-  const [positionInput, setPositionInput] = useState(search.companyPosition ?? "");
+  const [positionInput, setPositionInput] = useState(
+    search.companyPosition ?? "",
+  );
   const [statusInput, setStatusInput] = useState<MemberStatus | null>(
     search.status ?? null,
   );
@@ -227,7 +229,9 @@ function MemberPage() {
         <Select
           items={STATUS_FILTER_ITEMS}
           value={statusInput}
-          onValueChange={(value) => setStatusInput(value as MemberStatus | null)}
+          onValueChange={(value) =>
+            setStatusInput(value as MemberStatus | null)
+          }
         >
           <SelectTrigger className="w-32">
             <SelectValue />
@@ -451,7 +455,9 @@ function MemberPage() {
             <AlertDialogCancel>取消</AlertDialogCancel>
             <AlertDialogAction
               disabled={deleteMutation.isPending}
-              onClick={() => pendingDelete && deleteMutation.mutate(pendingDelete)}
+              onClick={() =>
+                pendingDelete && deleteMutation.mutate(pendingDelete)
+              }
             >
               删除
             </AlertDialogAction>

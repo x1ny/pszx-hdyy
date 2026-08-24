@@ -1,7 +1,6 @@
-import { queryOptions } from "@tanstack/react-query";
-import type { InferRequestType, InferResponseType } from "hono/client";
-import { memberKeys, type MemberStatus } from "#/features/member/queries";
-import { type ApiData, api, unwrap } from "#/shared/lib/api";
+import type { InferRequestType } from "hono/client";
+import type { MemberStatus } from "#/features/member/queries";
+import { api, unwrap } from "#/shared/lib/api";
 
 // 类型和"浏览列表"能力提到 features/member/queries.ts 了（邀请函生成页选
 // 邀请对象也要用），这里只重新导出、加上仅本页面用的变更操作。
@@ -29,14 +28,3 @@ export const deleteMember = (id: number) =>
 
 export const setMemberStatus = (id: number, status: MemberStatus) =>
   unwrap(api.api.member.setStatus.$post({ json: { id, status } }));
-
-/** 详情弹窗里的"参与信息"：按项目分组的活动参与列表。 */
-export type MemberParticipation = ApiData<
-  InferResponseType<typeof api.api.member.participation.$post>
->["list"][number];
-
-export const memberParticipationQueryOptions = (id: number) =>
-  queryOptions({
-    queryKey: [...memberKeys.all, "participation", id] as const,
-    queryFn: () => unwrap(api.api.member.participation.$post({ json: { id } })),
-  });
