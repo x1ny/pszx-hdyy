@@ -71,17 +71,25 @@ export const addZone = (
   },
 });
 
-/** 把一段拖拽的对角点组装成矩形/椭圆的 shape。多边形走 `polygonShapeFromPoints`。 */
+/**
+ * 把一段拖拽的对角点组装成矩形/椭圆的 shape。多边形走 `polygonShapeFromPoints`。
+ *
+ * `shapeType: "circle"` 落库时 `type` 仍然是 `"ellipse"`——圆形不是独立的
+ * `ZoneShape` 分支，宽高摁成同一个值（取拖拽框长边）就是一个圆，不需要
+ * `zoneContains`/`ZoneGeometry`/`resizeZone` 再多认一种形状。
+ */
 export function boxShapeFromDrag(
-  shapeType: "rect" | "ellipse",
+  shapeType: "rect" | "ellipse" | "circle",
   rect: Rect,
 ): ZoneShape {
+  const isCircle = shapeType === "circle";
+  const side = Math.max(rect.width, rect.height);
   return {
-    type: shapeType,
+    type: isCircle ? "ellipse" : shapeType,
     x: rect.x,
     y: rect.y,
-    width: Math.max(MIN_ZONE_SIZE, rect.width),
-    height: Math.max(MIN_ZONE_SIZE, rect.height),
+    width: Math.max(MIN_ZONE_SIZE, isCircle ? side : rect.width),
+    height: Math.max(MIN_ZONE_SIZE, isCircle ? side : rect.height),
   };
 }
 

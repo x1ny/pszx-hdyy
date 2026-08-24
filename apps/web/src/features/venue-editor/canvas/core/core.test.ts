@@ -385,6 +385,33 @@ describe("commands · 区域", () => {
     expect(shape.type).toBe("ellipse");
   });
 
+  test("boxShapeFromDrag 圆形落库成宽高相等的椭圆", () => {
+    // 圆形不是独立的 ZoneShape 分支——它就是宽高摁成同一个值的椭圆，
+    // 取拖拽框的长边，不是短边（不然圆会被裁小，超出鼠标划的框看着奇怪）。
+    const shape = boxShapeFromDrag("circle", {
+      x: 10,
+      y: 20,
+      width: 200,
+      height: 80,
+    });
+    expect(shape.type).toBe("ellipse");
+    expect(shape.width).toBe(200);
+    expect(shape.height).toBe(200);
+    expect(shape.x).toBe(10);
+    expect(shape.y).toBe(20);
+  });
+
+  test("圆形也不能小于最小尺寸", () => {
+    const shape = boxShapeFromDrag("circle", {
+      x: 0,
+      y: 0,
+      width: 2,
+      height: 5,
+    });
+    expect(shape.width).toBe(MIN_ZONE_SIZE);
+    expect(shape.height).toBe(MIN_ZONE_SIZE);
+  });
+
   test("polygonShapeFromPoints 算出包围盒和相对顶点", () => {
     const shape = polygonShapeFromPoints([
       { x: 100, y: 100 },
@@ -757,7 +784,7 @@ describe("interaction · 区域分布画布", () => {
     );
   });
 
-  test("画矩形/椭圆工具下按下就是拉框画形状", () => {
+  test("画矩形/椭圆/圆形工具下按下就是拉框画形状", () => {
     const doc = docWithRectZone();
     const rectSubject = resolveDragSubject({
       point: { x: 700, y: 700 },
@@ -780,6 +807,22 @@ describe("interaction · 区域分布画布", () => {
       scale: 1,
     });
     expect(ellipseSubject.kind).toBe("drawZone");
+
+    // 圆形工具在交互层跟矩形/椭圆走同一条判定分支——它不是一种要单独处理的
+    // 拖拽意图，只是 shapeType 换了个值，落库时才在 boxShapeFromDrag 里摁成
+    // 宽高相等（见 commands.ts 的对应测试）。
+    const circleSubject = resolveDragSubject({
+      point: { x: 700, y: 700 },
+      doc,
+      selection: EMPTY_SELECTION,
+      tool: "circle",
+      scale: 1,
+    });
+    expect(circleSubject).toEqual({
+      kind: "drawZone",
+      shapeType: "circle",
+      start: { x: 700, y: 700 },
+    });
   });
 
   test("多边形工具不走拖拽状态机，由组件自己管理点击草稿", () => {

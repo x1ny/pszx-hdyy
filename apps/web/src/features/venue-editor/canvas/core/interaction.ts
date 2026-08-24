@@ -28,8 +28,14 @@ import {
 // 顶层：区域分布画布
 // ---------------------------------------------------------------------------
 
-/** 顶层画布的工具。画形状的三种 + 选择，**没有"放座位"**——那是进入区域之后的事。 */
-export const ZONE_TOOLS = ["select", "rect", "ellipse", "polygon"] as const;
+/** 顶层画布的工具。画形状的四种 + 选择，**没有"放座位"**——那是进入区域之后的事。 */
+export const ZONE_TOOLS = [
+  "select",
+  "rect",
+  "ellipse",
+  "circle",
+  "polygon",
+] as const;
 export type ZoneTool = (typeof ZONE_TOOLS)[number];
 
 export type ResizeHandle = "nw" | "ne" | "sw" | "se";
@@ -44,10 +50,16 @@ export const EMPTY_SELECTION: Selection = { zoneIds: [], seatIds: [] };
 export type DragSubject =
   | { kind: "none" }
   | { kind: "pan" }
-  /** 拖拽画矩形/椭圆。多边形是点击构造，不走这条（见组件里的 polygonDraft 状态）。 */
+  /**
+   * 拖拽画矩形/椭圆/圆形。多边形是点击构造，不走这条（见组件里的 polygonDraft
+   * 状态）。**"圆形"不是独立的 `ZoneShape` 类型**——一个圆就是宽高相等的椭圆，
+   * 数据模型里没有必要为它多开一支：`shapeType: "circle"` 只是告诉
+   * `boxShapeFromDrag` 拖拽结束时把宽高摁成同一个值，落库时 `shape.type`
+   * 仍然是 `"ellipse"`，跟 `zoneContains`/`ZoneGeometry`/缩放逻辑一个字都不用改。
+   */
   | {
       kind: "drawZone";
-      shapeType: Extract<ZoneShapeType, "rect" | "ellipse">;
+      shapeType: Extract<ZoneShapeType, "rect" | "ellipse"> | "circle";
       start: Point;
     }
   | { kind: "moveZones"; zoneIds: string[] }
@@ -157,7 +169,7 @@ function hitHandle(
  * 判定这一次按下要开始什么。优先级从高到低：
  *
  * 1. 空格键按住 / 中键 → 平移画布（调用方传 `forcePan`）
- * 2. 画矩形/椭圆工具 → 拉框画形状
+ * 2. 画矩形/椭圆/圆形工具 → 拉框画形状
  * 3. 选中区域的缩放手柄
  * 4. 区域本体
  * 5. 空白 → 框选（顶层框选目前没有用途，占位对齐排位画布的手感，选中结果为空）
@@ -177,7 +189,7 @@ export function resolveDragSubject(input: {
 
   if (forcePan) return { kind: "pan" };
 
-  if (tool === "rect" || tool === "ellipse") {
+  if (tool === "rect" || tool === "ellipse" || tool === "circle") {
     return { kind: "drawZone", shapeType: tool, start: point };
   }
   if (tool === "polygon") return { kind: "none" };
