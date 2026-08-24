@@ -1,10 +1,19 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeftIcon, Loader2Icon, SearchIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  Loader2Icon,
+  SearchIcon,
+  UsersRoundIcon,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DocxPreview } from "#/features/invitation/docx-preview";
-import { maskMobile, todayIsoDate } from "#/features/invitation/labels";
+import {
+  INVITATION_BATCH_MAX,
+  maskMobile,
+  todayIsoDate,
+} from "#/features/invitation/labels";
 import {
   type InvitationTemplate,
   createInvitationBatch,
@@ -49,7 +58,7 @@ import {
   TableHeader,
   TableRow,
 } from "#/shared/components/ui/table.tsx";
-import { UsersRoundIcon } from "lucide-react";
+import { cn } from "#/shared/lib/utils.ts";
 
 export const Route = createFileRoute(
   "/_authenticated/project/$projectId_/activity/$activityId/invitations/generate",
@@ -149,8 +158,18 @@ function GeneratePage() {
     .filter((item) => !variables[item.name]?.trim())
     .map((item) => item.name);
 
+  /**
+   * 上限只在前端**提前拦一道**，服务端仍然会校验一次。
+   * 不做「勾满就不让勾」——那样用户只会觉得复选框坏了；让他勾出来、看见超了
+   * 多少、自己决定去掉谁，比替他截断清楚。
+   */
+  const overLimit = selected.size > INVITATION_BATCH_MAX;
+
   const canSubmit =
-    !!template && selected.size > 0 && missingVariables.length === 0;
+    !!template &&
+    selected.size > 0 &&
+    !overLimit &&
+    missingVariables.length === 0;
 
   const submitMutation = useMutation({
     mutationFn: () =>
@@ -187,7 +206,8 @@ function GeneratePage() {
           </Link>
           <h2 className="font-semibold text-lg tracking-tight">生成邀请函</h2>
           <p className="text-muted-foreground text-sm">
-            每次生成独立留档，不会影响之前已经生成过的批次。
+            每次生成独立留档，不会影响之前已经生成过的批次。单次最多{" "}
+            {INVITATION_BATCH_MAX} 人，超出请分批生成。
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -200,6 +220,13 @@ function GeneratePage() {
           </Button>
           <Button
             disabled={!canSubmit || submitMutation.isPending}
+            // 按钮灰了必须说得出为什么——这里离左边的「已选 x / 200 人」有
+            // 一段距离，光靠那行红字不够。
+            title={
+              overLimit
+                ? `单次最多 ${INVITATION_BATCH_MAX} 人，请取消部分选择后再生成`
+                : undefined
+            }
             onClick={() => submitMutation.mutate()}
           >
             {submitMutation.isPending ? (
@@ -216,8 +243,18 @@ function GeneratePage() {
           <div className="flex flex-wrap items-center justify-between gap-2 border-b p-3">
             <div className="font-medium text-sm">
               邀请对象
-              <span className="ml-2 text-muted-foreground">
-                已选 {selected.size} 人
+              {/* 上限常驻显示，不等超了才冒出来——用户是在这里一个个勾的，
+                  额度必须跟着计数一起看得见。 */}
+              <span
+                className={cn(
+                  "ml-2 font-normal",
+                  overLimit ? "text-destructive" : "text-muted-foreground",
+                )}
+              >
+                已选 {selected.size} / {INVITATION_BATCH_MAX} 人
+                {overLimit
+                  ? ` · 超出 ${selected.size - INVITATION_BATCH_MAX} 人，请取消部分选择`
+                  : null}
               </span>
             </div>
             <form

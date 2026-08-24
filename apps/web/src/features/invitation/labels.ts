@@ -40,3 +40,11 @@ export const maskMobile = (mobile?: string | null) => {
     ? mobile
     : `${mobile.slice(0, 3)}****${mobile.slice(-4)}`;
 };
+
+/**
+ * 单批生成/下载的人数上限（文档 §8.4.1、BR-DEV-014D）。
+ *
+ * 服务端 `CreateInvitationBatchInput` 卡的是同一个数，这里只是**提前告诉用户**，
+ * 不是校验——真正的拦截仍然在服务端。改的时候两边一起改。
+ */
+export const INVITATION_BATCH_MAX = 200;
