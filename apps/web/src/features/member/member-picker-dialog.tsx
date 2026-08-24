@@ -112,12 +112,29 @@ export function MemberPickerDialog({
   const list = listQuery.data?.list ?? [];
   const total = listQuery.data?.total ?? 0;
   const excluded = new Set(excludeIds ?? []);
+  const selectableIds = list
+    .filter((candidate) => !excluded.has(candidate.id))
+    .map((candidate) => candidate.id);
+  const allPageSelected =
+    selectableIds.length > 0 && selectableIds.every((id) => selected.has(id));
+  const somePageSelected =
+    !allPageSelected && selectableIds.some((id) => selected.has(id));
 
   const toggle = (id: number) =>
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      return next;
+    });
+
+  const togglePage = (checked: boolean) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of selectableIds) {
+        if (checked) next.add(id);
+        else next.delete(id);
+      }
       return next;
     });
 
@@ -193,7 +210,15 @@ export function MemberPickerDialog({
             <Table>
               <TableHeader className="sticky top-0 bg-muted/60">
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-12" />
+                  <TableHead className="w-12">
+                    <Checkbox
+                      aria-label="选择当前页全部人员"
+                      checked={allPageSelected}
+                      disabled={selectableIds.length === 0}
+                      indeterminate={somePageSelected}
+                      onCheckedChange={togglePage}
+                    />
+                  </TableHead>
                   <TableHead className="min-w-24">姓名</TableHead>
                   <TableHead className="min-w-40">企业（社会）职务</TableHead>
                   <TableHead className="min-w-32">手机号码</TableHead>
@@ -243,7 +268,9 @@ export function MemberPickerDialog({
                           <Checkbox
                             checked={already || selected.has(candidate.id)}
                             disabled={already}
-                            onCheckedChange={() => toggle(candidate.id)}
+                            onCheckedChange={() => {
+                              if (!already) toggle(candidate.id);
+                            }}
                             onClick={(event) => event.stopPropagation()}
                           />
                         </TableCell>
