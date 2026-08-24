@@ -52,7 +52,8 @@ apps/server    Hono + Better Auth + Drizzle（端口 8787）
 | 生产构建 | `bun run build` → `apps/web/dist/`（静态资源）+ `apps/server/dist/server.js`（bun build 打的单文件） |
 | 类型检查（全部包） | `bun run typecheck` |
 | 测试 | `bun run test` |
-| Lint + 格式化 | `bun run check` |
+| Lint + 格式检查（收尾默认） | `bunx biome check <本次修改文件...>`（不要加 `--write`） |
+| 全仓 Lint + 格式化（会写文件） | `bun run check`（仅在明确需要全仓修复且工作树干净时） |
 | 数据库推送 / 迁移 | `bun run db:push` / `db:generate` / `db:migrate` / `db:studio` |
 | 重新生成路由树 | `bun run --filter '@repo/web' generate-routes` |
 | 添加 shadcn 组件 | 在 `apps/web` 下 `bunx shadcn@latest add <name>` |
@@ -333,7 +334,9 @@ apps/web/src/
 - Hono，运行在 Bun 上（`export default { port, fetch }`）
 - Drizzle ORM + Postgres（docker-compose 起本地库，客户端在 `apps/server/src/infra/db.ts`）
 - TanStack Form（`@tanstack/react-form`）负责表单，**不用 react-hook-form**。理由：shadcn 的 `base-vega` 注册表根本没有 `form.tsx`（只给 `field.tsx`，跟表单库无关），RHF 那点集成优势在这里拿不到；而本项目的输入组件全是 Base UI **受控**组件，用 RHF 的话每个 Select 都得包一层 `Controller`；TanStack Form 受控优先、原生吃 Standard Schema（zod 4 直接当 validator，不需要 `@hookform/resolvers`）。校验错误是 `StandardSchemaV1Issue[]`，正好喂给 `ui/field.tsx` 的 `<FieldError errors={…} />`
-- Biome 负责 lint 和格式化。**缩进：TS/TSX 是 2 空格，不是 tab** —— `biome.json` 顶层的 `formatter.indentStyle: "tab"` 被 `javascript.formatter.indentStyle: "space"` 覆盖了，只有 json 之类才是 tab。字符串双引号。收尾前务必跑 `bun run check`
+- Biome 负责 lint 和格式化。**缩进：TS/TSX 是 2 空格，不是 tab** —— `biome.json` 顶层的 `formatter.indentStyle: "tab"` 被 `javascript.formatter.indentStyle: "space"` 覆盖了，只有 json 之类才是 tab。字符串双引号。
+- **不要把 `bun run check` 当成普通的收尾检查。** 根脚本实际是 `biome check --write`，不传路径会扫描并重写全仓所有纳入 Biome 的文件；Windows 上 Git 配置 `core.autocrlf=true` 时，LF/CRLF 转换还可能把它放大成大量无关修改标记。
+- 日常收尾只运行 `bunx biome check <本次修改文件...>`，不带 `--write`。确实需要自动修复时，也只对目标文件运行 `bunx biome check --write <本次修改文件...>`。只有明确要做全仓格式化、并已确认工作树干净且没有其他人的改动时，才运行 `bun run check`；执行后立即用 `git diff --name-only` 核对改动范围。
 - Vitest + happy-dom + Testing Library，只在 `apps/web`，配置在 `vitest.config.ts`，**刻意**与 `vite.config.ts` 分开
 
 ## 运行时

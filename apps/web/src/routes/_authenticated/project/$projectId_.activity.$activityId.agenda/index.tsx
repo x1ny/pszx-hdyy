@@ -31,6 +31,7 @@ import { Checkbox } from "#/shared/components/ui/checkbox.tsx";
 import { Skeleton } from "#/shared/components/ui/skeleton.tsx";
 import { cn } from "#/shared/lib/utils.ts";
 import { activityDetailQueryOptions } from "../-queries";
+import { seatingKeys, seatingPlansQueryOptions } from "../-venue-queries";
 import { AgendaLineDialog } from "./-components/agenda-line-dialog";
 import { AgendaTimeline } from "./-components/agenda-timeline";
 import { SegmentDetailDialog } from "./-components/segment-detail-dialog";
@@ -73,8 +74,8 @@ export const Route = createFileRoute(
   "/_authenticated/project/$projectId_/activity/$activityId/agenda/",
 )({
   validateSearch: AgendaSearchSchema,
-  // 议程、资源需求、人员时间冲突一起预取：三者都是首屏就要用的（列表的
-  // "资源需求"列、顶部那两条提示），分开取等于给首屏排了个瀑布。
+  // 议程、资源需求、人员状态和排位状态一起预取：它们都是首屏时间轴图标或
+  // 提示的数据源，分开取等于给首屏排了个瀑布。
   loader: ({ context, params }) => {
     const activityId = Number(params.activityId);
     return Promise.all([
@@ -85,6 +86,7 @@ export const Route = createFileRoute(
       context.queryClient.ensureQueryData(
         segmentMemberConflictQueryOptions(activityId),
       ),
+      context.queryClient.ensureQueryData(seatingPlansQueryOptions(activityId)),
     ]);
   },
   component: AgendaTab,
@@ -114,6 +116,7 @@ function AgendaTab() {
   // 人员时间冲突由后端整场活动扫一遍算好（同一个人被排进两个时间重叠的
   // 环节），这里只负责把结论显示出来。
   const conflictQuery = useQuery(segmentMemberConflictQueryOptions(activityId));
+  const seatingQuery = useQuery(seatingPlansQueryOptions(activityId));
   // 父路由（活动详情布局）的 loader 已经 ensureQueryData 过，这里是缓存命中
   const { data: activity } = useQuery(activityDetailQueryOptions(activityId));
 
@@ -131,6 +134,10 @@ function AgendaTab() {
   const invalidateAgenda = () => {
     queryClient.invalidateQueries({ queryKey: agendaKeys.all });
     queryClient.invalidateQueries({ queryKey: resourceDemandKeys.all });
+    // 排位总览以环节的开关为左表条件；打开或关闭排位开关都会改变那份列表。
+    queryClient.invalidateQueries({
+      queryKey: seatingKeys.plans(activityId),
+    });
     // 人员时间冲突是"人 × 环节时间"算出来的，改时间、作废、恢复都会让它变。
     // 反方向（加人、移人）由环节人员弹窗那句 invalidate 覆盖——那个 key 是
     // 这条的父级。
@@ -267,6 +274,19 @@ function AgendaTab() {
     else demandsBySegment.set(demand.segmentId, [demand]);
   }
   const openTodoCount = demands.filter(isOpenTodo).length;
+
+  const memberCounts = new Map(
+    (conflictQuery.data?.memberCounts ?? []).map(({ segmentId, count }) => [
+      segmentId,
+      count,
+    ]),
+  );
+  const seatingStatusBySegment = new Map(
+    (seatingQuery.data?.list ?? []).map((row) => [
+      row.segmentId,
+      row.plan?.status ?? null,
+    ]),
+  );
 
   // 超出活动时间范围只提示不阻断（C-016：本期业务冲突允许保存但提示）
   const outOfRange = activeSegments.filter(
@@ -411,13 +431,21 @@ function AgendaTab() {
       )}
 
       {search.view === "timeline" ? (
-        <AgendaTimeline days={timeline} onSelect={setDetail} />
+        <AgendaTimeline
+          days={timeline}
+          demandsBySegment={demandsBySegment}
+          memberCounts={memberCounts}
+          seatingStatusBySegment={seatingStatusBySegment}
+          onSelect={setDetail}
+        />
       ) : (
         <SegmentTable
           segments={tableSegments}
           lines={lines}
           sequenceLabels={sequenceLabels}
           demandsBySegment={demandsBySegment}
+          memberCounts={memberCounts}
+          seatingStatusBySegment={seatingStatusBySegment}
           pendingStatusId={
             statusMutation.isPending ? statusMutation.variables?.id : undefined
           }
@@ -444,6 +472,10 @@ function AgendaTab() {
       <SegmentDetailDialog
         segment={detail}
         lines={lines}
+        memberCount={detail ? memberCounts.get(detail.id) : undefined}
+        seatingStatus={
+          detail ? seatingStatusBySegment.get(detail.id) : undefined
+        }
         onOpenChange={(open) => {
           if (!open) setDetail(undefined);
         }}

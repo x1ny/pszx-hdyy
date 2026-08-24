@@ -1,4 +1,5 @@
 import { CalendarClockIcon } from "lucide-react";
+import type { ResourceDemand } from "#/features/resource/queries.ts";
 import {
   Empty,
   EmptyDescription,
@@ -7,6 +8,7 @@ import {
   EmptyTitle,
 } from "#/shared/components/ui/empty.tsx";
 import { cn } from "#/shared/lib/utils.ts";
+import type { PlanStatus } from "../../-venue-queries";
 import type { Segment } from "../-queries";
 import {
   formatTime,
@@ -14,6 +16,7 @@ import {
   SEGMENT_TYPE_LABELS,
   type TimelineDay,
 } from "../-utils";
+import { SegmentConfigIcons } from "./segment-config-icons";
 
 /**
  * 议程时间轴：泳道 = 议程线，块按时间比例定位。
@@ -24,9 +27,15 @@ import {
  */
 export function AgendaTimeline({
   days,
+  demandsBySegment,
+  memberCounts,
+  seatingStatusBySegment,
   onSelect,
 }: {
   days: TimelineDay[];
+  demandsBySegment: ReadonlyMap<number, ResourceDemand[]>;
+  memberCounts: ReadonlyMap<number, number>;
+  seatingStatusBySegment: ReadonlyMap<number, PlanStatus | null>;
   onSelect: (segment: Segment) => void;
 }) {
   if (days.length === 0) {
@@ -118,39 +127,52 @@ export function AgendaTimeline({
 
                     <div className="relative flex flex-col gap-1.5">
                       {lane.rows.map((row) => (
-                        <div key={row[0].segment.id} className="relative h-14">
-                          {row.map((block) => (
-                            <button
-                              key={block.segment.id}
-                              type="button"
-                              onClick={() => onSelect(block.segment)}
-                              title={`${block.segment.name} ${formatTime(block.segment.startTime)} - ${formatTime(block.segment.endTime)}`}
-                              className={cn(
-                                "absolute inset-y-0 flex min-w-24 cursor-pointer flex-col justify-center overflow-hidden rounded-md border px-2 text-left transition-colors",
-                                lane.line.lineType === "main"
-                                  ? "border-primary/25 bg-primary/10 hover:bg-primary/15"
-                                  : "border-chart-2/25 bg-chart-2/10 hover:bg-chart-2/15",
-                              )}
-                              style={{
-                                left: `${block.leftPct}%`,
-                                width: `${block.widthPct}%`,
-                              }}
-                            >
-                              <span className="truncate font-medium text-xs">
-                                {block.segment.name}
-                              </span>
-                              <span className="truncate text-[11px] text-muted-foreground tabular-nums">
-                                {formatTime(block.segment.startTime)} -{" "}
-                                {formatTime(block.segment.endTime)}
-                                {block.continuesNextDay && " 次日"}
-                              </span>
-                              <span className="truncate text-[11px] text-muted-foreground">
-                                {SEGMENT_TYPE_LABELS[block.segment.segmentType]}
-                                {block.segment.locationText &&
-                                  ` · ${block.segment.locationText}`}
-                              </span>
-                            </button>
-                          ))}
+                        <div key={row[0].segment.id} className="relative h-20">
+                          {row.map((block) => {
+                            const segment = block.segment;
+                            return (
+                              <button
+                                key={segment.id}
+                                type="button"
+                                onClick={() => onSelect(segment)}
+                                aria-label={`${segment.name}，${formatTime(segment.startTime)} 至 ${formatTime(segment.endTime)}`}
+                                className={cn(
+                                  "absolute inset-y-0 flex min-w-28 cursor-pointer flex-col justify-center overflow-hidden rounded-md border px-1.5 py-1.5 text-left transition-colors",
+                                  lane.line.lineType === "main"
+                                    ? "border-primary/25 bg-primary/10 hover:bg-primary/15"
+                                    : "border-chart-2/25 bg-chart-2/10 hover:bg-chart-2/15",
+                                )}
+                                style={{
+                                  left: `${block.leftPct}%`,
+                                  width: `${block.widthPct}%`,
+                                }}
+                              >
+                                <span className="truncate font-medium text-xs leading-4">
+                                  {segment.name}
+                                </span>
+                                <span className="truncate text-[11px] text-muted-foreground leading-4 tabular-nums">
+                                  {formatTime(segment.startTime)} -{" "}
+                                  {formatTime(segment.endTime)}
+                                  {block.continuesNextDay && " 次日"}
+                                </span>
+                                <span className="truncate text-[11px] text-muted-foreground leading-4">
+                                  {SEGMENT_TYPE_LABELS[segment.segmentType]}
+                                  {segment.locationText &&
+                                    ` · ${segment.locationText}`}
+                                </span>
+                                <div className="mt-0.5 flex h-4 min-w-0 items-center">
+                                  <SegmentConfigIcons
+                                    segment={segment}
+                                    memberCount={memberCounts.get(segment.id)}
+                                    seatingStatus={seatingStatusBySegment.get(
+                                      segment.id,
+                                    )}
+                                    demands={demandsBySegment.get(segment.id)}
+                                  />
+                                </div>
+                              </button>
+                            );
+                          })}
                         </div>
                       ))}
                     </div>

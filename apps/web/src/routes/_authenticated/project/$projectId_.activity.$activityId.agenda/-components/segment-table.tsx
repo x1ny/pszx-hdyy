@@ -22,6 +22,7 @@ import {
   TableRow,
 } from "#/shared/components/ui/table.tsx";
 import { cn } from "#/shared/lib/utils.ts";
+import type { PlanStatus } from "../../-venue-queries";
 import type { AgendaLine, Segment } from "../-queries";
 import {
   formatSegmentRange,
@@ -31,6 +32,7 @@ import {
   SEGMENT_TYPE_BADGE_CLASS,
   SEGMENT_TYPE_LABELS,
 } from "../-utils";
+import { SegmentConfigIcons } from "./segment-config-icons";
 
 const dayFormat = new Intl.DateTimeFormat("zh-CN", {
   month: "2-digit",
@@ -42,6 +44,8 @@ export function SegmentTable({
   lines,
   sequenceLabels,
   demandsBySegment,
+  memberCounts,
+  seatingStatusBySegment,
   pendingStatusId,
   onDetail,
   onEdit,
@@ -53,6 +57,10 @@ export function SegmentTable({
   sequenceLabels: Map<number, string>;
   /** 按环节分组的资源需求项，用来画"资源需求"列的 chip。 */
   demandsBySegment: Map<number, ResourceDemand[]>;
+  /** 已开启人员能力的环节，用人数区分未配置与已配置。 */
+  memberCounts: ReadonlyMap<number, number>;
+  /** 当前有效排位方案的状态；无值即已开启但未配置。 */
+  seatingStatusBySegment: ReadonlyMap<number, PlanStatus | null>;
   pendingStatusId?: number;
   onDetail: (segment: Segment) => void;
   onEdit: (segment: Segment) => void;
@@ -117,17 +125,12 @@ export function SegmentTable({
                       {segment.name}
                     </button>
                     {(segment.memberEnabled || segment.seatingEnabled) && (
-                      <div className="mt-0.5 flex gap-1">
-                        {segment.memberEnabled && (
-                          <span className="text-muted-foreground text-xs">
-                            人员已开启
-                          </span>
-                        )}
-                        {segment.seatingEnabled && (
-                          <span className="text-muted-foreground text-xs">
-                            排位已开启
-                          </span>
-                        )}
+                      <div className="mt-1">
+                        <SegmentConfigIcons
+                          segment={segment}
+                          memberCount={memberCounts.get(segment.id)}
+                          seatingStatus={seatingStatusBySegment.get(segment.id)}
+                        />
                       </div>
                     )}
                   </TableCell>

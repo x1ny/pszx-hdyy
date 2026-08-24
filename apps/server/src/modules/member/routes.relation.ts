@@ -755,7 +755,9 @@ export const segmentMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
    *
    * 一次把本活动所有环节人员连着环节时间捞回来，配对判定交给
    * findMemberTimeConflicts——理由见 conflicts.ts 顶部。`segment_member.activityId`
-   * 那列冗余就是为这类"按活动汇总"的查询留的。
+   * 那列冗余就是为这类"按活动汇总"的查询留的。同一批行顺带按环节汇总
+   * 人数，给议程节点判断"人员未配置 / 已配置 N 人"；不另发一条几乎相同的
+   * 全活动查询。
    */
   .post("/conflicts", jsonBody(ListSegmentMemberConflictsInput), async (c) => {
     const { activityId } = c.req.valid("json");
@@ -768,6 +770,7 @@ export const segmentMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
         segmentName: activitySegment.name,
         startTime: activitySegment.startTime,
         endTime: activitySegment.endTime,
+        segmentStatus: activitySegment.status,
       })
       .from(segmentMember)
       .innerJoin(member, eq(member.id, segmentMember.memberId))
@@ -775,15 +778,25 @@ export const segmentMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
         activitySegment,
         eq(activitySegment.id, segmentMember.segmentId),
       )
-      .where(
-        and(
-          eq(segmentMember.activityId, activityId),
-          // 作废环节不占时间段，和同议程线的重叠校验口径一致。
-          eq(activitySegment.status, "active"),
-        ),
-      );
+      .where(eq(segmentMember.activityId, activityId));
 
-    return c.json(ok({ list: findMemberTimeConflicts(rows) }));
+    const counts = new Map<number, number>();
+    for (const row of rows) {
+      counts.set(row.segmentId, (counts.get(row.segmentId) ?? 0) + 1);
+    }
+
+    // 作废环节的人员仍要计入上面的配置人数（历史关系没有消失），但不占时间段，
+    // 因此只在冲突计算前过滤，和同议程线的重叠校验保持同一口径。
+    const activeRows = rows.filter((row) => row.segmentStatus === "active");
+
+    return c.json(
+      ok({
+        list: findMemberTimeConflicts(activeRows),
+        memberCounts: [...counts.entries()]
+          .sort(([left], [right]) => left - right)
+          .map(([segmentId, count]) => ({ segmentId, count })),
+      }),
+    );
   })
 
   .post("/add", jsonBody(AddSegmentMembersInput), async (c) => {

@@ -4,6 +4,7 @@ import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import TanStackQueryDevtools from "#/app/devtools";
 import type { RouterContext } from "#/app/providers";
 import { Toaster } from "#/shared/components/ui/sonner.tsx";
+import { TooltipProvider } from "#/shared/components/ui/tooltip.tsx";
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   component: RootLayout,
@@ -11,7 +12,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 
 function RootLayout() {
   return (
-    <>
+    <TooltipProvider>
       <Outlet />
       {/* 挂在根上而不是 AppLayout 里：登录页不在 AppLayout 下，也要能弹 toast。 */}
       <Toaster position="top-center" richColors />
@@ -27,6 +28,6 @@ function RootLayout() {
           TanStackQueryDevtools,
         ]}
       />
-    </>
+    </TooltipProvider>
   );
 }

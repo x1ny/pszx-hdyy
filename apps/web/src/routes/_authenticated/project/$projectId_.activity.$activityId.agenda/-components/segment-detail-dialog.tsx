@@ -11,6 +11,8 @@ import {
 } from "#/shared/components/ui/dialog.tsx";
 import { cn } from "#/shared/lib/utils.ts";
 import { formatDateTime } from "../../-utils";
+import type { PlanStatus } from "../../-venue-queries";
+import { PLAN_STATUS_LABELS } from "../../-venue-utils";
 import type { AgendaLine, Segment } from "../-queries";
 import {
   formatSegmentRange,
@@ -31,6 +33,8 @@ const dayFormat = new Intl.DateTimeFormat("zh-CN", {
 export function SegmentDetailDialog({
   segment,
   lines,
+  memberCount = 0,
+  seatingStatus,
   onOpenChange,
   onEdit,
   onManageMembers,
@@ -38,6 +42,8 @@ export function SegmentDetailDialog({
 }: {
   segment?: Segment;
   lines: AgendaLine[];
+  memberCount?: number;
+  seatingStatus?: PlanStatus | null;
   onOpenChange: (open: boolean) => void;
   onEdit: (segment: Segment) => void;
   onManageMembers: (segment: Segment) => void;
@@ -89,10 +95,18 @@ export function SegmentDetailDialog({
                 <Row label="地点 / 区域">{segment.locationText || "-"}</Row>
                 <Row label="负责人">{segment.ownerName || "-"}</Row>
                 <Row label="环节人员">
-                  {segment.memberEnabled ? "已开启" : "未开启"}
+                  {!segment.memberEnabled
+                    ? "未开启"
+                    : memberCount > 0
+                      ? `已配置 · ${memberCount} 人`
+                      : "未配置"}
                 </Row>
                 <Row label="排位">
-                  {segment.seatingEnabled ? "已开启 · 未配置" : "未开启"}
+                  {!segment.seatingEnabled
+                    ? "未开启"
+                    : seatingStatus
+                      ? PLAN_STATUS_LABELS[seatingStatus]
+                      : "未配置"}
                 </Row>
                 <Row label="最后修改">{formatDateTime(segment.updatedAt)}</Row>
               </dl>
