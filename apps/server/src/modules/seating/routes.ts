@@ -1,4 +1,14 @@
-import { and, asc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+  sql,
+} from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../../infra/db";
 import { err, ok } from "../../shared/result";
@@ -6,7 +16,11 @@ import { jsonBody } from "../../shared/validate";
 import { activitySegment } from "../agenda/schema";
 import { type AuthedVariables, requireUser } from "../auth";
 import { activityMember, member, segmentMember } from "../member/schema";
-import { activityVenue, activityVenueZone } from "../venue/schema";
+import {
+  activityVenue,
+  activityVenueLayout,
+  activityVenueZone,
+} from "../venue/schema";
 import {
   findInvalidAssignments,
   isWritable,
@@ -180,8 +194,23 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
       .where(
         and(
           eq(activitySegment.activityId, activityId),
-          // 开关没开的环节根本不该出现在排位页（§7 的第一个派生态）。
-          eq(activitySegment.seatingEnabled, true),
+          /**
+           * "开关开着" **或** "已经有非作废方案"。
+           *
+           * 早先这里是硬过滤 `seatingEnabled = true`，把开关当成了列表的筛选
+           * 条件。后果是：环节已经排好位，有人回议程页把排位开关一关，这一行
+           * 就从列表里消失了——但方案还在库里、还占着"一个环节一个有效方案"的
+           * 唯一索引、场地空间页还显示那块区域"被开幕式引用"、那块区域因此
+           * 还删不掉。用户看得见后果，却找不到入口去作废它（评审 §3.4）。
+           *
+           * 开关和方案是两个独立的事实，用前者过滤后者就会漏。改成并集之后，
+           * 开关关掉的那一行仍然在列表里，带一个「排位开关已关闭」的芯片和
+           * 作废出口。
+           */
+          or(
+            eq(activitySegment.seatingEnabled, true),
+            isNotNull(segmentSeatingPlan.id),
+          ),
           status ? eq(segmentSeatingPlan.status, status) : undefined,
         ),
       )
@@ -236,6 +265,15 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
         zoneCapacity: activityVenueZone.capacity,
         activityVenueId: activityVenueZone.activityVenueId,
         venueName: activityVenue.name,
+        /**
+         * 上游那份活动空间画布最后改于何时。
+         *
+         * 前端拿它跟本方案的 `savedAt` 比——上游更新就说明这份排位的底图是
+         * 旧快照了。**只用来提示，不触发任何自动同步**：快照隔离本来就是
+         * 设计意图（§2.2），自动跟随会让已确认的排位静默变形。
+         * 缺的只是"让用户知道"，这一列补的就是那个（评审 §3.8）。
+         */
+        spaceUpdatedAt: activityVenueLayout.updatedAt,
       })
       .from(segmentSeatingPlan)
       .innerJoin(
@@ -249,6 +287,15 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
       .innerJoin(
         activityVenue,
         eq(activityVenue.id, activityVenueZone.activityVenueId),
+      )
+      // left：源场地没画过平面图时活动层也没有 blob 行，那时候无从比较，
+      // spaceUpdatedAt 为 null，前端不显示提示。
+      .leftJoin(
+        activityVenueLayout,
+        eq(
+          activityVenueLayout.activityVenueId,
+          activityVenueZone.activityVenueId,
+        ),
       )
       .where(eq(segmentSeatingPlan.id, planId));
 
@@ -905,11 +952,17 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
           status: segmentSeatingPlan.status,
           version: segmentSeatingPlan.version,
           capacity: activityVenueZone.capacity,
+          segmentStatus: activitySegment.status,
+          segmentName: activitySegment.name,
         })
         .from(segmentSeatingPlan)
         .innerJoin(
           activityVenueZone,
           eq(activityVenueZone.id, segmentSeatingPlan.activityVenueZoneId),
+        )
+        .innerJoin(
+          activitySegment,
+          eq(activitySegment.id, segmentSeatingPlan.segmentId),
         )
         .where(eq(segmentSeatingPlan.id, planId));
       if (!plan) return { kind: "notFound" as const };
@@ -918,6 +971,17 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
       }
       if (plan.status === "confirmed") {
         return { kind: "invalid" as const, error: "方案已经是已确认状态" };
+      }
+      /**
+       * 作废的环节不能再确认排位。BR-DEV-003B：环节作废后"不进入新排位、
+       * 不进入座位通知"——`createPlan` 早就挡了前半句，后半句一直没有落点，
+       * 于是一个已作废环节的方案照样能点确认、照样会生成通知（评审 §3.5）。
+       */
+      if (plan.segmentStatus === "voided") {
+        return {
+          kind: "invalid" as const,
+          error: `环节「${plan.segmentName}」已作废，不能确认它的排位`,
+        };
       }
 
       const seats = await tx

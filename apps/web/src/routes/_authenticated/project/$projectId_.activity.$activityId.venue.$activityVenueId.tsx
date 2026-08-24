@@ -91,6 +91,9 @@ function ActivityVenueLayoutPage() {
         zone={editingZone}
         venueName={bundle.activityVenue.name}
         pending={updateZoneMutation.isPending}
+        // 名称在这一页归右侧属性面板管（跟画布一起保存）。弹窗是即时写库的，
+        // 两个入口写同一列会互相覆盖——见弹窗组件里 hideName 的说明。
+        hideName
         onOpenChange={(open) => !open && setBusinessFieldsZoneId(null)}
         onSubmit={(values) => updateZoneMutation.mutate(values)}
       />

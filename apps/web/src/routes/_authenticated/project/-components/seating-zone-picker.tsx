@@ -24,6 +24,7 @@ export function SeatingZonePicker({
   open,
   activityId,
   segmentName,
+  highlightZoneId,
   pending,
   onOpenChange,
   onPick,
@@ -31,6 +32,8 @@ export function SeatingZonePicker({
   open: boolean;
   activityId: number;
   segmentName: string;
+  /** 从场地空间某个区域点「排位」进来时，把那块区域排在最前并标出来。 */
+  highlightZoneId?: number;
   pending: boolean;
   onOpenChange: (open: boolean) => void;
   onPick: (zoneId: number) => void;
@@ -43,9 +46,13 @@ export function SeatingZonePicker({
   const venueNameById = new Map(
     (listQuery.data?.venues ?? []).map((v) => [v.id, v.name]),
   );
-  const zones = (listQuery.data?.zones ?? []).filter(
-    (zone) => zone.status === "active",
-  );
+  const zones = (listQuery.data?.zones ?? [])
+    .filter((zone) => zone.status === "active")
+    // 带着来源区域进来的，把它顶到第一个——用户就是冲它来的，
+    // 不该还要在列表里找一遍。
+    .sort((a, b) =>
+      a.id === highlightZoneId ? -1 : b.id === highlightZoneId ? 1 : 0,
+    );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -71,15 +78,28 @@ export function SeatingZonePicker({
                 disabled={pending}
                 onClick={() => onPick(zone.id)}
                 className={cn(
-                  "flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-3 text-left transition-colors",
+                  "flex items-center justify-between gap-3 rounded-lg border bg-card p-3 text-left transition-colors",
+                  zone.id === highlightZoneId
+                    ? "border-primary bg-primary/5"
+                    : "border-border",
                   pending
                     ? "cursor-not-allowed opacity-60"
                     : "cursor-pointer hover:bg-muted/60",
                 )}
               >
                 <div className="min-w-0">
-                  <div className="truncate font-medium text-sm">
-                    {zone.name}
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate font-medium text-sm">
+                      {zone.name}
+                    </span>
+                    {zone.id === highlightZoneId && (
+                      <Badge
+                        variant="outline"
+                        className="shrink-0 border-primary/40 text-primary"
+                      >
+                        你选的
+                      </Badge>
+                    )}
                   </div>
                   <p className="truncate text-muted-foreground text-xs">
                     {venueNameById.get(zone.activityVenueId) ?? "-"} ·{" "}

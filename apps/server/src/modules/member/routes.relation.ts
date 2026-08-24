@@ -17,8 +17,18 @@ import { err, ok } from "../../shared/result";
 import { jsonBody } from "../../shared/validate";
 import { activitySegment } from "../agenda/schema";
 import { type AuthedVariables, requireUser } from "../auth";
+import {
+  listInvitationsByActivityMember,
+  releaseInvitationsByActivityMember,
+} from "../invitation/cascade";
 import { activity } from "../project/schema";
 import { activityResource, resourceMemberBinding } from "../resource/schema";
+import {
+  listSeatsByActivityMember,
+  listSeatsBySegmentMember,
+  releaseSeatsByActivityMember,
+  releaseSeatsBySegmentMembers,
+} from "../seating/cascade";
 import {
   createMemberInTx,
   ensureActivityMembers,
@@ -39,6 +49,7 @@ import {
   ListSegmentMembersInput,
   RelationIdInput,
   RemoveActivityMemberInput,
+  RemoveSegmentMemberInput,
   UpdateActivityMemberInput,
   UpdateProjectMemberInput,
   UpdateSegmentMemberInput,
@@ -454,6 +465,13 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
         .orderBy(asc(activityResource.id)),
     ]);
 
+    // 座位和邀请函各查一次。两者都跨模块，且都是"外键故意没设 cascade、
+    // 要求先展示清单再显式解除"的同一类下游关联。
+    const [seats, invitations] = await Promise.all([
+      listSeatsByActivityMember(db, id),
+      listInvitationsByActivityMember(db, id),
+    ]);
+
     return c.json(
       ok({
         items: [
@@ -461,6 +479,21 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
             kind: "segment" as const,
             label: "环节人员",
             names: segments.map((s) => s.name),
+          },
+          {
+            // 座位必须单独列一项、而且要报到具体座位号：运营看到"3 个座位"和
+            // 看到"开幕式 A3、主论坛 B7"是两种决策质量。移除之后这几个位置就空了，
+            // 得有人去补。
+            kind: "seat" as const,
+            label: "排位座位",
+            names: seats.map((s) => `${s.segmentName} ${s.seatLabel}`),
+          },
+          {
+            // 邀请函是"公函留痕"，schema 里那条外键故意不设 cascade 就是为了
+            // 不让一次误删悄悄带走它。解除必须是用户看过清单之后的显式动作。
+            kind: "invitation" as const,
+            label: "邀请函记录",
+            names: invitations.map((i) => i.batchName ?? `#${i.id}`),
           },
           {
             kind: "resource" as const,
@@ -474,8 +507,14 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
 
   .post("/remove", jsonBody(RemoveActivityMemberInput), async (c) => {
     const { id, cascade } = c.req.valid("json");
+    const userId = c.get("authedUser").id;
 
-    const [[relatedSegments], [relatedBindings]] = await Promise.all([
+    const [
+      [relatedSegments],
+      [relatedBindings],
+      relatedSeats,
+      relatedInvitations,
+    ] = await Promise.all([
       db
         .select({ total: count() })
         .from(segmentMember)
@@ -484,14 +523,28 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
         .select({ total: count() })
         .from(resourceMemberBinding)
         .where(eq(resourceMemberBinding.activityMemberId, id)),
+      listSeatsByActivityMember(db, id),
+      listInvitationsByActivityMember(db, id),
     ]);
     const segmentCount = relatedSegments?.total ?? 0;
     const bindingCount = relatedBindings?.total ?? 0;
+    const seatCount = relatedSeats.length;
+    const invitationCount = relatedInvitations.length;
 
-    if ((segmentCount > 0 || bindingCount > 0) && !cascade) {
+    if (
+      (segmentCount > 0 ||
+        bindingCount > 0 ||
+        seatCount > 0 ||
+        invitationCount > 0) &&
+      !cascade
+    ) {
       // 不是错误，是要求前端走一遍 /impact + 二次确认再回来。
       const parts = [
         segmentCount > 0 ? `${segmentCount} 个环节` : null,
+        // 座位排在环节后面：它比"参与哪些环节"更具体，移除之后会直接留下
+        // 空位需要补人，是这几项里最需要被看见的。
+        seatCount > 0 ? `${seatCount} 个已排座位` : null,
+        invitationCount > 0 ? `${invitationCount} 份邀请函记录` : null,
         bindingCount > 0 ? `${bindingCount} 项资源服务安排` : null,
       ].filter(Boolean);
       return c.json(
@@ -500,6 +553,22 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
     }
 
     const row = await db.transaction(async (tx) => {
+      /**
+       * ⚠️ 顺序有讲究：下面这几张表对 activity_member / segment_member 的外键
+       * **都故意没有 cascade**（各自 schema 里有理由），所以必须在删上游之前
+       * 显式清掉，否则撞约束报 500。
+       *
+       * 座位那条在 docs/场地排位交互评审.md §3.1 复现过；邀请函那条是修它的
+       * 时候连带发现的同一类问题，schema 注释里早写了"应该显式删记录"，
+       * 只是一直没人实现。
+       */
+      if (seatCount > 0) {
+        await releaseSeatsByActivityMember(tx, id, userId);
+      }
+      if (invitationCount > 0) {
+        await releaseInvitationsByActivityMember(tx, id);
+      }
+
       if (segmentCount > 0) {
         await tx
           .delete(segmentMember)
@@ -660,13 +729,37 @@ export const segmentMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
     return row ? c.json(ok(row)) : c.json(notFound("环节人员关系"));
   })
 
-  // 环节是链条最末端，移除不需要影响清单——排位建表后这里要跟活动层一样加
-  // /impact + cascade，因为座位分配会指向 segment_member.id。
-  .post("/remove", jsonBody(RelationIdInput), async (c) => {
-    const [row] = await db
-      .delete(segmentMember)
-      .where(eq(segmentMember.id, c.req.valid("json").id))
-      .returning({ id: segmentMember.id });
+  /**
+   * 环节人员移除。
+   *
+   * 排位建起来之后，环节人员**不再是链条末端**——`seat_assignment` 指向
+   * `segment_member.id`，而那条外键没有 cascade。所以这里跟活动层一样要
+   * 先报清单、二次确认，再连座位一起解。
+   */
+  .post("/remove", jsonBody(RemoveSegmentMemberInput), async (c) => {
+    const { id, cascade } = c.req.valid("json");
+    const userId = c.get("authedUser").id;
+
+    const seats = await listSeatsBySegmentMember(db, id);
+
+    if (seats.length > 0 && !cascade) {
+      return c.json(
+        validationError(
+          `该人员在本环节已排 ${seats.map((s) => s.seatLabel).join("、")}，请确认是否一并解除排位`,
+        ),
+      );
+    }
+
+    const row = await db.transaction(async (tx) => {
+      if (seats.length > 0) {
+        await releaseSeatsBySegmentMembers(tx, [id], userId);
+      }
+      const [deleted] = await tx
+        .delete(segmentMember)
+        .where(eq(segmentMember.id, id))
+        .returning({ id: segmentMember.id });
+      return deleted;
+    });
 
     return row ? c.json(ok(row)) : c.json(notFound("环节人员关系"));
   });

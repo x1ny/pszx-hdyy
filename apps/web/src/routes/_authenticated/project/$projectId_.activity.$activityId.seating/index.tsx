@@ -3,8 +3,19 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArmchairIcon, ExternalLinkIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
 import { canvasEditor } from "#/features/venue-editor/canvas";
 import { buildPlanDoc } from "#/features/venue-editor/plan-doc";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "#/shared/components/ui/alert-dialog.tsx";
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button, buttonVariants } from "#/shared/components/ui/button.tsx";
 import {
@@ -45,9 +56,24 @@ import {
   UNCONFIGURED_CHIP,
 } from "../-venue-utils";
 
+/**
+ * `zoneId` 是从场地空间的区域行点「排位」带过来的上下文。
+ *
+ * 那个按钮原先只是跳到本页、什么都不带——用户点的是"给**这块区域**排位"，
+ * 得到的却是排位页首页，还得自己再找环节、再选一遍那块区域（评审 §3.6）。
+ * 带上之后：顶部显示来源提示，选区域的弹窗默认高亮它。
+ *
+ * **不做行过滤**：一块区域可以被多个环节引用，而"还没配的环节"恰恰是用户
+ * 从这里进来最可能要操作的对象，过滤掉就本末倒置了。
+ */
+const SeatingSearchSchema = z.object({
+  zoneId: z.number().int().positive().optional().catch(undefined),
+});
+
 export const Route = createFileRoute(
   "/_authenticated/project/$projectId_/activity/$activityId/seating/",
 )({
+  validateSearch: SeatingSearchSchema,
   component: SeatingPage,
 });
 
@@ -63,6 +89,7 @@ export const Route = createFileRoute(
  */
 function SeatingPage() {
   const { projectId, activityId: activityIdParam } = Route.useParams();
+  const { zoneId: fromZoneId } = Route.useSearch();
   const activityId = Number(activityIdParam);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -74,6 +101,16 @@ function SeatingPage() {
   const [statusFilter, setStatusFilter] = useState<PlanStatus | "all">("all");
   const [pickerFor, setPickerFor] = useState<SeatingPlanRow | null>(null);
   const [rejectFor, setRejectFor] = useState<SeatingPlanRow | null>(null);
+  /**
+   * 确认和作废都要二次确认。
+   *
+   * 确认原先是单击即执行——而它是这一页后果最重的操作（对外生效、version +1、
+   * 生成座位通知，文档把它定性为高风险），反倒是作废有 `window.confirm`。
+   * 现在两个都走 AlertDialog，跟仓库其余页面（人员、项目、邀请函模板…）一致，
+   * 顺带把"0 人已排"这种该拦一下的情况摆到确认弹窗里（评审 §3.9–3.11）。
+   */
+  const [confirmFor, setConfirmFor] = useState<SeatingPlanRow | null>(null);
+  const [voidFor, setVoidFor] = useState<SeatingPlanRow | null>(null);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: seatingKeys.all });
@@ -227,6 +264,28 @@ function SeatingPage() {
         </div>
       </div>
 
+      {fromZoneId && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-4 py-2 text-sm">
+          <span className="text-muted-foreground">
+            从场地空间的「
+            {spaceQuery.data?.zones.find((z) => z.id === fromZoneId)?.name ??
+              "某个区域"}
+            」进来——给下面任一环节点「选择区域」时，它会排在最前面。
+          </span>
+          <Link
+            to="/project/$projectId/activity/$activityId/seating"
+            params={{ projectId, activityId: activityIdParam }}
+            search={{}}
+            className={cn(
+              buttonVariants({ variant: "ghost", size: "sm" }),
+              "ml-auto",
+            )}
+          >
+            清除
+          </Link>
+        </div>
+      )}
+
       {all.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-16 text-center">
           <ArmchairIcon className="size-8 text-muted-foreground/40" />
@@ -253,7 +312,29 @@ function SeatingPage() {
               {rows.map((row) => (
                 <TableRow key={row.segmentId}>
                   <TableCell>
-                    <div className="font-medium">{row.segmentName}</div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-medium">{row.segmentName}</span>
+                      {/* 环节作废后它的方案不该还能确认（BR-DEV-003B）。整行
+                          降级显示，操作列也会相应收窄。 */}
+                      {row.segmentStatus === "voided" && (
+                        <Badge
+                          variant="outline"
+                          className="border-destructive/30 bg-destructive/10 text-destructive"
+                        >
+                          环节已作废
+                        </Badge>
+                      )}
+                      {/* 开关关了但方案还在——这一行原先会整个消失，用户就再也
+                          找不到入口作废它了（评审 §3.4）。 */}
+                      {!row.seatingEnabled && row.plan && (
+                        <Badge
+                          variant="outline"
+                          className="border-warning/30 bg-warning/10 text-warning-foreground"
+                        >
+                          排位开关已关闭
+                        </Badge>
+                      )}
+                    </div>
                     <div className="text-muted-foreground text-xs">
                       {formatDateTime(row.startTime)}
                     </div>
@@ -323,44 +404,36 @@ function SeatingPage() {
                           >
                             {row.plan.status === "voided" ? "查看" : "进入画布"}
                           </Link>
-                          {row.plan.status === "pending" && (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                disabled={confirmMutation.isPending}
-                                onClick={() =>
-                                  row.plan &&
-                                  confirmMutation.mutate(row.plan.id)
-                                }
-                              >
-                                确认
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setRejectFor(row)}
-                              >
-                                退回
-                              </Button>
-                            </>
-                          )}
+                          {/* 环节作废后不能再确认它的排位（BR-DEV-003B），
+                              服务端也拦了一道；这里同步收掉按钮，别让用户
+                              点了才知道不行。 */}
+                          {row.plan.status === "pending" &&
+                            row.segmentStatus !== "voided" && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={confirmMutation.isPending}
+                                  onClick={() => setConfirmFor(row)}
+                                >
+                                  确认
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setRejectFor(row)}
+                                >
+                                  退回
+                                </Button>
+                              </>
+                            )}
                           {row.plan.status !== "voided" && (
                             <Button
                               variant="ghost"
                               size="sm"
                               className="text-destructive hover:text-destructive"
                               disabled={voidMutation.isPending}
-                              onClick={() => {
-                                if (
-                                  !window.confirm(
-                                    `作废「${row.segmentName}」的排位方案？已排的座位会一并解除。`,
-                                  )
-                                ) {
-                                  return;
-                                }
-                                if (row.plan) voidMutation.mutate(row.plan.id);
-                              }}
+                              onClick={() => setVoidFor(row)}
                             >
                               作废
                             </Button>
@@ -384,10 +457,80 @@ function SeatingPage() {
         </div>
       )}
 
+      <AlertDialog
+        open={confirmFor !== null}
+        onOpenChange={(open) => !open && setConfirmFor(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认发布这份排位？</AlertDialogTitle>
+            <AlertDialogDescription>
+              「{confirmFor?.segmentName}」的排位将对外生效，并生成座位通知。
+              确认后再改动会打回待确认，需要重新确认并重发通知。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="px-6 text-sm">
+            <div className="rounded-lg border bg-muted/40 p-3">
+              将发布 <strong>{confirmFor?.seatCount ?? 0}</strong> 个启用位置，
+              其中 <strong>{confirmFor?.assignedCount ?? 0}</strong> 个已排人。
+              {confirmFor?.assignedCount === 0 && (
+                // 不硬拦——可能真有"自由入座、方案只用来固化座位表"的场景，
+                // 但这事必须让人看见再决定（评审 §3.10）。
+                <p className="mt-1 text-warning-foreground">
+                  目前还没有任何人被排位，确认后发出的座位通知里不会有人。
+                </p>
+              )}
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={confirmMutation.isPending}
+              onClick={() => {
+                if (confirmFor?.plan)
+                  confirmMutation.mutate(confirmFor.plan.id);
+                setConfirmFor(null);
+              }}
+            >
+              确认发布
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={voidFor !== null}
+        onOpenChange={(open) => !open && setVoidFor(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>作废这份排位方案？</AlertDialogTitle>
+            <AlertDialogDescription>
+              「{voidFor?.segmentName}」已排的 {voidFor?.assignedCount ?? 0}{" "}
+              个座位分配会一并解除，方案进入终态不能再改。
+              之后可以为这个环节重新建一份新方案。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={voidMutation.isPending}
+              onClick={() => {
+                if (voidFor?.plan) voidMutation.mutate(voidFor.plan.id);
+                setVoidFor(null);
+              }}
+            >
+              作废
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <SeatingZonePicker
         open={pickerFor !== null}
         activityId={activityId}
         segmentName={pickerFor?.segmentName ?? ""}
+        highlightZoneId={fromZoneId}
         pending={createMutation.isPending}
         onOpenChange={(open) => !open && setPickerFor(null)}
         onPick={(zoneId) =>

@@ -156,6 +156,17 @@ export const zoneUsageQueryOptions = (activityId: number) =>
       unwrap(api.api.seating.zoneUsage.$post({ json: { activityId } })),
   });
 
+/**
+ * 同上，但是**当场拉一次**而不是走缓存。
+ *
+ * 活动空间画布保存前要用它拦"删掉了正被引用的区域"——那一刻必须是最新的
+ * 引用关系，用缓存里可能几分钟前的快照来放行删除是不负责任的。
+ */
+export const fetchZoneUsage = (activityId: number) =>
+  unwrap(api.api.seating.zoneUsage.$post({ json: { activityId } })).then(
+    (result) => result.list,
+  );
+
 export const seatingCandidatesQueryOptions = (
   planId: number,
   keyword?: string,

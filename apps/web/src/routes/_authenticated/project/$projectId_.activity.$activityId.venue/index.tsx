@@ -193,7 +193,10 @@ function ActivityVenuePage() {
         <StatCard
           label="可用点位"
           value={statsQuery.data?.capacity ?? 0}
-          hint="仅统计启用区域"
+          // 这是**手填的规划值**，不是画布里实际有多少座位——两者可以不一样，
+          // 而且改画布不会自动更新它。副标题必须说清楚，否则看统计卡的人会
+          // 把它当实测数（评审 §3.12）。
+          hint="启用区域的规划值，与实际座位数可能不同"
         />
         <StatCard
           label="被排位引用"
@@ -335,6 +338,9 @@ function ActivityVenuePage() {
                                   projectId,
                                   activityId: activityIdParam,
                                 }}
+                                // 带上区域上下文——排位页会提示来源，选区域的
+                                // 弹窗也会把这块区域顶到第一个（评审 §3.6）。
+                                search={{ zoneId: zone.id }}
                                 className={cn(
                                   buttonVariants({
                                     variant: "ghost",
