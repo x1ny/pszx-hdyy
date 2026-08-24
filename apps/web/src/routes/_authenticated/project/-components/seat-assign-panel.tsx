@@ -124,7 +124,7 @@ export function SeatAssignPanel({
         </p>
       ) : !seat.enabled ? (
         <p className="text-muted-foreground text-xs">
-          这个位置本环节停用了，要排人先在画布上把它重新启用。
+          这个位置本环节停用了，要排人先用下方的「本环节启用此位置」把它打开。
         </p>
       ) : (
         <>
@@ -186,6 +186,14 @@ export function SeatAssignPanel({
                   </button>
                 );
               })}
+              {/* 服务端 limit 200。到了上限就说出来——否则人数多的活动里，
+                  排在后面的人"不搜就看不见"，而用户根本不知道列表被截断了
+                  （评审 §3.14）。 */}
+              {candidatesQuery.data.list.length >= 200 && (
+                <p className="px-2 py-2 text-center text-muted-foreground text-xs">
+                  仅显示前 200 人，用上面的搜索框找具体的人。
+                </p>
+              )}
             </div>
           ) : (
             <p className="py-6 text-center text-muted-foreground text-xs">

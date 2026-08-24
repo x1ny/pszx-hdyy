@@ -42,12 +42,25 @@ export function ActivityZoneDialog({
   zone,
   venueName,
   pending,
+  hideName,
   onOpenChange,
   onSubmit,
 }: {
   zone: ActivityVenueZoneRow | null;
   venueName: string;
   pending: boolean;
+  /**
+   * 画布页要传 `true`。
+   *
+   * 那一页的区域属性面板本来就管「名称」，而且它是**跟着画布一起保存**的；
+   * 这个弹窗是**即时写库**的。同一列两个入口、两种时机，结果是：用弹窗改完名字
+   * 立即生效，再点一次画布的「保存」，归并逻辑会拿画布里那份还没更新的旧名字
+   * 把它覆盖回去——用户刚改的名字被静默还原，没有任何提示。
+   *
+   * 所以画布页把这个字段藏掉，名称只留属性面板一个入口；概览页没有属性面板，
+   * 保持显示。见 docs/场地排位交互评审.md §3.3。
+   */
+  hideName?: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: UpdateActivityVenueZoneInput) => void;
 }) {
@@ -75,14 +88,16 @@ export function ActivityZoneDialog({
           description="改的只是本活动怎么用这块区域，不会影响场地库，也不会影响其他活动。"
         />
         <DialogBody className="grid grid-cols-2 gap-4">
-          <Field>
-            <FieldLabel htmlFor="zone-name">活动区域名称</FieldLabel>
-            <Input
-              id="zone-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </Field>
+          {!hideName && (
+            <Field>
+              <FieldLabel htmlFor="zone-name">活动区域名称</FieldLabel>
+              <Input
+                id="zone-name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </Field>
+          )}
 
           <Field>
             <FieldLabel htmlFor="zone-source">来源场地区域</FieldLabel>

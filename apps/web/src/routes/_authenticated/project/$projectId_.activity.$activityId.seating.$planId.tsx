@@ -1,6 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { CircleSlashIcon, TriangleAlertIcon } from "lucide-react";
+import {
+  ArrowLeftRightIcon,
+  CircleSlashIcon,
+  TriangleAlertIcon,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { canvasEditor } from "#/features/venue-editor/canvas";
@@ -14,6 +18,7 @@ import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import { Skeleton } from "#/shared/components/ui/skeleton.tsx";
 import { cn } from "#/shared/lib/utils.ts";
+import { formatDateTime } from "../venue/-utils";
 import { SeatAssignPanel } from "./-components/seat-assign-panel";
 import {
   assignActivityMemberToSeat,
@@ -21,6 +26,7 @@ import {
   seatingKeys,
   seatingPlanQueryOptions,
   setSeatEnabled,
+  swapSeats,
   unassignSeat,
 } from "./-venue-queries";
 import { PLAN_STATUS_CHIP, PLAN_STATUS_LABELS } from "./-venue-utils";
@@ -54,6 +60,17 @@ function SeatingCanvasPage() {
   const bundle = planQuery.data;
 
   const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
+
+  /**
+   * 对调模式：记住"从哪个座位发起的"，下一次点中座位就是目标。
+   *
+   * 做成两步点击而不是拖拽——排位画布的几何是只读的，拖拽在这一页已经被
+   * `assignOnly` 关掉了，再为对调开一个拖拽手势会跟"这里不能拖"的心智冲突。
+   */
+  const [swapFrom, setSwapFrom] = useState<{
+    id: number;
+    label: string;
+  } | null>(null);
 
   const doc = useMemo(() => {
     if (!bundle?.layout) return null;
@@ -134,6 +151,47 @@ function SeatingCanvasPage() {
     onError: (error) => toast.error(error.message),
   });
 
+  const swapMutation = useMutation({
+    mutationFn: (input: { seatAId: number; seatBId: number }) =>
+      swapSeats(planId, input.seatAId, input.seatBId),
+    onSuccess: (result) => {
+      toast.success("已对调");
+      if (result.wasConfirmed) {
+        toast.warning("这份排位已经确认发布过，改动后需要重新确认");
+      }
+      setSwapFrom(null);
+      invalidate();
+    },
+    onError: (error) => {
+      toast.error(error.message);
+      setSwapFrom(null);
+    },
+  });
+
+  /**
+   * 对调模式下，点中另一个座位就是"选目标"而不是"改选中"。
+   * 点空白处（没有座位）当取消——不然进了对调模式就只能靠按钮退出。
+   */
+  const handleSelectionChange = (next: Selection) => {
+    if (!swapFrom) {
+      setSelection(next);
+      return;
+    }
+    const targetExternalId = next.seatIds[0];
+    const target = targetExternalId
+      ? seatByExternalId.get(targetExternalId)
+      : undefined;
+
+    if (!target) {
+      setSwapFrom(null);
+      setSelection(next);
+      return;
+    }
+    if (target.id === swapFrom.id) return; // 点回自己，什么都不做
+
+    swapMutation.mutate({ seatAId: swapFrom.id, seatBId: target.id });
+  };
+
   const setEnabledMutation = useMutation({
     mutationFn: (input: { seatId: number; enabled: boolean }) =>
       setSeatEnabled(planId, input.seatId, input.enabled),
@@ -205,6 +263,26 @@ function SeatingCanvasPage() {
         </div>
       </div>
 
+      {/**
+       * 底图过期提示。上游活动空间的画布在本方案保存之后又改过，说明这份排位
+       * 用的是旧快照。**只提示，不自动同步**——快照隔离是设计意图，自动跟随
+       * 会让已确认的排位静默变形（评审 §3.8）。
+       */}
+      {bundle.plan.spaceUpdatedAt &&
+        bundle.plan.savedAt &&
+        new Date(bundle.plan.spaceUpdatedAt) >
+          new Date(bundle.plan.savedAt) && (
+          <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning-foreground">
+            <TriangleAlertIcon className="mt-0.5 size-4 shrink-0" />
+            <div>
+              活动空间的平面图在这份排位保存之后改过（
+              {formatDateTime(bundle.plan.spaceUpdatedAt)}）。
+              这里显示的仍是建立方案时的快照——是有意如此，改动不会自动同步过来。
+              如果上游的调整需要体现到排位里，请作废本方案后重新建。
+            </div>
+          </div>
+        )}
+
       {bundle.plan.status === "rejected" && bundle.plan.rejectedReason && (
         <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-destructive text-sm">
           <TriangleAlertIcon className="mt-0.5 size-4 shrink-0" />
@@ -212,11 +290,29 @@ function SeatingCanvasPage() {
         </div>
       )}
 
+      {swapFrom && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-4 py-2 text-sm">
+          <ArrowLeftRightIcon className="size-4 shrink-0 text-primary" />
+          <span>
+            正在对调 <strong>{swapFrom.label}</strong>
+            ——点画布上的另一个座位完成对调。
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto"
+            onClick={() => setSwapFrom(null)}
+          >
+            取消
+          </Button>
+        </div>
+      )}
+
       <ZoneSeatingEditor
         zone={zone}
         state={state}
         selection={selection}
-        onSelectionChange={setSelection}
+        onSelectionChange={handleSelectionChange}
         onCommand={() => {
           /* assignOnly：不会被真的调用，见 zone-seating-editor.tsx 里 assignOnly 的说明。 */
         }}
@@ -254,6 +350,24 @@ function SeatingCanvasPage() {
                 selectedSeat && unassignMutation.mutate(selectedSeat.id)
               }
             />
+
+            {/* 对调只在这个座位上有人时才有意义——空座位要"换人"直接在上面的
+                候选人列表里点一下就行，不需要走对调。 */}
+            {selectedSeat && selectedAssignment && !readOnly && (
+              <Button
+                variant="outline"
+                disabled={swapMutation.isPending}
+                onClick={() =>
+                  setSwapFrom({
+                    id: selectedSeat.id,
+                    label: selectedSeat.label,
+                  })
+                }
+              >
+                <ArrowLeftRightIcon />
+                与其它座位对调
+              </Button>
+            )}
 
             {/* 启用/停用是本环节的业务状态，不是几何，跟排人一样即时提交
                 （§17.5）——排位阶段的画布已经只读，不需要再有一个只为它

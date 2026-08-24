@@ -139,8 +139,13 @@ export const updateSegmentMember = (
   json: InferRequestType<typeof api.api.segmentMember.update.$post>["json"],
 ) => unwrap(api.api.segmentMember.update.$post({ json }));
 
-export const removeSegmentMember = (id: number) =>
-  unwrap(api.api.segmentMember.remove.$post({ json: { id } }));
+/**
+ * 移出环节。`cascade` 为假时，如果这个人在本环节已排座位，服务端会**拒绝**并
+ * 回一句点名到座位号的提示——调用方拿这句话再问用户一次，得到确认后带
+ * `cascade: true` 重来。跟活动层移除是同一套两步走。
+ */
+export const removeSegmentMember = (id: number, cascade = false) =>
+  unwrap(api.api.segmentMember.remove.$post({ json: { id, cascade } }));
 
 // ---------------------------------------------------------------------------
 // 候选人员（选择器的数据源）
@@ -152,9 +157,7 @@ export type MemberCandidateFilters = InferRequestType<
   typeof api.api.member.candidates.$post
 >["json"];
 
-export const memberCandidateQueryOptions = (
-  filters: MemberCandidateFilters,
-) =>
+export const memberCandidateQueryOptions = (filters: MemberCandidateFilters) =>
   queryOptions({
     queryKey: ["memberCandidates", filters] as const,
     queryFn: () => unwrap(api.api.member.candidates.$post({ json: filters })),

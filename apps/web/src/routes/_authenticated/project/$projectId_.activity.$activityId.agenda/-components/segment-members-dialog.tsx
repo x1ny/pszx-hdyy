@@ -144,14 +144,31 @@ export function SegmentMembersDialog({
     onError: (error) => toast.error(error.message),
   });
 
+  /**
+   * 第一次点「确认移出」不带 cascade。如果这个人在本环节已排了座位，服务端会
+   * 拒绝并回一句点名到座位号的提示——把那句话留在这里，弹窗改成二次确认，
+   * 用户再点一次才真的连座位一起解。
+   */
+  const [seatWarning, setSeatWarning] = useState<string>();
+
   const removeMutation = useMutation({
-    mutationFn: (row: SegmentMember) => removeSegmentMember(row.id),
+    mutationFn: ({ row, cascade }: { row: SegmentMember; cascade: boolean }) =>
+      removeSegmentMember(row.id, cascade),
     onSuccess: () => {
       toast.success("已移出本环节");
       setRemoving(undefined);
+      setSeatWarning(undefined);
       invalidate();
     },
-    onError: (error) => toast.error(error.message),
+    onError: (error) => {
+      // 服务端把"已排座位"这一类拦截做成了可读的业务提示，不是错误——
+      // 原样留在弹窗里让用户看清再决定，比弹一个转瞬即逝的 toast 有用。
+      if (error.message.includes("排位")) {
+        setSeatWarning(error.message);
+        return;
+      }
+      toast.error(error.message);
+    },
   });
 
   return (
@@ -166,137 +183,137 @@ export function SegmentMembersDialog({
           </DialogHeader>
 
           <DialogBody className="flex flex-col gap-4">
-          <div className="flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-muted-foreground text-sm">
-            <InfoIcon className="mt-0.5 size-4 shrink-0" />
-            <p>
-              可以直接从全量人员库选人，不需要先到活动人员页配置。选中的人若还不在本活动或本项目内，系统会自动补齐这两层关系，并把录入渠道记为「环节入口补齐」。
-            </p>
-          </div>
+            <div className="flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-muted-foreground text-sm">
+              <InfoIcon className="mt-0.5 size-4 shrink-0" />
+              <p>
+                可以直接从全量人员库选人，不需要先到活动人员页配置。选中的人若还不在本活动或本项目内，系统会自动补齐这两层关系，并把录入渠道记为「环节入口补齐」。
+              </p>
+            </div>
 
-          <div className="flex justify-end gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setCreateRole("");
-                setCreateOpen(true);
-              }}
-            >
-              手动录入
-            </Button>
-            <Button size="sm" onClick={() => setPickerOpen(true)}>
-              <PlusIcon />
-              从已有人员选择
-            </Button>
-          </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setCreateRole("");
+                  setCreateOpen(true);
+                }}
+              >
+                手动录入
+              </Button>
+              <Button size="sm" onClick={() => setPickerOpen(true)}>
+                <PlusIcon />
+                从已有人员选择
+              </Button>
+            </div>
 
-          {/* 滚动交给 DialogBody，这里不再套一层容器（见 ui/dialog.tsx）。 */}
-          <div className="rounded-lg border">
-            <Table>
-              <TableHeader className="sticky top-0 bg-muted/60">
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="min-w-40">人员</TableHead>
-                  <TableHead className="w-40">环节身份</TableHead>
-                  <TableHead className="min-w-28">来源</TableHead>
-                  <TableHead className="min-w-28">分组</TableHead>
-                  <TableHead className="min-w-24">负责人</TableHead>
-                  <TableHead className="min-w-28">录入渠道</TableHead>
-                  <TableHead className="w-20 text-center">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {listQuery.isPending ? (
-                  Array.from({ length: 3 }, (_, index) => (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
-                    <TableRow key={index}>
-                      {Array.from({ length: 7 }, (_, cell) => (
-                        // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
-                        <TableCell key={cell}>
-                          <Skeleton className="h-5 w-full" />
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))
-                ) : list.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7}>
-                      <Empty className="border-0">
-                        <EmptyHeader>
-                          <EmptyMedia variant="icon">
-                            <UsersRoundIcon />
-                          </EmptyMedia>
-                          <EmptyTitle>本环节还没有人员</EmptyTitle>
-                          <EmptyDescription>
-                            从全量人员库选人加入本环节。
-                          </EmptyDescription>
-                        </EmptyHeader>
-                      </Empty>
-                    </TableCell>
+            {/* 滚动交给 DialogBody，这里不再套一层容器（见 ui/dialog.tsx）。 */}
+            <div className="rounded-lg border">
+              <Table>
+                <TableHeader className="sticky top-0 bg-muted/60">
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="min-w-40">人员</TableHead>
+                    <TableHead className="w-40">环节身份</TableHead>
+                    <TableHead className="min-w-28">来源</TableHead>
+                    <TableHead className="min-w-28">分组</TableHead>
+                    <TableHead className="min-w-24">负责人</TableHead>
+                    <TableHead className="min-w-28">录入渠道</TableHead>
+                    <TableHead className="w-20 text-center">操作</TableHead>
                   </TableRow>
-                ) : (
-                  list.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell>
-                        <div className="font-medium">{row.name}</div>
-                        <div className="text-muted-foreground text-xs">
-                          {[row.companyPosition, row.mobile]
-                            .filter(Boolean)
-                            .join(" · ") || "-"}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Select
-                          items={ROLE_ITEMS}
-                          value={row.segmentRole}
-                          onValueChange={(value) =>
-                            value &&
-                            roleMutation.mutate({ row, role: String(value) })
-                          }
-                        >
-                          <SelectTrigger size="sm" className="w-36">
-                            <SelectValue placeholder="未设置" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {ROLE_ITEMS.map((item) => (
-                              <SelectItem key={item.value} value={item.value}>
-                                {item.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell>{row.source || "-"}</TableCell>
-                      <TableCell>{row.groupName || "-"}</TableCell>
-                      <TableCell>{row.ownerName || "-"}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-col items-start gap-1">
-                          <Badge variant="secondary" className="font-normal">
-                            {RELATION_ORIGIN_LABELS[row.originType]}
-                          </Badge>
-                          {!row.hasOwnRelationFields &&
-                          (row.source || row.groupName || row.ownerName) ? (
-                            <span className="text-muted-foreground text-xs">
-                              关系字段继承自活动
-                            </span>
-                          ) : null}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => setRemoving(row)}
-                        >
-                          移出
-                        </Button>
+                </TableHeader>
+                <TableBody>
+                  {listQuery.isPending ? (
+                    Array.from({ length: 3 }, (_, index) => (
+                      // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
+                      <TableRow key={index}>
+                        {Array.from({ length: 7 }, (_, cell) => (
+                          // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
+                          <TableCell key={cell}>
+                            <Skeleton className="h-5 w-full" />
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  ) : list.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7}>
+                        <Empty className="border-0">
+                          <EmptyHeader>
+                            <EmptyMedia variant="icon">
+                              <UsersRoundIcon />
+                            </EmptyMedia>
+                            <EmptyTitle>本环节还没有人员</EmptyTitle>
+                            <EmptyDescription>
+                              从全量人员库选人加入本环节。
+                            </EmptyDescription>
+                          </EmptyHeader>
+                        </Empty>
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                  ) : (
+                    list.map((row) => (
+                      <TableRow key={row.id}>
+                        <TableCell>
+                          <div className="font-medium">{row.name}</div>
+                          <div className="text-muted-foreground text-xs">
+                            {[row.companyPosition, row.mobile]
+                              .filter(Boolean)
+                              .join(" · ") || "-"}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            items={ROLE_ITEMS}
+                            value={row.segmentRole}
+                            onValueChange={(value) =>
+                              value &&
+                              roleMutation.mutate({ row, role: String(value) })
+                            }
+                          >
+                            <SelectTrigger size="sm" className="w-36">
+                              <SelectValue placeholder="未设置" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {ROLE_ITEMS.map((item) => (
+                                <SelectItem key={item.value} value={item.value}>
+                                  {item.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>{row.source || "-"}</TableCell>
+                        <TableCell>{row.groupName || "-"}</TableCell>
+                        <TableCell>{row.ownerName || "-"}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col items-start gap-1">
+                            <Badge variant="secondary" className="font-normal">
+                              {RELATION_ORIGIN_LABELS[row.originType]}
+                            </Badge>
+                            {!row.hasOwnRelationFields &&
+                            (row.source || row.groupName || row.ownerName) ? (
+                              <span className="text-muted-foreground text-xs">
+                                关系字段继承自活动
+                              </span>
+                            ) : null}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => setRemoving(row)}
+                          >
+                            移出
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </DialogBody>
 
           <DialogFooter>
@@ -348,7 +365,10 @@ export function SegmentMembersDialog({
       <Dialog
         open={!!removing}
         onOpenChange={(open) => {
-          if (!open) setRemoving(undefined);
+          if (!open) {
+            setRemoving(undefined);
+            setSeatWarning(undefined);
+          }
         }}
       >
         <DialogContent>
@@ -358,19 +378,41 @@ export function SegmentMembersDialog({
               将解除「{removing?.name}」与本环节的关系。
             </DialogDescription>
           </DialogHeader>
-          <DialogBody className="text-muted-foreground">
-            该人员仍保留在本活动和本项目中，随时可以重新加入本环节。
+          <DialogBody className="flex flex-col gap-3">
+            {seatWarning && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-destructive text-sm">
+                {seatWarning}
+                <p className="mt-1 text-destructive/80">
+                  继续移出会把这些座位一并空出来，需要另找人补上。
+                </p>
+              </div>
+            )}
+            <p className="text-muted-foreground text-sm">
+              该人员仍保留在本活动和本项目中，随时可以重新加入本环节。
+            </p>
           </DialogBody>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRemoving(undefined)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRemoving(undefined);
+                setSeatWarning(undefined);
+              }}
+            >
               取消
             </Button>
             <Button
               variant="destructive"
               disabled={removeMutation.isPending}
-              onClick={() => removing && removeMutation.mutate(removing)}
+              onClick={() =>
+                removing &&
+                removeMutation.mutate({
+                  row: removing,
+                  cascade: !!seatWarning,
+                })
+              }
             >
-              确认移出
+              {seatWarning ? "仍然移出并解除排位" : "确认移出"}
             </Button>
           </DialogFooter>
         </DialogContent>

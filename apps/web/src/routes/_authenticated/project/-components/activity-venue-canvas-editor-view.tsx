@@ -34,6 +34,7 @@ import { Button, buttonVariants } from "#/shared/components/ui/button.tsx";
 import { cn } from "#/shared/lib/utils.ts";
 import {
   type ActivityVenueLayoutBundle,
+  fetchZoneUsage,
   saveActivityVenueLayout,
 } from "../-venue-queries";
 
@@ -103,8 +104,43 @@ export function ActivityVenueCanvasEditorView({
   );
 
   const saveMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const projection = canvasEditor.project(doc);
+
+      /**
+       * 保存前先拦一道"删掉了正被排位引用的区域"。
+       *
+       * 不拦的话这次保存会撞 `fk_seating_plan_zone` 外键——服务端只能回一句
+       * "服务器内部错误"，而且**整批改动一起回滚**，用户既不知道是哪块区域，
+       * 也不知道这次编辑的其它内容为什么没保存（评审 §3.2）。
+       *
+       * venue 模块看不见 seating（单向依赖），拦不了也不该拦；但前端把两个
+       * 模块的数据拼起来是允许的——概览页的「引用环节」列本来就是这么做的。
+       */
+      const stillHere = new Set(projection.zones.map((z) => z.externalId));
+      const removed = bundle.zones.filter((z) => !stillHere.has(z.externalId));
+
+      if (removed.length > 0) {
+        const usage = await fetchZoneUsage(Number(activityId));
+        const usedBy = new Map<number, string[]>();
+        for (const row of usage) {
+          const list = usedBy.get(row.activityVenueZoneId) ?? [];
+          list.push(row.segmentName);
+          usedBy.set(row.activityVenueZoneId, list);
+        }
+        const blocked = removed
+          .map((zone) => ({ zone, segments: usedBy.get(zone.id) ?? [] }))
+          .filter((item) => item.segments.length > 0);
+
+        if (blocked.length > 0) {
+          throw new Error(
+            `这些区域正被环节排位引用，删不掉：${blocked
+              .map((b) => `${b.zone.name}（${b.segments.join("、")}）`)
+              .join("；")}。请先作废那些排位方案，或撤销删除后再保存。`,
+          );
+        }
+      }
+
       // 只投影区域——活动层不落座位行，座位那部分不发给服务端（§3.3）。
       return saveActivityVenueLayout({
         activityVenueId,

@@ -110,19 +110,6 @@ export const SeatNode = memo(function SeatNode({
           {seat.label}
         </text>
       )}
-      {showLabel && occupantName && (
-        <text
-          x={cx}
-          y={cy + SEAT_R + 19}
-          textAnchor="middle"
-          fontSize={9}
-          fontWeight={600}
-          fill="var(--primary)"
-          style={{ userSelect: "none", pointerEvents: "none" }}
-        >
-          {occupantName}
-        </text>
-      )}
     </g>
   );
 });
