@@ -7,6 +7,8 @@ import {
   ilike,
   inArray,
   isNotNull,
+  isNull,
+  ne,
   notExists,
   or,
   sql,
@@ -30,7 +32,13 @@ import {
   releaseSeatsByActivityMember,
   releaseSeatsBySegmentMembers,
 } from "../seating/cascade";
+import {
+  seatAssignment,
+  segmentSeat,
+  segmentSeatingPlan,
+} from "../seating/schema";
 import { memberTrip } from "../trip/schema";
+import { activityVenue, activityVenueZone } from "../venue/schema";
 import { findMemberTimeConflicts } from "./conflicts";
 import {
   createMemberInTx,
@@ -421,6 +429,105 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
     ]);
 
     return c.json(ok({ list, total: totalRows[0]?.total ?? 0 }));
+  })
+
+  /**
+   * 查询一条活动人员详情：人员主档摘要、当前活动关系和环节参与。
+   *
+   * 详情单独查询而不继续加宽 `/list`：国别、证件、联系方式和排位信息只在用户
+   * 点开某一行时需要，塞进分页列表会让每次筛选、翻页都重复传输这些低频字段。
+   */
+  .post("/get", jsonBody(RelationIdInput), async (c) => {
+    const id = c.req.valid("json").id;
+
+    const [detail] = await db
+      .select({
+        id: activityMember.id,
+        memberId: member.id,
+        name: member.name,
+        gender: member.gender,
+        countryRegion: member.countryRegion,
+        nativePlace: member.nativePlace,
+        companyPosition: member.companyPosition,
+        idType: member.idType,
+        idNumber: member.idNumber,
+        mobile: member.mobile,
+        phone: member.phone,
+        email: member.email,
+        language: member.language,
+        source: activityMember.source,
+        groupName: activityMember.groupName,
+        ownerName: activityMember.ownerName,
+        originType: activityMember.originType,
+        remark: activityMember.remark,
+      })
+      .from(activityMember)
+      .innerJoin(member, eq(member.id, activityMember.memberId))
+      .where(eq(activityMember.id, id))
+      .limit(1);
+
+    if (!detail) return c.json(notFound("活动人员关系"));
+
+    const segments = await db
+      .select({
+        id: segmentMember.id,
+        segmentId: activitySegment.id,
+        name: activitySegment.name,
+        segmentRole: segmentMember.segmentRole,
+        ownerName: sql<
+          string | null
+        >`coalesce(${segmentMember.ownerName}, ${activityMember.ownerName})`.as(
+          "owner_name",
+        ),
+        seatingStatus: segmentSeatingPlan.status,
+        venueName: activityVenue.name,
+        zoneName: activityVenueZone.name,
+        seatLabel: segmentSeat.label,
+      })
+      .from(segmentMember)
+      .innerJoin(
+        activityMember,
+        eq(activityMember.id, segmentMember.activityMemberId),
+      )
+      .innerJoin(
+        activitySegment,
+        eq(activitySegment.id, segmentMember.segmentId),
+      )
+      // 作废方案不是当前排位。partial unique index 保证一个环节至多命中一条
+      // 非作废方案，因此后面的座位关联不会把同一条环节人员展开成多行。
+      .leftJoin(
+        segmentSeatingPlan,
+        and(
+          eq(segmentSeatingPlan.segmentId, segmentMember.segmentId),
+          ne(segmentSeatingPlan.status, "voided"),
+        ),
+      )
+      .leftJoin(
+        activityVenueZone,
+        eq(activityVenueZone.id, segmentSeatingPlan.activityVenueZoneId),
+      )
+      .leftJoin(
+        activityVenue,
+        eq(activityVenue.id, activityVenueZone.activityVenueId),
+      )
+      .leftJoin(
+        seatAssignment,
+        and(
+          eq(seatAssignment.planId, segmentSeatingPlan.id),
+          eq(seatAssignment.segmentMemberId, segmentMember.id),
+          isNull(seatAssignment.revokedAt),
+        ),
+      )
+      .leftJoin(segmentSeat, eq(segmentSeat.id, seatAssignment.segmentSeatId))
+      .where(
+        and(
+          eq(segmentMember.activityMemberId, id),
+          eq(activitySegment.status, "active"),
+        ),
+      )
+      .orderBy(asc(activitySegment.startTime), asc(activitySegment.id));
+
+    return c.json(ok({ ...detail, segments }));
   })
 
   .post("/add", jsonBody(AddActivityMembersInput), async (c) => {

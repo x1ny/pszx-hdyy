@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { PlusIcon, SearchIcon, UsersRoundIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { MemberPickerDialog } from "#/features/member/member-picker-dialog.tsx";
@@ -14,6 +14,8 @@ import {
 } from "#/features/member/relation-fields.tsx";
 import {
   type ActivityMember,
+  type ActivityMemberDetail,
+  activityMemberDetailQueryOptions,
   activityMemberKeys,
   activityMemberListQueryOptions,
   activityMemberSourcesQueryOptions,
@@ -33,8 +35,16 @@ import {
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "#/shared/components/ui/card.tsx";
+import {
   Dialog,
   DialogBody,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -118,6 +128,7 @@ function ActivityMembersPage() {
   const [editForm, setEditForm] =
     useState<RelationFormValues>(emptyRelationForm);
 
+  const [viewing, setViewing] = useState<ActivityMember>();
   const [removing, setRemoving] = useState<ActivityMember>();
 
   const filters = { activityId, ...search };
@@ -326,7 +337,7 @@ function ActivityMembersPage() {
               <TableHead className="min-w-28">录入渠道</TableHead>
               <TableHead className="min-w-52">参与环节</TableHead>
               <TableHead className="min-w-32">备注</TableHead>
-              <TableHead className="w-40 text-center">操作</TableHead>
+              <TableHead className="w-56 text-center">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -408,6 +419,14 @@ function ActivityMembersPage() {
                         variant="ghost"
                         size="sm"
                         className="text-primary hover:text-primary"
+                        onClick={() => setViewing(row)}
+                      >
+                        详情
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-primary hover:text-primary"
                         onClick={() => {
                           setEditing(row);
                           setEditForm({
@@ -464,6 +483,13 @@ function ActivityMembersPage() {
           </Button>
         </div>
       </div>
+
+      <ActivityMemberDetailDialog
+        member={viewing}
+        onOpenChange={(open) => {
+          if (!open) setViewing(undefined);
+        }}
+      />
 
       {/* 「本项目人员」放在前面当默认：加活动人员时绝大多数时候是从本项目
           已有的人里挑，全量库是名单上确实来了新人时才翻的兜底。 */}
@@ -632,4 +658,253 @@ function ActivityMembersPage() {
       </Dialog>
     </div>
   );
+}
+
+type ActivityMemberDetailDialogProps = {
+  member?: ActivityMember;
+  onOpenChange: (open: boolean) => void;
+};
+
+function ActivityMemberDetailDialog({
+  member,
+  onOpenChange,
+}: ActivityMemberDetailDialogProps) {
+  return (
+    <Dialog open={!!member} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-4xl" showCloseButton={false}>
+        <DialogHeader className="flex-row items-center justify-between pr-6">
+          <DialogTitle>活动人员详情</DialogTitle>
+          <DialogClose render={<Button variant="ghost" size="sm" />}>
+            关闭
+          </DialogClose>
+        </DialogHeader>
+        {member && <ActivityMemberDetailContent id={member.id} />}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ActivityMemberDetailContent({ id }: { id: number }) {
+  const detailQuery = useQuery(activityMemberDetailQueryOptions(id));
+
+  if (detailQuery.isPending) {
+    return (
+      <DialogBody className="flex flex-col gap-4">
+        {Array.from({ length: 3 }, (_, index) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
+          <Skeleton className="h-44 w-full" key={index} />
+        ))}
+      </DialogBody>
+    );
+  }
+
+  if (detailQuery.isError || !detailQuery.data) {
+    return (
+      <DialogBody>
+        <Empty className="rounded-lg border border-dashed py-10">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <UsersRoundIcon />
+            </EmptyMedia>
+            <EmptyTitle>活动人员详情加载失败</EmptyTitle>
+            <EmptyDescription>请关闭弹窗后重试。</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      </DialogBody>
+    );
+  }
+
+  const detail = detailQuery.data;
+  const contact = [detail.mobile, detail.phone].filter(Boolean).join(" / ");
+
+  return (
+    <DialogBody className="flex flex-col gap-4">
+      <DetailCard action="查看主档" title="人员主档摘要">
+        <dl className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
+          <DetailField label="姓名">{displayValue(detail.name)}</DetailField>
+          <DetailField label="性别">{displayValue(detail.gender)}</DetailField>
+          <DetailField label="国别/地区">
+            {displayValue(detail.countryRegion)}
+          </DetailField>
+          <DetailField label="籍贯">
+            {displayValue(detail.nativePlace)}
+          </DetailField>
+          <DetailField label="职务">
+            {displayValue(detail.companyPosition)}
+          </DetailField>
+          <DetailField label="证件类型">
+            {displayValue(detail.idType)}
+          </DetailField>
+          <DetailField label="证件号码">
+            {maskIdNumber(detail.idNumber)}
+          </DetailField>
+          <DetailField label="联系方式">{contact || "-"}</DetailField>
+          <DetailField label="邮箱">{displayValue(detail.email)}</DetailField>
+          <DetailField label="语种">
+            {displayValue(detail.language)}
+          </DetailField>
+        </dl>
+      </DetailCard>
+
+      <DetailCard action="编辑关系" title="当前活动关系">
+        <dl className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
+          <DetailField label="来源">{displayValue(detail.source)}</DetailField>
+          <DetailField label="分组">
+            {displayValue(detail.groupName)}
+          </DetailField>
+          <DetailField label="负责人">
+            {displayValue(detail.ownerName)}
+          </DetailField>
+          <DetailField label="数据来源">
+            {RELATION_ORIGIN_LABELS[detail.originType]}
+          </DetailField>
+          <div className="sm:col-span-2 lg:col-span-4">
+            <dt className="font-medium text-sm">备注</dt>
+            <dd className="mt-1 whitespace-pre-wrap text-sm leading-6">
+              {displayValue(detail.remark)}
+            </dd>
+          </div>
+        </dl>
+      </DetailCard>
+
+      <DetailCard action="调整" title="环节参与">
+        <SegmentParticipationTable detail={detail} />
+      </DetailCard>
+    </DialogBody>
+  );
+}
+
+function DetailCard({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action: string;
+  children: ReactNode;
+}) {
+  return (
+    <Card size="sm" className="shrink-0">
+      <CardHeader className="border-b">
+        <CardTitle>{title}</CardTitle>
+        {/* 原型中的详情内操作本期只保留位置，不接跳转或编辑逻辑。禁用态能明确
+            表达“暂不可用”，也避免一个看似可点击、实际无响应的按钮。 */}
+        <CardAction>
+          <Button variant="outline" size="sm" disabled>
+            {action}
+          </Button>
+        </CardAction>
+      </CardHeader>
+      <CardContent>{children}</CardContent>
+    </Card>
+  );
+}
+
+function DetailField({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <dt className="font-medium text-sm">{label}</dt>
+      <dd className="mt-1 break-words text-sm leading-6">{children}</dd>
+    </div>
+  );
+}
+
+function SegmentParticipationTable({
+  detail,
+}: {
+  detail: ActivityMemberDetail;
+}) {
+  if (detail.segments.length === 0) {
+    return (
+      <Empty className="border-0 py-8">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <UsersRoundIcon />
+          </EmptyMedia>
+          <EmptyTitle>暂未参与任何环节</EmptyTitle>
+        </EmptyHeader>
+      </Empty>
+    );
+  }
+
+  return (
+    <Table>
+      <TableHeader className="bg-muted/60">
+        <TableRow className="hover:bg-transparent">
+          <TableHead className="min-w-32">环节</TableHead>
+          <TableHead className="min-w-24">环节身份</TableHead>
+          <TableHead className="min-w-24">负责人</TableHead>
+          <TableHead className="min-w-24">排位状态</TableHead>
+          <TableHead className="min-w-40">座位</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {detail.segments.map((segment) => (
+          <TableRow key={segment.id}>
+            <TableCell className="font-medium">{segment.name}</TableCell>
+            <TableCell>{displayValue(segment.segmentRole)}</TableCell>
+            <TableCell>{displayValue(segment.ownerName)}</TableCell>
+            <TableCell>
+              <SeatingStatusBadge status={segment.seatingStatus} />
+            </TableCell>
+            <TableCell>{formatSeat(segment)}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+type SeatingStatus = NonNullable<
+  ActivityMemberDetail["segments"][number]["seatingStatus"]
+>;
+
+const SEATING_STATUS_LABELS = {
+  pending: "待确认",
+  confirmed: "已确认",
+  rejected: "已退回",
+  voided: "已作废",
+} as const satisfies Record<SeatingStatus, string>;
+
+function SeatingStatusBadge({ status }: { status: SeatingStatus | null }) {
+  if (!status) return <Badge variant="outline">未配置</Badge>;
+
+  return (
+    <Badge variant={status === "confirmed" ? "default" : "secondary"}>
+      {SEATING_STATUS_LABELS[status]}
+    </Badge>
+  );
+}
+
+function formatSeat(segment: ActivityMemberDetail["segments"][number]) {
+  if (segment.seatLabel && segment.seatingStatus !== "confirmed") {
+    return "待确认后展示";
+  }
+
+  return (
+    [segment.venueName, segment.zoneName, segment.seatLabel]
+      .filter(Boolean)
+      .join(" ") || "-"
+  );
+}
+
+function maskIdNumber(value: string | null) {
+  if (!value) return "-";
+  if (value.length <= 8) return value;
+
+  const headLength = value.length >= 14 ? 6 : 2;
+  const tailLength = 4;
+  return `${value.slice(0, headLength)}${"*".repeat(
+    value.length - headLength - tailLength,
+  )}${value.slice(-tailLength)}`;
+}
+
+function displayValue(value: string | null | undefined) {
+  return value || "-";
 }
