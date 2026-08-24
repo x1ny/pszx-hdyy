@@ -22,18 +22,25 @@ const SETTINGS: [key: string, value: string, why: string][] = [
 ];
 
 async function git(args: string[]) {
-  const proc = Bun.spawn(["git", ...args], {
-    cwd: repoRoot,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
+  try {
+    const proc = Bun.spawn(["git", ...args], {
+      cwd: repoRoot,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
 
-  return { stdout: stdout.trim(), stderr: stderr.trim(), exitCode };
+    return { stdout: stdout.trim(), stderr: stderr.trim(), exitCode };
+  } catch {
+    // 镜像构建里根本没有 git 二进制（oven/bun:alpine 不带）。
+    // Bun.spawn 找不到可执行文件时是**抛异常**，不是返回非零退出码 ——
+    // 下面那句 `exitCode !== 0` 的短路接不住它，postinstall 会直接失败。
+    return { stdout: "", stderr: "git not available", exitCode: 127 };
+  }
 }
 
 const warnings: string[] = [];

@@ -15,6 +15,11 @@ WORKDIR /app
 COPY package.json bun.lock ./
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
+# 根 package.json 的 postinstall 会跑这个脚本，而这一层还没到 `COPY . .`，
+# 不单独拷进来的话 bun install 直接报 "Module not found"。它在镜像里是空操作：
+# 容器里既没有 .git 也没有 git 二进制，脚本会自行短路退出。
+# 单独拷一个文件而不是整个 scripts/：这一层的缓存只在它自己变动时才失效。
+COPY scripts/setup-git.ts scripts/
 RUN bun install --frozen-lockfile --linker=hoisted
 
 COPY . .
