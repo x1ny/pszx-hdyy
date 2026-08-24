@@ -53,6 +53,9 @@ bun run deploy:test
 
 脚本会先构建并推送 `:test` 镜像，再调 Rancher redeploy API。也可以用
 `RANCHER_REDEPLOY_URL` / `RANCHER_DEPLOY_TOKEN` / `DEPLOY_INSECURE_TLS` 临时覆盖。
+测试环境的运行时变量由 Rancher workload 管理，不读取仓库根目录的 `.env`；
+要让会话在 8 小时后过期，在 workload 中设置
+`BETTER_AUTH_SESSION_EXPIRES_IN_SECONDS=28800` 后再部署。
 
 ## 容器运行
 
@@ -69,6 +72,7 @@ docker run -d -p 80:80 -e DATABASE_URL=postgresql://user:pass@db:5432/pszx_hdyy 
 | `APP_URL` | 是* | — | 浏览器访问的地址。entrypoint 用它派生下面两个 |
 | `BETTER_AUTH_URL` | 是* | 由 `APP_URL` 派生 | 单独设会覆盖派生值 |
 | `WEB_ORIGIN` | 是* | 由 `APP_URL` 派生 | 同上 |
+| `BETTER_AUTH_SESSION_EXPIRES_IN_SECONDS` | 否 | `604800`（7 天） | 会话有效期，单位秒；测试环境设为 `28800` 即 8 小时 |
 | `SERVER_PORT` | 否 | `80` | |
 | `FILE_STORAGE_DIR` | 否 | `/app/data/files` | |
 | `FILE_MAX_SIZE_BYTES` | 否 | `52428800`（50 MiB） | |

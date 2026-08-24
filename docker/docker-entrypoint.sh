@@ -41,6 +41,7 @@ esac
 echo "pszx-hdyy starting"
 echo "  BETTER_AUTH_URL:  $BETTER_AUTH_URL"
 echo "  WEB_ORIGIN:       $WEB_ORIGIN"
+echo "  SESSION_EXPIRES:  ${BETTER_AUTH_SESSION_EXPIRES_IN_SECONDS:-604800}s"
 echo "  SERVER_PORT:      ${SERVER_PORT:-80}"
 echo "  WEB_DIST_DIR:     ${WEB_DIST_DIR:-(unset, 不托管前端)}"
 echo "  FILE_STORAGE_DIR: $FILE_STORAGE_DIR"
