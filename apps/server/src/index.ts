@@ -84,10 +84,9 @@ app.use("*", sessionMiddleware);
 
 // Add new feature modules by chaining another .route("/api/<module>", xyzRoutes)
 // here — only what's chained onto `routes` is visible to hc<AppType> on the
-// client. Each module owns one prefix, so a module's `.use(requireUser)`
-// (or lack of one, see file below) only ever scopes to its own prefix —
-// it can't leak onto routes registered elsewhere in this chain regardless
-// of ordering.
+// client. Each module owns one prefix, so its auth middleware (module-wide or
+// route-specific, as in file) only ever scopes to its own prefix — it can't
+// leak onto routes registered elsewhere in this chain regardless of ordering.
 // 导出是给 `scripts/gen-api-docs.ts` 用的：文档生成器 import 这个实例、读
 // `app.routes`，接口清单就永远等于真正注册的路由。运行时入口仍然是下面的
 // default export，这里多一个具名导出不改变任何行为。
@@ -106,9 +105,9 @@ export const routes = app
   .route("/api/activityMember", activityMemberRoutes)
   .route("/api/segmentMember", segmentMemberRoutes)
   .route("/api/invitation", invitationRoutes)
-  // File upload and file reads are intentionally public — no requireUser
-  // in modules/file/routes.ts, and that's safe now: the prefix means no
-  // other module's auth guard can accidentally cover it either.
+  // File upload enforces its own login check; file reads stay public for
+  // browser previews and downloads. The module owns this prefix, so guards
+  // from other modules cannot accidentally cover it.
   .route("/api/file", fileRoutes)
   .route("/api/project", projectRoutes)
   .route("/api/activity", activityRoutes)

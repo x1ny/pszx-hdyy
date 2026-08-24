@@ -1,9 +1,10 @@
-import { bodyLimit } from "hono/body-limit";
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { fileMaxSizeBytes } from "../../infra/file-config";
 import { contentDisposition } from "../../shared/content-disposition";
 import { err, ok } from "../../shared/result";
 import { validate } from "../../shared/validate";
+import { requireUser } from "../auth";
 import { findFileForRead, storeUploadedFile } from "./service";
 import { FileParams, FileQuery, UploadFileInput } from "./validation";
 
@@ -18,9 +19,11 @@ const uploadTooLarge = () =>
     `文件大小不能超过 ${Math.floor(fileMaxSizeBytes / 1024 / 1024)} MB`,
   );
 
-// File upload and file reads are intentionally public for now.
+// Uploads require a session. File reads remain public for browser previews and
+// downloads.
 export const fileRoutes = new Hono().post(
     "/upload",
+    requireUser,
     bodyLimit({
       maxSize: maxUploadBodyBytes,
       onError: (c) => c.json(uploadTooLarge()),
