@@ -12,6 +12,14 @@ import {
 } from "#/features/trip/utils.ts";
 import { Button } from "#/shared/components/ui/button.tsx";
 import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "#/shared/components/ui/combobox.tsx";
+import {
   Dialog,
   DialogBody,
   DialogContent,
@@ -157,6 +165,10 @@ function TripForm({
   });
 
   const members = options?.members ?? [];
+  const memberItems = members.map((item) => ({
+    value: item.activityMemberId,
+    label: item.name,
+  }));
   const segments = options?.segments ?? [];
 
   return (
@@ -218,41 +230,42 @@ function TripForm({
                 field.state.meta.errors.length > 0;
               return (
                 <Field data-invalid={invalid}>
-                  <FieldLabel>
+                  <FieldLabel htmlFor={field.name}>
                     姓名
                     <RequiredMark />
                   </FieldLabel>
-                  <Select
-                    items={members.map((item) => ({
-                      value: item.activityMemberId,
-                      label: item.name,
-                    }))}
-                    value={field.state.value || null}
+                  <Combobox
+                    items={memberItems}
+                    value={
+                      memberItems.find(
+                        (item) => item.value === field.state.value,
+                      ) ?? null
+                    }
+                    itemToStringLabel={(item) => item.label}
+                    itemToStringValue={(item) => String(item.value)}
                     onValueChange={(value) => {
-                      field.handleChange(value == null ? 0 : Number(value));
+                      field.handleChange(value?.value ?? 0);
                       field.handleBlur();
                     }}
                   >
-                    <SelectTrigger
+                    <ComboboxInput
+                      id={field.name}
                       className="w-full"
+                      placeholder="请选择或搜索人员"
                       aria-invalid={invalid}
                       onBlur={field.handleBlur}
-                    >
-                      <SelectValue placeholder="请选择人员" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        {members.map((item) => (
-                          <SelectItem
-                            key={item.activityMemberId}
-                            value={item.activityMemberId}
-                          >
-                            {item.name}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
+                    />
+                    <ComboboxContent>
+                      <ComboboxEmpty>没有匹配的人员</ComboboxEmpty>
+                      <ComboboxList>
+                        {(item) => (
+                          <ComboboxItem key={item.value} value={item}>
+                            {item.label}
+                          </ComboboxItem>
+                        )}
+                      </ComboboxList>
+                    </ComboboxContent>
+                  </Combobox>
                   <FieldError
                     errors={
                       field.state.meta.isTouched ? field.state.meta.errors : []
