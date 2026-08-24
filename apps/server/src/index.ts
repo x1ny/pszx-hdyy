@@ -2,7 +2,14 @@ import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { activityConfigRoutes } from "./modules/activity-config/routes";
 import { agendaRoutes } from "./modules/agenda/routes";
-import { authHandler, sessionMiddleware, type Variables } from "./modules/auth";
+import {
+  assertDevAuthIsSafe,
+  authHandler,
+  devAuthRoutes,
+  isDevAuthEnabled,
+  sessionMiddleware,
+  type Variables,
+} from "./modules/auth";
 import { exampleRoutes } from "./modules/example/routes";
 import { fileRoutes } from "./modules/file/routes";
 import { invitationRoutes } from "./modules/invitation/routes";
@@ -80,6 +87,17 @@ if (webDistDir) {
 // before the session middleware.
 app.route("/", authHandler);
 
+// 开发专用的免密登录后门，只在 DEV_AUTH_BYPASS=1 时才存在
+// （理由和安全边界写在 modules/auth/routes.dev.ts 的文件头）。
+// 断言无条件执行：生产形态下开着这个开关会直接抛错拒绝启动，而不是安静跳过。
+assertDevAuthIsSafe();
+
+if (isDevAuthEnabled()) {
+  // 刻意挂在 `routes` 链之外：它不进 AppType，前端拿不到它的类型，
+  // 也就不可能有前端代码不小心依赖上一个开发后门。
+  app.route("/api/dev", devAuthRoutes);
+}
+
 app.use("*", sessionMiddleware);
 
 // Add new feature modules by chaining another .route("/api/<module>", xyzRoutes)
@@ -144,7 +162,14 @@ app.onError((error, c) => {
 
 export type AppType = typeof routes;
 
+// 不设 SERVER_HOST 时保持 Bun 的默认行为（绑所有接口）—— 生产镜像走的就是
+// 这条路。开发编排会显式传 127.0.0.1（scripts/dev.ts）：Bun 默认绑全部接口，
+// 实测局域网 IP 可达，而开发环境挂着 /api/dev/login 这个免密入口，不限制的话
+// 同网段任何人都能签出一个真实 session。
+const serverHost = process.env.SERVER_HOST?.trim();
+
 export default {
   port: Number(process.env.SERVER_PORT ?? 8787),
+  ...(serverHost ? { hostname: serverHost } : {}),
   fetch: app.fetch,
 };

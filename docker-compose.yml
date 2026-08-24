@@ -1,3 +1,12 @@
+# 固定 project 名。不写的话 compose 按**目录名**派生 project，于是每个
+# worktree 各建一个 postgres 容器去抢 5432 —— 抢输的那些不发布端口却继续跑，
+# 卷也一路堆积（这个仓库真出现过 4 个容器 / 5 个孤儿卷）。写死之后所有
+# worktree 共用同一个持久库，这也正是 `bun run dev:persist` 的语义。
+#
+# 默认的 `bun run dev` 不走这个文件，它每个 worktree 起一次性的 tmpfs 容器
+# （见 scripts/dev-db.ts）。
+name: pszx-hdyy
+
 services:
   postgres:
     image: postgres:16-alpine

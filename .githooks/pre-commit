@@ -1,0 +1,12 @@
+#!/bin/sh
+# 冲突路径的补漏：`git merge` 撞上冲突时不会走 pre-merge-commit，
+# 而是等你解完冲突再 `git commit` —— 那一步触发的是 pre-commit。
+# 只在确实处在合并状态（存在 MERGE_HEAD）时拦，普通提交不受影响。
+
+git_dir=$(git rev-parse --git-dir) || exit 0
+
+if [ -f "$git_dir/MERGE_HEAD" ]; then
+  exec "$(dirname "$0")/pre-merge-commit" "$@"
+fi
+
+exit 0

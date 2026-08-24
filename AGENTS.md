@@ -22,13 +22,15 @@ Before editing files for a substantial task:
 ## 旧项目代码参考
 当用户要求参考旧代码时 再从这两个目录中读取代码研究
 
-测试环境 http://10.2.1.16:30053/  账号：admin 密码：Sjzt@123
+测试环境 http://10.2.1.16:30053/ ——账号密码放在本地 `.env` 的 `LEGACY_TEST_USER` / `LEGACY_TEST_PASSWORD`（`.env` 不进 git），不要再写回这份文档。
 前端代码： ../ruoyi-antdp
 后端代码： ../fashion_actions_management
 
 ## 新建 CRUD 模块
 
 照着 supplier 模块抄（后端 `modules/supplier/`，前端 `routes/_authenticated/supplier/`）。踩过的坑、定下的模式、配色/表格/按钮的视觉规范、一份可以照抄的检查清单，都在 [docs/crud-page-guide.md](docs/crud-page-guide.md)——写新模块之前先看这份，别重新踩一遍已经踩过的坑（比如 `ok()`/`err()` 千万不能加类型标注、列表别按 `updatedAt` 排序）。
+
+**新模块记得在 `apps/server/src/dev-seed/` 加一个带数字前缀的种子文件**，不加的话新页面在临时库里永远是空的、没法调（见下面"开发调试"）。
 
 ## 仓库结构
 
@@ -48,7 +50,8 @@ apps/server    Hono + Better Auth + Drizzle（端口 8787）
 | 任务 | 命令（在仓库根执行） |
 | --- | --- |
 | 安装依赖 | `bun install` |
-| 起开发环境 | `bun run dev`（先 `docker compose up -d`，再同时起 server 和 web） |
+| 起开发环境（临时库，默认） | `bun run dev`——每个 worktree 一个一次性 tmpfs 容器，自动建表 + 灌种子，退出即销毁 |
+| 起开发环境（持久库） | `bun run dev:persist`——连 docker-compose 那个库，不建表也不灌种子 |
 | 生产构建 | `bun run build` → `apps/web/dist/`（静态资源）+ `apps/server/dist/server.js`（bun build 打的单文件） |
 | 类型检查（全部包） | `bun run typecheck` |
 | 测试 | `bun run test` |
@@ -56,6 +59,7 @@ apps/server    Hono + Better Auth + Drizzle（端口 8787）
 | 全仓 Lint + 格式化（会写文件） | `bun run check`（仅在明确需要全仓修复且工作树干净时） |
 | 数据库推送 / 迁移 | `bun run db:push` / `db:generate` / `db:migrate` / `db:studio` |
 | 重新生成路由树 | `bun run --filter '@repo/web' generate-routes` |
+| 回收垃圾容器 / 卷 / 已合入的分支 | `bun run prune`（只列不删）→ `bun run prune --yes` |
 | 添加 shadcn 组件 | 在 `apps/web` 下 `bunx shadcn@latest add <name>` |
 | 打 tag 发版 | `bun run release`（`major` / `minor` / `vX.Y.Z`，默认 patch） |
 | 构建并推送镜像 | `bun run docker:build-push [版本号]` |
@@ -78,8 +82,49 @@ CORS、`trustedOrigins` 不用加域名、`VITE_API_URL` 不用设，所以同�
 **在 `.claude/worktrees/` 这类深路径下跑 `bun install`/`bun add` 报 `ENOENT ... (copyfile)`，或者装完页面到处 `Invalid hook call`：** 这是 Windows + 深路径 worktree 的已知环境问题，不是仓库配置或依赖本身的问题，修法见 [docs/windows-worktree-notes.md](docs/windows-worktree-notes.md)——一句话版：带上 `--linker=hoisted`，且不要中途在 isolated/hoisted 之间切换。
 
 ## 开发调试
-如果需求可自行通过浏览器进行登录、注册，通过真实的页面操作进行调试。
-账号 x1nyhh@163.com 密码xiny1118
+
+**默认的 `bun run dev` 起的是一次性数据库。** 每个 worktree 一个 tmpfs 容器、随机端口，Ctrl-C 就销毁——多个 worktree 并行开发不会再互相踩数据。启动时自动建表（drizzle 的 `pushSchema`）并灌种子，全程约 3 秒。
+
+要看本地积累的真实数据时用 `bun run dev:persist`，它连 docker-compose 那个持久库，**不建表也不灌种子**（schema 同步仍然是你手动 `bun run db:push`）。
+
+**登录直接访问 `/api/dev/login`。** 一次 GET 就进登录态（种子账号 `dev@example.com`），任何人都不需要输入密码；带上 `?redirect=/project/1` 可以直接落到指定页面。它走的是 Better Auth **完整的真实认证链路**——真 session、真 cookie、照常过 `sessionMiddleware`，所以 `_authenticated` 守卫和会话相关的坑在开发环境照样暴露得出来。这条路由只在 `DEV_AUTH_BYPASS=1` 时存在，生产形态下带着这个开关启动会直接抛错拒绝启动（见 `modules/auth/routes.dev.ts`）。
+
+**可以自行用浏览器登录、点页面、走真实操作来调试，不用每次问。**
+
+**种子数据在 `apps/server/src/dev-seed/`**，文件名的数字前缀决定执行顺序（外键依赖靠它表达）。演示数据的固定 ID 写在 `dev-seed/context.ts`，可以直接导航：
+
+- `/project/1` 演示项目（下挂 2 个活动）
+- `/project/1/activity/1/agenda` 议程，**刻意埋了一处人员时间冲突**，冲突提示不用手工造数据就能验
+- `/member` 24 个人员，够翻 3 页，含 1 个停用状态
+- `/venue`（1 个场地 / 2 区域 / 10 座位）、`/supplier`（3 家，含停用和多类目）
+
+**改了 schema 就顺手改种子。** 种子一律用 drizzle 的 typed insert，字段改了 `bun run typecheck` 直接报错；`bun run dev` 每次都跑全量种子，坏了当场炸。新增模块时在 `dev-seed/` 里加一个带数字前缀的文件即可，序号留了间隔，**不用改任何已有文件**（并行分支因此不会在种子上冲突）。种子只对空库负责，不需要写幂等逻辑。
+
+**要连"正在跑的那个"临时库**（`db:studio`、一次性排查脚本）：`bun run db:studio` 已经配好了——`bun run dev` 会把真实连接串写进 gitignored 的 `apps/server/.dev-db.env`，db 系列脚本按 `.env` → `.dev-db.env` 的顺序读，后者覆盖前者；dev 没在跑时自动回落到 `.env` 的持久库。**别手写 `localhost:5432`**，那是持久库，你会在另一个库里看到一堆真实数据，然后得出完全错误的结论。
+
+## 提交与合并：线性历史是强制的
+
+master 的历史必须线性，**这条规则由 git 自己执行，不是靠自觉**：
+
+- `merge.ff = only` / `pull.ff = only`——任何非快进合并直接失败退出。
+- `.githooks/pre-merge-commit` 和 `.githooks/pre-commit`——堵住 `git merge --no-ff`，以及"有冲突时解完再 `git commit`"这条不经过前一个钩子的绕过路径。
+- 两者由 `postinstall`（`scripts/setup-git.ts`）自动落地，**不区分 Claude Code 还是 Codex**。
+
+  覆盖范围有个边界要知道：`merge.ff=only` 写在共享的 `.git/config` 里，**所有 worktree 立刻生效**；但 `core.hooksPath=.githooks` 是相对每个 worktree 的路径，还没 rebase 到这次改动的分支里没有 `.githooks` 目录，钩子那一层要等它们 rebase 后才生效（配置层仍然挡着，只是显式的 `--no-ff` 暂时拦不住）。`bun install` 时 `setup-git.ts` 会把这种情况打出来。
+
+**agent 干完活的终点是"rebase 完成且检查通过"，不是"已合并"：**
+
+```bash
+git fetch
+git rebase master          # 在功能分支里做，冲突自己解
+bun run typecheck && bun run test
+```
+
+**当前 `bun run test` 有 3 个已知失败，都在 `apps/server/src/modules/invitation/docx.test.ts` 的「真实模板（商会）」用例上。** 它们在 master 上同样是红的：`docs/模板/泉州市纺织服装商会模板.docx` 出厂就带 `{{姓名}}`、`{{联系人}}`、`{{联系电话}}`、`{{发函日期}}` 四个占位符且不含 `XXXX`，而测试是照着更早那版模板写的。**不是你造成的，也不要顺手改**——改测试期望等于替 invitation 模块决定「出厂模板该不该预置占位符」，那是产品口径。除这 3 个之外必须全绿；多出任何一个失败都是你的。
+
+然后停下来告诉用户可以合了。合进 master 由用户执行 `git merge --ff-only <分支>`——这一步不可逆，而且并行分支的合并顺序会互相影响，需要人来编排。这也天然成了验收关口：用户那条 `--ff-only` 如果失败，就说明 rebase 没做对。
+
+别尝试用 `git merge` 或 `git merge --no-ff` 抄近路，钩子会拒绝，并把仓库留在一个未完成的合并状态里（要 `git merge --abort` 才能退出）。
 
 ## 前后端边界
 

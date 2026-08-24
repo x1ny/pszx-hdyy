@@ -18,7 +18,9 @@ const config = defineConfig({
     // SameSite handling in development.
     proxy: {
       "/api": {
-        target: `http://localhost:${serverPort}`,
+        // 用 127.0.0.1 而不是 localhost：开发时后端只绑回环 IPv4，而 Windows 上
+        // localhost 可能先解析成 ::1，那样代理会连不上。
+        target: `http://127.0.0.1:${serverPort}`,
       },
     },
   },

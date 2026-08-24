@@ -1,0 +1,30 @@
+#!/bin/sh
+# 这个仓库要求线性历史。合并提交（交叉合并）在这里被硬拒绝，不是靠自觉。
+#
+# 触发时机：`git merge` 走到「要生成一个合并提交」这一步。
+# `git merge --ff-only` 和 `git merge --squash` 都不生成合并提交，
+# 所以它们不会碰到这个钩子 —— 这正是允许的两条路。
+
+cat >&2 <<'MESSAGE'
+
+  ✗ 拒绝生成合并提交：这个仓库要求线性历史。
+
+    先退出当前这次未完成的合并：
+
+      git merge --abort
+
+    然后按标准做法把功能分支合回 master：
+
+      git fetch
+      git rebase master          # 在功能分支里做，解掉冲突
+      git switch master
+      git merge --ff-only <分支>
+
+    强制层不止这一个钩子：merge.ff=only 会拒绝任何非快进合并，
+    所以「这次先直接 merge 一下」这条路不存在。
+
+    确实需要一个合并提交时（极少），显式加 --no-verify 绕过本钩子。
+
+MESSAGE
+
+exit 1

@@ -512,6 +512,12 @@ const collectEndpoints = (): Endpoint[] => {
     // 不是一条具体接口。
     if (route.path.includes("*")) continue;
 
+    // 开发专用的免密登录后门（modules/auth/routes.dev.ts）。它挂在同一个 Hono
+    // 实例上，所以只要生成文档时环境里恰好有 DEV_AUTH_BYPASS=1，它就会被写进
+    // apps/web/public/docs/ —— 而那份文档挂在 session 中间件之前，**任何人不登录
+    // 就能访问**。这里无条件排掉，不依赖"生成时那个环境变量应该没设"。
+    if (route.path.startsWith("/api/dev/")) continue;
+
     const key = `${route.method} ${route.path}`;
     const endpoint = endpoints.get(key) ?? {
       method: route.method,

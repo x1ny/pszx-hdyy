@@ -16,3 +16,7 @@ todos.json
 
 # 接口文档的线上副本，由 `bun run build` 生成（见 scripts/gen-api-docs.ts）
 apps/web/public/docs/
+
+# 临时开发库的真实连接串，由 `bun run dev` 写入、退出时删除。
+# db:studio / db:push 靠它连到正在跑的那个库，而不是 .env 里的持久库。
+apps/server/.dev-db.env
