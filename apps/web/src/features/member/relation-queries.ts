@@ -62,10 +62,16 @@ export type ActivityMemberFilters = InferRequestType<
   typeof api.api.activityMember.list.$post
 >["json"];
 
+export type ActivityMemberSources = ApiData<
+  InferResponseType<typeof api.api.activityMember.listSources.$post>
+>;
+
 export const activityMemberKeys = {
   all: ["activityMember"] as const,
   list: (filters: ActivityMemberFilters) =>
     [...activityMemberKeys.all, "list", filters] as const,
+  sources: (activityId: number) =>
+    [...activityMemberKeys.all, "sources", activityId] as const,
 };
 
 export const activityMemberListQueryOptions = (
@@ -75,6 +81,15 @@ export const activityMemberListQueryOptions = (
     queryKey: activityMemberKeys.list(filters),
     queryFn: () => unwrap(api.api.activityMember.list.$post({ json: filters })),
     placeholderData: keepPreviousData,
+  });
+
+export const activityMemberSourcesQueryOptions = (activityId: number) =>
+  queryOptions({
+    queryKey: activityMemberKeys.sources(activityId),
+    queryFn: () =>
+      unwrap(
+        api.api.activityMember.listSources.$post({ json: { activityId } }),
+      ),
   });
 
 export const addActivityMembers = (

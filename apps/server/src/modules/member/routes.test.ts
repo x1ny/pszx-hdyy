@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { desc, sql } from "drizzle-orm";
 import { db } from "../../infra/db";
 import { memberReadFields } from "./routes";
+import { activityMemberSegments } from "./routes.relation";
 import { activityMember, member } from "./schema";
+import {
+  ListActivityMemberSourcesInput,
+  ListActivityMembersInput,
+} from "./validation";
 
 /**
  * 钉住 activityCount 那句相关子查询的**渲染结果**，而不是它的取值。
@@ -44,5 +49,42 @@ describe("memberReadFields.activityCount", () => {
       .toSQL().sql;
 
     expect(naive).toContain(`where "member_id" = "id"`);
+  });
+});
+
+describe("活动人员列表", () => {
+  test("来源选项接口只需要活动 id", () => {
+    expect(ListActivityMemberSourcesInput.parse({ activityId: 1 })).toEqual({
+      activityId: 1,
+    });
+  });
+
+  test("来源和负责人筛选会去掉首尾空白", () => {
+    const parsed = ListActivityMembersInput.parse({
+      activityId: 1,
+      source: "  企业嘉宾  ",
+      ownerName: "  王运营  ",
+      page: 1,
+      pageSize: 10,
+    });
+
+    expect(parsed.source).toBe("企业嘉宾");
+    expect(parsed.ownerName).toBe("王运营");
+  });
+
+  test("参与环节按开始时间和 id 稳定排序，并关联到当前活动人员", () => {
+    const rendered = db
+      .select({
+        id: activityMember.id,
+        segments: activityMemberSegments,
+      })
+      .from(activityMember)
+      .toSQL();
+
+    expect(rendered.sql).toContain(
+      `"segment_member"."activity_member_id" = "activity_member"."id"`,
+    );
+    expect(rendered.sql).toContain(`order by "start_time", "segment_id"`);
+    expect(rendered.params).toContain("active");
   });
 });

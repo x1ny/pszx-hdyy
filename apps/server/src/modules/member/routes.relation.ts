@@ -6,6 +6,7 @@ import {
   exists,
   ilike,
   inArray,
+  isNotNull,
   notExists,
   or,
   sql,
@@ -23,13 +24,13 @@ import {
 } from "../invitation/cascade";
 import { activity } from "../project/schema";
 import { activityResource, resourceMemberBinding } from "../resource/schema";
-import { memberTrip } from "../trip/schema";
 import {
   listSeatsByActivityMember,
   listSeatsBySegmentMember,
   releaseSeatsByActivityMember,
   releaseSeatsBySegmentMembers,
 } from "../seating/cascade";
+import { memberTrip } from "../trip/schema";
 import { findMemberTimeConflicts } from "./conflicts";
 import {
   createMemberInTx,
@@ -46,6 +47,7 @@ import {
   AddNewSegmentMemberInput,
   AddProjectMembersInput,
   AddSegmentMembersInput,
+  ListActivityMemberSourcesInput,
   ListActivityMembersInput,
   ListProjectMembersInput,
   ListSegmentMemberConflictsInput,
@@ -63,6 +65,28 @@ const validationError = (message: string) =>
 
 const notFound = (what: string) =>
   err({ code: "NOT_FOUND" as const, message: `${what}不存在` });
+
+/**
+ * 活动人员列表里的参与环节。
+ *
+ * 返回名称而不是计数：运营需要直接确认一个人具体参与哪些环节。每项附带 id 只为
+ * 前端提供稳定身份。顺序与议程列表一致，先按开始时间，再用 id 给同一时刻的环节
+ * 做稳定兜底；已经作废的环节不再发生，不应继续出现在当前参与安排里。
+ *
+ * 关联条件刻意用 `eq(...)`，保证 Drizzle 在相关子查询中保留全限定列名。
+ */
+export const activityMemberSegments = sql<
+  Array<{ id: number; name: string }>
+>`coalesce((
+  select json_agg(
+    json_build_object('id', ${segmentMember.segmentId}, 'name', ${activitySegment.name})
+    order by ${activitySegment.startTime}, ${segmentMember.segmentId}
+  )
+  from ${segmentMember}
+  join ${activitySegment} on ${eq(activitySegment.id, segmentMember.segmentId)}
+  where ${eq(segmentMember.activityMemberId, activityMember.id)}
+    and ${eq(activitySegment.status, "active")}
+), '[]'::json)`.as("segments");
 
 /**
  * ladder 抛出的业务失败翻译成统一信封。ladder 用 throw 而不是返回结果对象，
@@ -326,9 +350,36 @@ export const projectMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
 export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
   .use(requireUser)
 
+  .post("/listSources", jsonBody(ListActivityMemberSourcesInput), async (c) => {
+    const { activityId } = c.req.valid("json");
+    const rows = await db
+      .selectDistinct({ source: activityMember.source })
+      .from(activityMember)
+      .where(
+        and(
+          eq(activityMember.activityId, activityId),
+          isNotNull(activityMember.source),
+        ),
+      )
+      .orderBy(asc(activityMember.source));
+
+    // 来源是运营手填字段，不预设字典；选项始终来自当前活动已有记录。
+    return c.json(
+      ok(rows.flatMap(({ source }) => (source?.trim() ? [source] : []))),
+    );
+  })
+
   .post("/list", jsonBody(ListActivityMembersInput), async (c) => {
-    const { activityId, name, companyPosition, groupName, page, pageSize } =
-      c.req.valid("json");
+    const {
+      activityId,
+      name,
+      companyPosition,
+      source,
+      groupName,
+      ownerName,
+      page,
+      pageSize,
+    } = c.req.valid("json");
 
     const where = and(
       eq(activityMember.activityId, activityId),
@@ -336,7 +387,9 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
       companyPosition
         ? ilike(member.companyPosition, `%${companyPosition}%`)
         : undefined,
+      source ? ilike(activityMember.source, `%${source}%`) : undefined,
       groupName ? ilike(activityMember.groupName, `%${groupName}%`) : undefined,
+      ownerName ? ilike(activityMember.ownerName, `%${ownerName}%`) : undefined,
     );
 
     const { limit, offset } = toLimitOffset({ page, pageSize });
@@ -352,12 +405,7 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
           originType: activityMember.originType,
           remark: activityMember.remark,
           createdAt: activityMember.createdAt,
-
-          // 列表上直接给"参与了几个环节"，运营才看得出谁还没分配环节。
-          segmentCount: sql<number>`(
-            select count(*)::int from ${segmentMember}
-            where ${eq(segmentMember.activityMemberId, activityMember.id)}
-          )`.as("segment_count"),
+          segments: activityMemberSegments,
         })
         .from(activityMember)
         .innerJoin(member, eq(member.id, activityMember.memberId))

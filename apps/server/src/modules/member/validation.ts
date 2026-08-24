@@ -219,7 +219,13 @@ export const ListActivityMembersInput = PageInput.extend({
   activityId: id,
   name: filter,
   companyPosition: filter,
+  source: filter,
   groupName: filter,
+  ownerName: filter,
+});
+
+export const ListActivityMemberSourcesInput = z.object({
+  activityId: id,
 });
 
 export const AddActivityMembersInput = z.object({

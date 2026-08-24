@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { PlusIcon, SearchIcon, UsersRoundIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { MemberPickerDialog } from "#/features/member/member-picker-dialog.tsx";
@@ -16,6 +16,7 @@ import {
   type ActivityMember,
   activityMemberKeys,
   activityMemberListQueryOptions,
+  activityMemberSourcesQueryOptions,
   addActivityMembers,
   addNewActivityMember,
   getActivityMemberImpact,
@@ -48,6 +49,14 @@ import {
   EmptyTitle,
 } from "#/shared/components/ui/empty.tsx";
 import { Input } from "#/shared/components/ui/input.tsx";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "#/shared/components/ui/select.tsx";
 import { Skeleton } from "#/shared/components/ui/skeleton.tsx";
 import {
   Table,
@@ -60,7 +69,9 @@ import {
 
 const SearchSchema = z.object({
   name: z.string().optional().catch(undefined),
+  source: z.string().optional().catch(undefined),
   groupName: z.string().optional().catch(undefined),
+  ownerName: z.string().optional().catch(undefined),
   page: z.number().int().min(1).default(1).catch(1),
   pageSize: z.number().int().min(1).max(100).default(10).catch(10),
 });
@@ -82,29 +93,48 @@ function ActivityMembersPage() {
   const queryClient = useQueryClient();
 
   const [nameInput, setNameInput] = useState(search.name ?? "");
+  const [sourceInput, setSourceInput] = useState<string | null>(
+    search.source ?? null,
+  );
   const [groupInput, setGroupInput] = useState(search.groupName ?? "");
+  const [ownerInput, setOwnerInput] = useState(search.ownerName ?? "");
 
   // URL 变了就把草稿拉回来对齐（后退、粘链接进来）。
   useEffect(() => {
     setNameInput(search.name ?? "");
+    setSourceInput(search.source ?? null);
     setGroupInput(search.groupName ?? "");
-  }, [search.name, search.groupName]);
+    setOwnerInput(search.ownerName ?? "");
+  }, [search.name, search.source, search.groupName, search.ownerName]);
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [createForm, setCreateForm] = useState<RelationFormValues>(emptyRelationForm);
+  const [createForm, setCreateForm] =
+    useState<RelationFormValues>(emptyRelationForm);
   const [pendingIds, setPendingIds] = useState<number[]>([]);
   const [addForm, setAddForm] = useState<RelationFormValues>(emptyRelationForm);
 
   const [editing, setEditing] = useState<ActivityMember>();
-  const [editForm, setEditForm] = useState<RelationFormValues>(emptyRelationForm);
+  const [editForm, setEditForm] =
+    useState<RelationFormValues>(emptyRelationForm);
 
   const [removing, setRemoving] = useState<ActivityMember>();
 
   const filters = { activityId, ...search };
   const listQuery = useQuery(activityMemberListQueryOptions(filters));
+  const sourcesQuery = useQuery(activityMemberSourcesQueryOptions(activityId));
   const list = listQuery.data?.list ?? [];
   const total = listQuery.data?.total ?? 0;
+  const sourceItems = useMemo(
+    () => [
+      { value: null, label: "全部来源" },
+      ...(sourcesQuery.data ?? []).map((source) => ({
+        value: source,
+        label: source,
+      })),
+    ],
+    [sourcesQuery.data],
+  );
 
   // 移除前的受影响清单。只在确认弹窗打开时才查——它是"点了移除之后"才需要的
   // 信息，提前查会给每一行都发一个请求。
@@ -175,7 +205,8 @@ function ActivityMembersPage() {
   const removeMutation = useMutation({
     // cascade 恒为 true：这个弹窗本身就是 BR-DEV-029 要求的那次二次确认，
     // 用户看着受影响清单点的"确认移除"。带 false 再来一轮只是多一个往返。
-    mutationFn: (target: ActivityMember) => removeActivityMember(target.id, true),
+    mutationFn: (target: ActivityMember) =>
+      removeActivityMember(target.id, true),
     onSuccess: () => {
       toast.success("已解除该人员在本活动下的关系");
       setRemoving(undefined);
@@ -225,7 +256,9 @@ function ActivityMembersPage() {
         onSubmit={() =>
           applyFilter({
             name: nameInput.trim() || undefined,
+            source: sourceInput ?? undefined,
             groupName: groupInput.trim() || undefined,
+            ownerName: ownerInput.trim() || undefined,
           })
         }
       >
@@ -238,23 +271,51 @@ function ActivityMembersPage() {
             onChange={(event) => setNameInput(event.target.value)}
           />
         </div>
+        <Select
+          items={sourceItems}
+          value={sourceInput}
+          onValueChange={(value) =>
+            setSourceInput(value === null ? null : String(value))
+          }
+        >
+          <SelectTrigger className="w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {sourceItems.map((item) => (
+                <SelectItem key={item.value ?? "all"} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
         <Input
           className="w-48"
           placeholder="搜索分组"
           value={groupInput}
           onChange={(event) => setGroupInput(event.target.value)}
         />
+        <Input
+          className="w-44"
+          placeholder="搜索负责人"
+          value={ownerInput}
+          onChange={(event) => setOwnerInput(event.target.value)}
+        />
         <FilterActions
           onReset={() => {
             setNameInput("");
+            setSourceInput(null);
             setGroupInput("");
+            setOwnerInput("");
             navigate({ search: { page: 1, pageSize: search.pageSize } });
           }}
         />
       </FilterBar>
 
       <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
-        <Table className="min-w-[1100px]">
+        <Table className="min-w-[1240px]">
           <TableHeader className="bg-muted/60">
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-16 text-center">序号</TableHead>
@@ -263,7 +324,7 @@ function ActivityMembersPage() {
               <TableHead className="min-w-28">分组</TableHead>
               <TableHead className="min-w-24">负责人</TableHead>
               <TableHead className="min-w-28">录入渠道</TableHead>
-              <TableHead className="w-24 text-center">参与环节</TableHead>
+              <TableHead className="min-w-52">参与环节</TableHead>
               <TableHead className="min-w-32">备注</TableHead>
               <TableHead className="w-40 text-center">操作</TableHead>
             </TableRow>
@@ -319,8 +380,24 @@ function ActivityMembersPage() {
                       {RELATION_ORIGIN_LABELS[row.originType]}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-center tabular-nums">
-                    {row.segmentCount}
+                  <TableCell>
+                    {row.segments.length > 0 ? (
+                      <ol className="flex min-w-48 flex-col gap-1">
+                        {row.segments.map((segment, segmentIndex) => (
+                          <li
+                            key={segment.id}
+                            className="flex items-baseline gap-1.5"
+                          >
+                            <span className="w-4 shrink-0 text-right text-muted-foreground text-xs tabular-nums">
+                              {segmentIndex + 1}.
+                            </span>
+                            <span>{segment.name}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    ) : (
+                      "-"
+                    )}
                   </TableCell>
                   <TableCell className="max-w-40 truncate text-muted-foreground">
                     {row.remark || "-"}
@@ -416,7 +493,13 @@ function ActivityMembersPage() {
         title="手动录入活动人员"
         description="全量人员库里还没有这个人时用这个入口。保存后会同时建立主档、项目关系和本活动关系。"
         submitting={createMutation.isPending}
-        extraFields={<RelationFields value={createForm} onChange={setCreateForm} idPrefix="new" />}
+        extraFields={
+          <RelationFields
+            value={createForm}
+            onChange={setCreateForm}
+            idPrefix="new"
+          />
+        }
         onOpenChange={setCreateOpen}
         onSubmit={(fields) => createMutation.mutate(fields)}
       />
@@ -437,7 +520,11 @@ function ActivityMembersPage() {
             </DialogDescription>
           </DialogHeader>
           <DialogBody>
-            <RelationFields value={addForm} onChange={setAddForm} idPrefix="add" />
+            <RelationFields
+              value={addForm}
+              onChange={setAddForm}
+              idPrefix="add"
+            />
           </DialogBody>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPendingIds([])}>
@@ -463,11 +550,15 @@ function ActivityMembersPage() {
           <DialogHeader>
             <DialogTitle>编辑活动关系</DialogTitle>
             <DialogDescription>
-              「{editing?.name}」在本场活动下的关系字段。改动只影响当前活动，不会写回人员主档，也不影响其他活动。
+              {`「${editing?.name}」在本场活动下的关系字段。改动只影响当前活动，不会写回人员主档，也不影响其他活动。`}
             </DialogDescription>
           </DialogHeader>
           <DialogBody>
-            <RelationFields value={editForm} onChange={setEditForm} idPrefix="edit" />
+            <RelationFields
+              value={editForm}
+              onChange={setEditForm}
+              idPrefix="edit"
+            />
           </DialogBody>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditing(undefined)}>
@@ -495,7 +586,7 @@ function ActivityMembersPage() {
           <DialogHeader>
             <DialogTitle>确认移除该活动人员？</DialogTitle>
             <DialogDescription>
-              将解除「{removing?.name}」在本场活动下的参与关系。人员主档和项目人员关系保留，之后仍可重新加入。
+              {`将解除「${removing?.name}」在本场活动下的参与关系。人员主档和项目人员关系保留，之后仍可重新加入。`}
             </DialogDescription>
           </DialogHeader>
 
@@ -518,7 +609,9 @@ function ActivityMembersPage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-muted-foreground">该人员暂无其他关联内容。</p>
+                <p className="text-muted-foreground">
+                  该人员暂无其他关联内容。
+                </p>
               )}
             </div>
           </DialogBody>
@@ -540,4 +633,3 @@ function ActivityMembersPage() {
     </div>
   );
 }
-
