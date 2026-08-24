@@ -21,6 +21,8 @@ bun run dev
 
 The root development runner starts the server and web app together. `SERVER_PORT` (default `8787`) and `WEB_PORT` (default `3000`) are preferred starting ports; if either is occupied, the runner finds the next available port. The selected server port is passed to both the Hono server and the Vite `/api` proxy. If the web port changes, `WEB_ORIGIN` and `BETTER_AUTH_URL` are updated for the same run so authentication continues to work.
 
+Vite dev and preview run through `bun vite` without `--bun`, so Vite follows its Node shebang. On Windows this avoids reusing the same numeric port on IPv4 when it is already occupied on IPv6, which would defeat automatic port fallback.
+
 Use `bun run dev` from the repository root to enable this coordination. Running an individual package script does not perform the cross-process port selection.
 
 First run needs the tables:

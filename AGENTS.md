@@ -66,7 +66,7 @@ apps/server    Hono + Better Auth + Drizzle（端口 8787）
 CORS、`trustedOrigins` 不用加域名、`VITE_API_URL` 不用设，所以同一个镜像能跑遍
 所有环境。开发环境不设 `WEB_DIST_DIR`，静态资源仍归 Vite。细节见 `docker/README.md`。
 
-开发端口约定：根目录的 `bun run dev` 由 `scripts/dev.ts` 统一启动前后端。`SERVER_PORT`（默认 `8787`）和 `WEB_PORT`（默认 `3000`）是首选端口，被占用时向上寻找可用端口；最终的后端端口同时传给 Hono 和 Vite 代理，前端端口变化时同步更新认证 origin。这样做是为了避免端口自动变化后代理或 Better Auth 仍指向旧端口。单独运行某个 workspace 的 `dev` 脚本不经过这层协调。
+开发端口约定：根目录的 `bun run dev` 由 `scripts/dev.ts` 统一启动前后端。`SERVER_PORT`（默认 `8787`）和 `WEB_PORT`（默认 `3000`）是首选端口，被占用时向上寻找可用端口；最终的后端端口同时传给 Hono 和 Vite 代理，前端端口变化时同步更新认证 origin。这样做是为了避免端口自动变化后代理或 Better Auth 仍指向旧端口。单独运行某个 workspace 的 `dev` 脚本不经过这层协调。Vite 的 `dev` / `preview` 必须用 `bun vite …`，不要加 `--bun`：Windows 下强制用 Bun 运行 Vite 时，已有进程监听 `[::1]:3000` 后仍可能另行绑定 `127.0.0.1:3000`，导致自动换端口失效；不加 `--bun` 会遵循 Vite 的 Node shebang，工具入口仍然是 Bun。
 
 单独起某个包用 `bun run --filter '@repo/server' dev`。
 

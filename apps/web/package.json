@@ -6,9 +6,9 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "dev": "bun --bun vite dev --port 3000",
+    "dev": "bun vite dev",
     "build": "bun --bun vite build",
-    "preview": "bun --bun vite preview",
+    "preview": "bun vite preview",
     "generate-routes": "tsr generate",
     "test": "bun --bun vitest run",
     "test:watch": "bun --bun vitest",

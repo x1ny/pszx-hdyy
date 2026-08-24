@@ -5,11 +5,14 @@ import viteReact from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 const serverPort = process.env.SERVER_PORT ?? "8787";
+const webPort = Number(process.env.WEB_PORT ?? "3000");
 
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
   server: {
-    port: 3000,
+    host: "localhost",
+    port: webPort,
+    strictPort: false,
     // Everything under /api is served by apps/server. Proxying keeps the
     // browser on a single origin, so Better Auth's cookies need no CORS or
     // SameSite handling in development.

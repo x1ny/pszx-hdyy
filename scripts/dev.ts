@@ -1,9 +1,25 @@
 import { createServer } from "node:net";
+import { networkInterfaces } from "node:os";
 import { resolve } from "node:path";
 
 const DEFAULT_SERVER_PORT = 8787;
 const DEFAULT_WEB_PORT = 3000;
 const MAX_PORT = 65535;
+const PORT_UNAVAILABLE_ERRORS = new Set(["EACCES", "EADDRINUSE"]);
+
+function getPortProbeHosts() {
+  const hosts = new Set(["127.0.0.1", "::1"]);
+
+  for (const addresses of Object.values(networkInterfaces())) {
+    for (const address of addresses ?? []) {
+      hosts.add(address.address);
+    }
+  }
+
+  return [...hosts];
+}
+
+const PORT_PROBE_HOSTS = getPortProbeHosts();
 
 function readPort(name: string, fallback: number) {
   const raw = process.env[name] ?? String(fallback);
@@ -18,15 +34,30 @@ function readPort(name: string, fallback: number) {
   return port;
 }
 
-function isPortAvailable(port: number) {
+function isPortAvailableOnHost(port: number, host: string) {
   return new Promise<boolean>((resolveAvailability) => {
     const probe = createServer();
 
-    probe.once("error", () => resolveAvailability(false));
-    probe.listen({ host: "127.0.0.1", port }, () => {
+    probe.once("error", (error: NodeJS.ErrnoException) => {
+      // A network address can disappear between enumeration and probing, and
+      // IPv6 may be disabled. Only port conflicts/reservations make this
+      // candidate unavailable; unsupported addresses are skipped.
+      resolveAvailability(!PORT_UNAVAILABLE_ERRORS.has(error.code ?? ""));
+    });
+    probe.listen({ host, port }, () => {
       probe.close(() => resolveAvailability(true));
     });
   });
+}
+
+async function isPortAvailable(port: number) {
+  for (const host of PORT_PROBE_HOSTS) {
+    if (!(await isPortAvailableOnHost(port, host))) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 async function findAvailablePort(
@@ -39,7 +70,9 @@ async function findAvailablePort(
     }
   }
 
-  throw new Error(`No available port found from ${requestedPort} to ${MAX_PORT}`);
+  throw new Error(
+    `No available port found from ${requestedPort} to ${MAX_PORT}`,
+  );
 }
 
 const requestedServerPort = readPort("SERVER_PORT", DEFAULT_SERVER_PORT);
@@ -74,13 +107,7 @@ const serverCwd = resolve("apps/server");
 const webCwd = resolve("apps/web");
 
 const serverProcess = Bun.spawn(
-  [
-    process.execPath,
-    "--env-file=../../.env",
-    "--hot",
-    "run",
-    "src/index.ts",
-  ],
+  [process.execPath, "--env-file=../../.env", "--hot", "run", "src/index.ts"],
   {
     cwd: serverCwd,
     env: childEnv,
@@ -90,10 +117,12 @@ const serverProcess = Bun.spawn(
   },
 );
 
+// Do not add `--bun` here. On Windows, Bun may bind IPv4 localhost even when
+// the same port is already listening on IPv6 localhost. Respecting Vite's Node
+// shebang keeps its own automatic port fallback consistent with this probe.
 const webProcess = Bun.spawn(
   [
     process.execPath,
-    "--bun",
     "vite",
     "dev",
     "--host",
@@ -141,5 +170,7 @@ const firstExit = await Promise.race(
 
 stopChildren();
 await Promise.all(children.map((child) => child.exited));
-console.error(`[dev] process ${firstExit.index} exited with code ${firstExit.code}`);
+console.error(
+  `[dev] process ${firstExit.index} exited with code ${firstExit.code}`,
+);
 process.exit(firstExit.code);
