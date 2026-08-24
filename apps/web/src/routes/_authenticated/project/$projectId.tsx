@@ -130,9 +130,12 @@ function ProjectDetailLayout() {
             </dl>
 
             {project.description && (
-              <p className="whitespace-pre-wrap text-muted-foreground text-sm leading-relaxed">
-                {project.description}
-              </p>
+              <div className="flex flex-col gap-0.5">
+                <p className="text-muted-foreground text-xs">项目简介</p>
+                <p className="whitespace-pre-wrap text-muted-foreground text-sm leading-relaxed">
+                  {project.description}
+                </p>
+              </div>
             )}
           </div>
         )}
