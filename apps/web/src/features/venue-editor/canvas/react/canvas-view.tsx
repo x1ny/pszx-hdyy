@@ -169,8 +169,11 @@ const ZoneNode = memo(function ZoneNode({
   // 坐标，靠这层 translate 就能跟矩形/椭圆一样平移，不用在几何层面特殊处理。
   const dx = offset?.x ?? 0;
   const dy = offset?.y ?? 0;
-  const labelX = zone.shape.x + 10 + dx;
-  const labelY = zone.shape.y + dy;
+  const labelX = zone.shape.x + zone.shape.width / 2 + dx;
+  const labelY = zone.shape.y + zone.shape.height / 2 + dy;
+  // 区域越大，标签也相应放大；小区域保留一个可读的最小字号。
+  const nameSize = Math.max(20, Math.min(22, zone.shape.height / 5));
+  const captionSize = nameSize * 0.7;
 
   return (
     <g>
@@ -183,8 +186,9 @@ const ZoneNode = memo(function ZoneNode({
       </g>
       <text
         x={labelX}
-        y={labelY + 20}
-        fontSize={13}
+        y={labelY - captionSize * 0.4}
+        textAnchor="middle"
+        fontSize={nameSize}
         fontWeight={600}
         fill={zone.stroke}
         style={{ userSelect: "none", pointerEvents: "none" }}
@@ -193,8 +197,9 @@ const ZoneNode = memo(function ZoneNode({
       </text>
       <text
         x={labelX}
-        y={labelY + 36}
-        fontSize={11}
+        y={labelY + nameSize * 0.8}
+        textAnchor="middle"
+        fontSize={captionSize}
         fill="var(--muted-foreground)"
         style={{ userSelect: "none", pointerEvents: "none" }}
       >
