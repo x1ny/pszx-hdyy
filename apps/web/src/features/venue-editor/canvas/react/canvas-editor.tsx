@@ -1,6 +1,7 @@
 import { useGesture } from "@use-gesture/react";
 import {
   CircleIcon,
+  Disc2Icon,
   MousePointer2Icon,
   PentagonIcon,
   RedoIcon,
@@ -74,7 +75,10 @@ const TOOL_ITEMS: {
 }[] = [
   { value: "select", label: "选择", icon: MousePointer2Icon },
   { value: "rect", label: "矩形", icon: SquareIcon },
-  { value: "ellipse", label: "椭圆", icon: CircleIcon },
+  // 圆形拿真正的圆形图标；椭圆换一个不同的图标避免两个按钮长得一样
+  // （lucide 没有专门的椭圆图标，Disc2 好歹是个扁一点的形状）。
+  { value: "ellipse", label: "椭圆", icon: Disc2Icon },
+  { value: "circle", label: "圆形", icon: CircleIcon },
   { value: "polygon", label: "多边形", icon: PentagonIcon },
 ];
 
@@ -490,7 +494,21 @@ export function CanvasEditor({
           draftRect: null,
           resizePreview: null,
         };
-      case "drawZone":
+      case "drawZone": {
+        const rect = normalizeRect(drag.subject.start, drag.current);
+        // 圆形工具拖拽时预览框也摁成正方形，跟松手后落库的形状对上——
+        // 不然拖出来是长方形虚线框，松手突然跳成圆，手感很怪。
+        const preview =
+          drag.subject.shapeType === "circle"
+            ? {
+                x: rect.x,
+                y: rect.y,
+                width: Math.max(rect.width, rect.height),
+                height: Math.max(rect.width, rect.height),
+              }
+            : rect;
+        return { dragOffset: null, draftRect: preview, resizePreview: null };
+      }
       case "marquee":
         return {
           dragOffset: null,
