@@ -84,8 +84,9 @@ export const Route = createFileRoute(
  * 几乎完全重合，拆开的唯一理由是它们挂在两个二级菜单下；菜单一收，加一个状态
  * 筛选就够了（docs/场地排位底层设计.md §2.1）。
  *
- * 一行一个**开了排位开关的环节**，不是一行一个方案——"未配置"是派生态，它没有
- * 方案行，只有左连接才能把它显示出来。
+ * 一行一个**开了排位开关的有效环节**，不是一行一个方案——"未配置"是派生态，
+ * 它没有方案行，只有左连接才能把它显示出来。作废环节仍由接口返回给议程页，
+ * 但不在本页展示。
  */
 function SeatingPage() {
   const { projectId, activityId: activityIdParam } = Route.useParams();
@@ -220,7 +221,9 @@ function SeatingPage() {
   if (plansQuery.isLoading) return <Skeleton className="h-96 w-full" />;
 
   const all = plansQuery.data?.list ?? [];
-  const rows = all.filter((row) =>
+  // 作废环节保留在接口结果里供议程页显示历史状态，但排位页只展示有效环节。
+  const visible = all.filter((row) => row.segmentStatus !== "voided");
+  const rows = visible.filter((row) =>
     statusFilter === "all" ? true : row.plan?.status === statusFilter,
   );
 
@@ -230,7 +233,7 @@ function SeatingPage() {
         <div>
           <h2 className="font-semibold text-lg tracking-tight">排位</h2>
           <p className="text-muted-foreground text-sm">
-            按环节各自一份方案 · 共 {all.length} 个开启排位的环节
+            按环节各自一份方案 · 共 {visible.length} 个开启排位的环节
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -286,7 +289,7 @@ function SeatingPage() {
         </div>
       )}
 
-      {all.length === 0 ? (
+      {visible.length === 0 ? (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-16 text-center">
           <ArmchairIcon className="size-8 text-muted-foreground/40" />
           <p className="font-medium text-sm">没有开启排位的环节</p>
