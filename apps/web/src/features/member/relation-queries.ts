@@ -108,6 +108,8 @@ export const segmentMemberKeys = {
   all: ["segmentMember"] as const,
   list: (segmentId: number) =>
     [...segmentMemberKeys.all, "list", segmentId] as const,
+  conflicts: (activityId: number) =>
+    [...segmentMemberKeys.all, "conflicts", activityId] as const,
 };
 
 export const segmentMemberListQueryOptions = (segmentId: number) =>
@@ -120,6 +122,25 @@ export const segmentMemberListQueryOptions = (segmentId: number) =>
         }),
       ),
     placeholderData: keepPreviousData,
+  });
+
+/** 一处冲突 = 一个人 + 两个时间重叠的环节。 */
+export type SegmentMemberConflict = ApiData<
+  InferResponseType<typeof api.api.segmentMember.conflicts.$post>
+>["list"][number];
+
+/**
+ * 全活动的人员时间冲突，议程页顶部那条提示的数据源。
+ *
+ * key 挂在 `segmentMemberKeys.all` 底下，所以环节人员弹窗里那句 invalidate 会
+ * 顺带把它刷掉——加人、移人都可能造出或消掉一处冲突。另一半诱因是环节时间
+ * 变了，那一侧由议程页在保存后显式失效这个 key（那里失效的是 agendaKeys）。
+ */
+export const segmentMemberConflictQueryOptions = (activityId: number) =>
+  queryOptions({
+    queryKey: segmentMemberKeys.conflicts(activityId),
+    queryFn: () =>
+      unwrap(api.api.segmentMember.conflicts.$post({ json: { activityId } })),
   });
 
 export const addSegmentMembers = (

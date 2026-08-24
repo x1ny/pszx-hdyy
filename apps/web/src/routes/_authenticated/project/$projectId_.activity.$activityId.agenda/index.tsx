@@ -1,9 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { ListIcon, PlusIcon, RouteIcon, TriangleAlertIcon } from "lucide-react";
+import {
+  ListIcon,
+  PlusIcon,
+  RouteIcon,
+  TriangleAlertIcon,
+  UsersRoundIcon,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
+import {
+  segmentMemberConflictQueryOptions,
+  segmentMemberKeys,
+} from "#/features/member/relation-queries.ts";
 import { isOpenTodo } from "#/features/resource/labels.ts";
 import {
   type ResourceDemand,
@@ -42,7 +52,12 @@ import {
   updateAgendaLine,
   updateSegment,
 } from "./-queries";
-import { buildAgendaTimeline, buildSequenceLabels, lineLabel } from "./-utils";
+import {
+  buildAgendaTimeline,
+  buildSequenceLabels,
+  formatSegmentRange,
+  lineLabel,
+} from "./-utils";
 
 /**
  * 视图和"含作废"走 URL search params，不用 useState——刷新、分享链接、
@@ -58,14 +73,17 @@ export const Route = createFileRoute(
   "/_authenticated/project/$projectId_/activity/$activityId/agenda/",
 )({
   validateSearch: AgendaSearchSchema,
-  // 议程和资源需求一起预取：列表的"资源需求"列要用后者，分两次等于给
-  // 首屏排了一个瀑布。
+  // 议程、资源需求、人员时间冲突一起预取：三者都是首屏就要用的（列表的
+  // "资源需求"列、顶部那两条提示），分开取等于给首屏排了个瀑布。
   loader: ({ context, params }) => {
     const activityId = Number(params.activityId);
     return Promise.all([
       context.queryClient.ensureQueryData(agendaQueryOptions(activityId)),
       context.queryClient.ensureQueryData(
         resourceDemandListQueryOptions(activityId),
+      ),
+      context.queryClient.ensureQueryData(
+        segmentMemberConflictQueryOptions(activityId),
       ),
     ]);
   },
@@ -93,6 +111,9 @@ function AgendaTab() {
   // 需求项全量一次拿回，这里只用来画列表那一列的 chip 和统计磁贴；
   // 弹窗里读的是同一份缓存，不会再发一次请求。
   const demandQuery = useQuery(resourceDemandListQueryOptions(activityId));
+  // 人员时间冲突由后端整场活动扫一遍算好（同一个人被排进两个时间重叠的
+  // 环节），这里只负责把结论显示出来。
+  const conflictQuery = useQuery(segmentMemberConflictQueryOptions(activityId));
   // 父路由（活动详情布局）的 loader 已经 ensureQueryData 过，这里是缓存命中
   const { data: activity } = useQuery(activityDetailQueryOptions(activityId));
 
@@ -110,6 +131,12 @@ function AgendaTab() {
   const invalidateAgenda = () => {
     queryClient.invalidateQueries({ queryKey: agendaKeys.all });
     queryClient.invalidateQueries({ queryKey: resourceDemandKeys.all });
+    // 人员时间冲突是"人 × 环节时间"算出来的，改时间、作废、恢复都会让它变。
+    // 反方向（加人、移人）由环节人员弹窗那句 invalidate 覆盖——那个 key 是
+    // 这条的父级。
+    queryClient.invalidateQueries({
+      queryKey: segmentMemberKeys.conflicts(activityId),
+    });
   };
 
   /**
@@ -248,6 +275,10 @@ function AgendaTab() {
       new Date(segment.endTime) > new Date(activity.endTime),
   );
 
+  // 同上，人员冲突也是只提示不阻断（C-016）：不同议程线本来就允许并行，
+  // 一个人能不能两头兼顾只有运营判断得了。
+  const conflicts = conflictQuery.data?.list ?? [];
+
   const tableSegments = search.includeVoided ? segments : activeSegments;
 
   const openCreate = () => {
@@ -349,6 +380,32 @@ function AgendaTab() {
               .join("、")}
             {outOfRange.length > 3 && ` 等 ${outOfRange.length} 个`}
             ——不影响保存，确认不是时间填错即可。
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {conflicts.length > 0 && (
+        <Alert>
+          <UsersRoundIcon />
+          <AlertTitle>有 {conflicts.length} 处人员时间冲突</AlertTitle>
+          {/* 一处冲突一行：一个人同时被排进两个时间重叠的环节。多于三处时
+              只列前三行，剩下的报个数——这条提示是让人知道"有问题、去哪看"，
+              不是冲突清单。 */}
+          <AlertDescription className="flex flex-col gap-1">
+            {conflicts.slice(0, 3).map((conflict) => {
+              const [first, second] = conflict.segments;
+              return (
+                <span key={`${conflict.memberId}-${first.id}-${second.id}`}>
+                  {conflict.memberName} 在「{first.name}」（
+                  {formatSegmentRange(first)}）、「{second.name}」（
+                  {formatSegmentRange(second)}）中存在时间冲突
+                </span>
+              );
+            })}
+            <span>
+              {conflicts.length > 3 && `……等 ${conflicts.length} 处。`}
+              不影响保存，请确认是否填错即可。
+            </span>
           </AlertDescription>
         </Alert>
       )}

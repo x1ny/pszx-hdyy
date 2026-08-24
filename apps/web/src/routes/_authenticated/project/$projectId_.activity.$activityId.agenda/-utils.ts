@@ -82,8 +82,16 @@ const localDayKey = (date: Date) =>
 const startOfLocalDay = (date: Date) =>
   new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 
-/** 同一天内的 "09:00 - 10:30"；跨日时把日期一起带上。 */
-export const formatSegmentRange = (segment: Segment) => {
+/**
+ * 同一天内的 "09:00 - 10:30"；跨日时把日期一起带上。
+ *
+ * 取结构类型而不是 `Segment`：人员冲突提示里拿到的只是环节的一小撮字段
+ * （id / name / 起止时间），没必要为了复用这句格式化把整个 Segment 传进来。
+ */
+export const formatSegmentRange = (segment: {
+  startTime: string;
+  endTime: string;
+}) => {
   const start = new Date(segment.startTime);
   const end = new Date(segment.endTime);
   const sameDay = localDayKey(start) === localDayKey(end);

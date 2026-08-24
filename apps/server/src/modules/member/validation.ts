@@ -267,6 +267,15 @@ export const ListSegmentMembersInput = PageInput.extend({
   name: filter,
 });
 
+/**
+ * 扫一遍整场活动的人员时间冲突。
+ *
+ * 按活动查而不是按环节：冲突是两个环节之间的事，站在单个环节上看不见。
+ * **不分页**——议程页要的是"有没有、有几处"这个结论，一页 20 条冲突里的
+ * 前 20 条没有意义；一个活动的环节人员在几千行量级，一次拉完即可。
+ */
+export const ListSegmentMemberConflictsInput = z.object({ activityId: id });
+
 export const AddSegmentMembersInput = z.object({
   segmentId: id,
   originType: SegmentEntryOrigin,

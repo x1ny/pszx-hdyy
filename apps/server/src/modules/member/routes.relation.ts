@@ -30,6 +30,7 @@ import {
   releaseSeatsByActivityMember,
   releaseSeatsBySegmentMembers,
 } from "../seating/cascade";
+import { findMemberTimeConflicts } from "./conflicts";
 import {
   createMemberInTx,
   ensureActivityMembers,
@@ -47,6 +48,7 @@ import {
   AddSegmentMembersInput,
   ListActivityMembersInput,
   ListProjectMembersInput,
+  ListSegmentMemberConflictsInput,
   ListSegmentMembersInput,
   RelationIdInput,
   RemoveActivityMemberInput,
@@ -698,6 +700,42 @@ export const segmentMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
     ]);
 
     return c.json(ok({ list, total: totalRows[0]?.total ?? 0 }));
+  })
+
+  /**
+   * 全活动的人员时间冲突（C-016 的"人员冲突"，只提示不阻断）。
+   *
+   * 一次把本活动所有环节人员连着环节时间捞回来，配对判定交给
+   * findMemberTimeConflicts——理由见 conflicts.ts 顶部。`segment_member.activityId`
+   * 那列冗余就是为这类"按活动汇总"的查询留的。
+   */
+  .post("/conflicts", jsonBody(ListSegmentMemberConflictsInput), async (c) => {
+    const { activityId } = c.req.valid("json");
+
+    const rows = await db
+      .select({
+        memberId: segmentMember.memberId,
+        memberName: member.name,
+        segmentId: activitySegment.id,
+        segmentName: activitySegment.name,
+        startTime: activitySegment.startTime,
+        endTime: activitySegment.endTime,
+      })
+      .from(segmentMember)
+      .innerJoin(member, eq(member.id, segmentMember.memberId))
+      .innerJoin(
+        activitySegment,
+        eq(activitySegment.id, segmentMember.segmentId),
+      )
+      .where(
+        and(
+          eq(segmentMember.activityId, activityId),
+          // 作废环节不占时间段，和同议程线的重叠校验口径一致。
+          eq(activitySegment.status, "active"),
+        ),
+      );
+
+    return c.json(ok({ list: findMemberTimeConflicts(rows) }));
   })
 
   .post("/add", jsonBody(AddSegmentMembersInput), async (c) => {
