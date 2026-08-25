@@ -88,6 +88,57 @@ const liveAssignment = isNull(seatAssignment.revokedAt);
 /** 未软删的位置。 */
 const liveSeat = isNull(segmentSeat.removedAt);
 
+/**
+ * 当前环节的排位候选人查询。
+ *
+ * 从 `activityMember` 出发也要用 inner join `segmentMember`：活动人员只是上游
+ * 范围，只有已经建立当前环节关系的人才允许出现在排位面板里。
+ */
+export const listCandidatesQuery = (
+  planId: number,
+  plan: { segmentId: number; activityId: number },
+  keyword?: string,
+) =>
+  db
+    .select({
+      activityMemberId: activityMember.id,
+      memberId: member.id,
+      name: member.name,
+      companyPosition: member.companyPosition,
+      mobile: member.mobile,
+      segmentMemberId: segmentMember.id,
+      takenSeatLabel: sql<string | null>`(
+        select ${segmentSeat.label} from ${seatAssignment}
+        join ${segmentSeat} on ${eq(segmentSeat.id, seatAssignment.segmentSeatId)}
+        where ${eq(seatAssignment.segmentMemberId, segmentMember.id)}
+          and ${eq(seatAssignment.planId, planId)}
+          and ${seatAssignment.revokedAt} is null
+        limit 1
+      )`.as("taken_seat_label"),
+    })
+    .from(activityMember)
+    .innerJoin(member, eq(member.id, activityMember.memberId))
+    .innerJoin(
+      segmentMember,
+      and(
+        eq(segmentMember.activityMemberId, activityMember.id),
+        eq(segmentMember.segmentId, plan.segmentId),
+      ),
+    )
+    .where(
+      and(
+        eq(activityMember.activityId, plan.activityId),
+        keyword
+          ? or(
+              ilike(member.name, `%${keyword}%`),
+              ilike(member.mobile, `%${keyword}%`),
+            )
+          : undefined,
+      ),
+    )
+    .orderBy(asc(member.name))
+    .limit(200);
+
 async function writeLog(
   tx: Tx,
   planId: number,
@@ -337,11 +388,10 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
   })
 
   /**
-   * 可以排进这个方案的人。
+   * 可以排进这个方案的人：只返回已经关联当前环节的人员。
    *
-   * 两个来源合成一份（§8）：**已经是本环节人员的**直接用；**只是活动人员的**
-   * 排上去时系统会自动补一条环节人员再建分配。前端在同一个抽屉里展示，用
-   * `segmentMemberId` 是否为空区分——为空的走 `assignActivityMember`。
+   * 排位方案按环节隔离，不能把同一活动中只参加其他环节的人员混进当前方案。
+   * 需要新增当前环节人员时，应先在环节人员管理中建立关系，再回到这里排位。
    *
    * 已占座的人标出来但不过滤掉：让人看见"他已经在 A3"比让他凭空消失有用。
    */
@@ -357,45 +407,7 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
       .where(eq(segmentSeatingPlan.id, planId));
     if (!plan) return c.json(notFound());
 
-    const rows = await db
-      .select({
-        activityMemberId: activityMember.id,
-        memberId: member.id,
-        name: member.name,
-        companyPosition: member.companyPosition,
-        mobile: member.mobile,
-        segmentMemberId: segmentMember.id,
-        takenSeatLabel: sql<string | null>`(
-          select ${segmentSeat.label} from ${seatAssignment}
-          join ${segmentSeat} on ${eq(segmentSeat.id, seatAssignment.segmentSeatId)}
-          where ${eq(seatAssignment.segmentMemberId, segmentMember.id)}
-            and ${eq(seatAssignment.planId, planId)}
-            and ${seatAssignment.revokedAt} is null
-          limit 1
-        )`.as("taken_seat_label"),
-      })
-      .from(activityMember)
-      .innerJoin(member, eq(member.id, activityMember.memberId))
-      .leftJoin(
-        segmentMember,
-        and(
-          eq(segmentMember.activityMemberId, activityMember.id),
-          eq(segmentMember.segmentId, plan.segmentId),
-        ),
-      )
-      .where(
-        and(
-          eq(activityMember.activityId, plan.activityId),
-          keyword
-            ? or(
-                ilike(member.name, `%${keyword}%`),
-                ilike(member.mobile, `%${keyword}%`),
-              )
-            : undefined,
-        ),
-      )
-      .orderBy(asc(member.name))
-      .limit(200);
+    const rows = await listCandidatesQuery(planId, plan, keyword);
 
     return c.json(ok({ list: rows }));
   })
@@ -637,7 +649,10 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
   })
 
   /**
-   * 排一个**还不是本环节人员**的活动人员：先补一条 `segment_member`，再建分配。
+   * 兼容旧客户端：排一个**还不是本环节人员**的活动人员，先补一条
+   * `segment_member`，再建分配。
+   *
+   * 当前 Web 管理端只展示当前环节人员，不再调用这个入口。
    *
    * 环节人员开关是关的也照补——那个开关本期只是声明（agenda/schema.ts 的原话：
    * "没有下游功能接上"），不影响排位能不能建关系。

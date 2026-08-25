@@ -21,7 +21,6 @@ import { cn } from "#/shared/lib/utils.ts";
 import { formatDateTime } from "../venue/-utils";
 import { SeatAssignPanel } from "./-components/seat-assign-panel";
 import {
-  assignActivityMemberToSeat,
   assignSeat,
   seatingKeys,
   seatingPlanQueryOptions,
@@ -127,16 +126,6 @@ function SeatingCanvasPage() {
       if (result.wasConfirmed) {
         toast.warning("这份排位已经确认发布过，改动后需要重新确认");
       }
-      invalidate();
-    },
-    onError: (error) => toast.error(error.message),
-  });
-
-  const assignActivityMemberMutation = useMutation({
-    mutationFn: (input: { seatId: number; activityMemberId: number }) =>
-      assignActivityMemberToSeat(planId, input.seatId, input.activityMemberId),
-    onSuccess: () => {
-      toast.success("已排位，并把该人员加入了本环节人员");
       invalidate();
     },
     onError: (error) => toast.error(error.message),
@@ -327,23 +316,12 @@ function SeatingCanvasPage() {
               seat={selectedSeat}
               assignment={selectedAssignment}
               readOnly={readOnly}
-              pending={
-                assignMutation.isPending ||
-                assignActivityMemberMutation.isPending ||
-                unassignMutation.isPending
-              }
+              pending={assignMutation.isPending || unassignMutation.isPending}
               onAssign={(segmentMemberId) =>
                 selectedSeat &&
                 assignMutation.mutate({
                   seatId: selectedSeat.id,
                   segmentMemberId,
-                })
-              }
-              onAssignActivityMember={(activityMemberId) =>
-                selectedSeat &&
-                assignActivityMemberMutation.mutate({
-                  seatId: selectedSeat.id,
-                  activityMemberId,
                 })
               }
               onUnassign={() =>

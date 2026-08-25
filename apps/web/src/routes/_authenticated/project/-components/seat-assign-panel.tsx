@@ -24,9 +24,8 @@ import {
  * unassign，一次都不碰画布保存。旧系统把两条揉成一条，于是每拖动一个座位都在
  * 重写全部人员绑定——那正是这份设计要避免的。
  *
- * 候选人来自两处，界面上不分栏：已经是本环节人员的直接排；只是活动人员的，
- * 排上去时系统自动补一条环节人员再建分配（§8）。用户不需要知道这个区别，
- * 但系统必须表达它——所以 `segmentMemberId` 为空的走另一个接口。
+ * 候选人只来自当前环节人员。活动人员需要先在环节人员管理中加入当前环节，
+ * 这里再使用其 `segmentMemberId` 排位，避免把其他环节的人员显示进来。
  */
 export function SeatAssignPanel({
   planId,
@@ -35,7 +34,6 @@ export function SeatAssignPanel({
   readOnly,
   pending,
   onAssign,
-  onAssignActivityMember,
   onUnassign,
 }: {
   planId: number;
@@ -44,7 +42,6 @@ export function SeatAssignPanel({
   readOnly: boolean;
   pending: boolean;
   onAssign: (segmentMemberId: number) => void;
-  onAssignActivityMember: (activityMemberId: number) => void;
   onUnassign: () => void;
 }) {
   const [keyword, setKeyword] = useState("");
@@ -153,11 +150,7 @@ export function SeatAssignPanel({
                     key={person.activityMemberId}
                     type="button"
                     disabled={pending || isHere}
-                    onClick={() =>
-                      person.segmentMemberId
-                        ? onAssign(person.segmentMemberId)
-                        : onAssignActivityMember(person.activityMemberId)
-                    }
+                    onClick={() => onAssign(person.segmentMemberId)}
                     className={cn(
                       "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
                       isHere
@@ -197,7 +190,7 @@ export function SeatAssignPanel({
             </div>
           ) : (
             <p className="py-6 text-center text-muted-foreground text-xs">
-              没有匹配的人员。人员来自本活动的活动人员，去「活动人员」里先加。
+              没有匹配的当前环节人员。请先到「环节人员」里添加。
             </p>
           )}
         </>

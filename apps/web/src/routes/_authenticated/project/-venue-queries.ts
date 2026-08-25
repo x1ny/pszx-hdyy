@@ -196,17 +196,6 @@ export const assignSeat = (
     }),
   );
 
-export const assignActivityMemberToSeat = (
-  planId: number,
-  segmentSeatId: number,
-  activityMemberId: number,
-) =>
-  unwrap(
-    api.api.seating.assignActivityMember.$post({
-      json: { planId, segmentSeatId, activityMemberId },
-    }),
-  );
-
 export const unassignSeat = (planId: number, segmentSeatId: number) =>
   unwrap(api.api.seating.unassign.$post({ json: { planId, segmentSeatId } }));
 
