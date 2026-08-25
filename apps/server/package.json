@@ -4,7 +4,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./client-type": "./src/client-type.ts"
+    "./client-type": "./src/client-type.ts",
+    "./dict": "./src/shared/dict/regions.ts"
   },
   "scripts": {
     "dev": "bun --env-file=../../.env --hot run src/index.ts",

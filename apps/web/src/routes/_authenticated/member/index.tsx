@@ -7,6 +7,7 @@ import { z } from "zod";
 import { MemberDetailDialog } from "#/features/member/member-detail-dialog.tsx";
 import {
   formatDateTime,
+  formatNativePlace,
   MEMBER_STATUS_CHIP,
   MEMBER_STATUS_DOT,
   MEMBER_STATUS_LABELS,
@@ -310,7 +311,12 @@ function MemberPage() {
                     {member.companyPosition || "-"}
                   </TableCell>
                   <TableCell>{member.countryRegion || "-"}</TableCell>
-                  <TableCell>{member.nativePlace || "-"}</TableCell>
+                  <TableCell>
+                    {formatNativePlace(
+                      member.nativeProvince,
+                      member.nativeCity,
+                    )}
+                  </TableCell>
                   <TableCell className="tabular-nums">
                     {maskPhone(member.mobile)}
                   </TableCell>

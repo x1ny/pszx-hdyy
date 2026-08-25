@@ -20,6 +20,17 @@ export const MEMBER_STATUS_DOT = {
   disabled: "bg-muted-foreground/40",
 } as const satisfies Record<MemberStatus, string>;
 
+/**
+ * 籍贯的显示串。
+ *
+ * 直接拼名字快照，不查字典——库里存的就是写入时的中文名（见 member/schema.ts）。
+ * 直辖市和港澳台没有市级，只显示省，所以这里是拼接而不是固定的"省 + 市"。
+ */
+export const formatNativePlace = (
+  province: string | null | undefined,
+  city: string | null | undefined,
+) => [province, city].filter(Boolean).join("") || "-";
+
 export const formatDateTime = (iso: string | null | undefined) => {
   if (!iso) return "-";
 

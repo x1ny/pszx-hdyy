@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  CHINA_CODE,
+  findCity,
+  findCountryRegion,
+  findProvince,
+} from "../../shared/dict/regions";
 import { PageInput } from "../../shared/pagination";
 import {
   MEMBER_GENDERS,
@@ -70,6 +76,66 @@ const idNumberRule = (idType?: string | null) => {
   }
 };
 
+/**
+ * 字典码。客户端只传码，名字由路由层查字典派生后写库（见 schema.ts 那段注释）。
+ */
+const dictCode = (label: string, exists: (code: string) => boolean) =>
+  z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => value || null)
+    .refine((value) => value === null || exists(value), `${label}不正确`);
+
+/**
+ * 国别与籍贯的交叉规则。前端会把这些状态做成禁用+清空，但**服务端才是权威**——
+ * 前端拦得住的组合，接口照样要拒。
+ */
+const validateRegion = (
+  value: {
+    countryRegionCode?: string | null;
+    nativeProvinceCode?: string | null;
+    nativeCityCode?: string | null;
+  },
+  ctx: z.RefinementCtx,
+) => {
+  const hasNativePlace = Boolean(
+    value.nativeProvinceCode || value.nativeCityCode,
+  );
+
+  // 籍贯只对中国籍开放。国别没填时也不收——不知道国别，就不知道这个字段适不适用。
+  if (hasNativePlace && value.countryRegionCode !== CHINA_CODE) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["nativeProvinceCode"],
+      message: value.countryRegionCode
+        ? "外籍无需填写籍贯"
+        : "请先选择国别/地区",
+    });
+    return;
+  }
+
+  if (value.nativeCityCode && !value.nativeProvinceCode) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["nativeProvinceCode"],
+      message: "请先选择省份",
+    });
+    return;
+  }
+
+  if (value.nativeCityCode) {
+    const city = findCity(value.nativeCityCode);
+    if (city && city.provinceCode !== value.nativeProvinceCode) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["nativeCityCode"],
+        message: "所选城市不属于该省份",
+      });
+    }
+  }
+};
+
 const validateIdNumber = (
   value: { idType?: string | null; idNumber?: string | null },
   ctx: z.RefinementCtx,
@@ -90,8 +156,13 @@ const MemberFields = z.object({
   name: required("姓名", 64),
   status: MemberStatusEnum.default("enabled"),
   gender: MemberGenderEnum.optional(),
-  countryRegion: optionalText("国别/地区", 64),
-  nativePlace: optionalText("籍贯", 128),
+  countryRegionCode: dictCode("国别/地区", (code) =>
+    Boolean(findCountryRegion(code)),
+  ),
+  nativeProvinceCode: dictCode("籍贯省份", (code) =>
+    Boolean(findProvince(code)),
+  ),
+  nativeCityCode: dictCode("籍贯城市", (code) => Boolean(findCity(code))),
   companyPosition: optionalText("企业（社会）职务", 255),
   idType: MemberIdTypeEnum.optional(),
   idNumber: optionalText("证件号码", 64),
@@ -115,9 +186,24 @@ const MemberFields = z.object({
   remark: optionalText("备注/说明", 2000),
 });
 
-export const CreateMemberInput = MemberFields.superRefine(validateIdNumber);
+/** 主档的两条跨字段规则合成一个 —— 链式 `.superRefine()` 在 extend/pick 之后不好拼。 */
+const validateMemberFields = (
+  value: {
+    idType?: string | null;
+    idNumber?: string | null;
+    countryRegionCode?: string | null;
+    nativeProvinceCode?: string | null;
+    nativeCityCode?: string | null;
+  },
+  ctx: z.RefinementCtx,
+) => {
+  validateIdNumber(value, ctx);
+  validateRegion(value, ctx);
+};
+
+export const CreateMemberInput = MemberFields.superRefine(validateMemberFields);
 export const UpdateMemberInput = MemberFields.extend({ id }).superRefine(
-  validateIdNumber,
+  validateMemberFields,
 );
 
 export const MemberIdInput = z.object({ id });

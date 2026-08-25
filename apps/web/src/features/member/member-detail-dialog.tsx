@@ -40,6 +40,7 @@ import {
   formatDateRange,
   formatDateTime,
   formatDateTimeRange,
+  formatNativePlace,
   MEMBER_STATUS_CHIP,
   MEMBER_STATUS_LABELS,
 } from "./utils.ts";
@@ -110,7 +111,12 @@ export function MemberDetailDialog({
                     {member.companyPosition || "-"}
                   </Row>
                   <Row label="国别 / 地区">{member.countryRegion || "-"}</Row>
-                  <Row label="籍贯">{member.nativePlace || "-"}</Row>
+                  <Row label="籍贯">
+                    {formatNativePlace(
+                      member.nativeProvince,
+                      member.nativeCity,
+                    )}
+                  </Row>
                   <Row label="启用状态">
                     <StatusBadge status={member.status} />
                   </Row>

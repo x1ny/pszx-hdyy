@@ -49,6 +49,40 @@ const COMPANY_POSITIONS = [
 // 反推出来的（见 modules/member 的来源筛选），只有一种来源等于没测。
 const SOURCES = ["手工添加", "项目指派", "报名", "环节引用"];
 
+// 籍贯的四种形态，刻意各不相同：普通省市、直辖市（字典里没有市级，市留空）、
+// 只选省不选市（合法，见 modules/member/validation.ts 的 validateRegion）。少一种
+// 形态，展示层"省 + 市"的拼接就有一条分支没被看过。
+const NATIVE_PLACES = [
+  {
+    nativeProvinceCode: "330000",
+    nativeProvince: "浙江省",
+    nativeCityCode: "330100",
+    nativeCity: "杭州市",
+  },
+  {
+    nativeProvinceCode: "350000",
+    nativeProvince: "福建省",
+    nativeCityCode: "350500",
+    nativeCity: "泉州市",
+  },
+  {
+    nativeProvinceCode: "110000",
+    nativeProvince: "北京市",
+    nativeCityCode: null,
+    nativeCity: null,
+  },
+  {
+    nativeProvinceCode: "440000",
+    nativeProvince: "广东省",
+    nativeCityCode: null,
+    nativeCity: null,
+  },
+];
+
+// 外籍那一位。籍贯必须为空——服务端会拒绝"非中国籍 + 有籍贯"的组合，
+// 种子里放一条正好让这条联动规则在开发环境里一直有个活样本。
+const FOREIGN_INDEX = 19;
+
 export const seed: SeedFn = async (db, { userId }) => {
   const audit = { createdBy: userId, updatedBy: userId };
 
@@ -58,7 +92,20 @@ export const seed: SeedFn = async (db, { userId }) => {
       name,
       gender: index % 3 === 0 ? ("女" as const) : ("男" as const),
       companyPosition: COMPANY_POSITIONS[index % COMPANY_POSITIONS.length],
-      countryRegion: "中国",
+      ...(index === FOREIGN_INDEX
+        ? {
+            countryRegionCode: "US",
+            countryRegion: "美国",
+            nativeProvinceCode: null,
+            nativeProvince: null,
+            nativeCityCode: null,
+            nativeCity: null,
+          }
+        : {
+            countryRegionCode: "CN",
+            countryRegion: "中国",
+            ...NATIVE_PLACES[index % NATIVE_PLACES.length],
+          }),
       idType: "身份证" as const,
       idNumber: `3301${String(19850101 + index).padStart(8, "0")}${String(index + 1).padStart(4, "0")}`,
       mobile: `138${String(10000000 + index).padStart(8, "0")}`,

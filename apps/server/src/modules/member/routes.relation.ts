@@ -446,8 +446,10 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
         memberId: member.id,
         name: member.name,
         gender: member.gender,
+        // 只取名字快照：这个详情是纯展示，不做回填，用不上码。
         countryRegion: member.countryRegion,
-        nativePlace: member.nativePlace,
+        nativeProvince: member.nativeProvince,
+        nativeCity: member.nativeCity,
         companyPosition: member.companyPosition,
         idType: member.idType,
         idNumber: member.idNumber,

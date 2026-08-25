@@ -1,6 +1,11 @@
 import { and, asc, count, desc, eq, ilike, ne, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../../infra/db";
+import {
+  findCity,
+  findCountryRegion,
+  findProvince,
+} from "../../shared/dict/regions";
 import { toLimitOffset } from "../../shared/pagination";
 import { err, ok } from "../../shared/result";
 import { jsonBody } from "../../shared/validate";
@@ -9,8 +14,8 @@ import { type AuthedVariables, requireUser } from "../auth";
 import { activity, project } from "../project/schema";
 import {
   activityMember,
-  member,
   type MemberIdType,
+  member,
   projectMember,
   segmentMember,
 } from "./schema";
@@ -29,8 +34,12 @@ const memberFields = {
   name: member.name,
   gender: member.gender,
   companyPosition: member.companyPosition,
+  countryRegionCode: member.countryRegionCode,
   countryRegion: member.countryRegion,
-  nativePlace: member.nativePlace,
+  nativeProvinceCode: member.nativeProvinceCode,
+  nativeProvince: member.nativeProvince,
+  nativeCityCode: member.nativeCityCode,
+  nativeCity: member.nativeCity,
   idType: member.idType,
   idNumber: member.idNumber,
   mobile: member.mobile,
@@ -42,6 +51,22 @@ const memberFields = {
   createdAt: member.createdAt,
   updatedAt: member.updatedAt,
 };
+
+/**
+ * 把客户端传来的字典码翻成名字快照。
+ *
+ * 客户端**只传码**，名字一律在这里派生——两样都收，迟早出现码是 US、名字是
+ * "中国"的行。码已经过 validation 的白名单校验，查不到就是 null。
+ */
+const regionNames = (input: {
+  countryRegionCode: string | null;
+  nativeProvinceCode: string | null;
+  nativeCityCode: string | null;
+}) => ({
+  countryRegion: findCountryRegion(input.countryRegionCode)?.name ?? null,
+  nativeProvince: findProvince(input.nativeProvinceCode)?.name ?? null,
+  nativeCity: findCity(input.nativeCityCode)?.name ?? null,
+});
 
 /**
  * 读取用的投影：多一个 activityCount。
@@ -88,7 +113,9 @@ const validationError = (message: string) =>
 const isForeignKeyViolation = (error: unknown): boolean => {
   if (typeof error !== "object" || error === null) return false;
   const { code, cause } = error as { code?: unknown; cause?: unknown };
-  return code === "23503" || (cause !== undefined && isForeignKeyViolation(cause));
+  return (
+    code === "23503" || (cause !== undefined && isForeignKeyViolation(cause))
+  );
 };
 
 /**
@@ -340,7 +367,12 @@ export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
     const userId = c.get("authedUser").id;
     const [row] = await db
       .insert(member)
-      .values({ ...input, createdBy: userId, updatedBy: userId })
+      .values({
+        ...input,
+        ...regionNames(input),
+        createdBy: userId,
+        updatedBy: userId,
+      })
       .returning(memberFields);
 
     return c.json(ok(row));
@@ -354,7 +386,11 @@ export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
 
     const [row] = await db
       .update(member)
-      .set({ ...input, updatedBy: c.get("authedUser").id })
+      .set({
+        ...input,
+        ...regionNames(input),
+        updatedBy: c.get("authedUser").id,
+      })
       .where(eq(member.id, id))
       .returning(memberFields);
 
@@ -409,7 +445,9 @@ export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
       // （Postgres 23503）统一翻成业务失败：新模块加了外键也不会变成 500。
       if (isForeignKeyViolation(error)) {
         return c.json(
-          validationError("该人员已被其他业务引用，不能删除；如需停用请改用禁用"),
+          validationError(
+            "该人员已被其他业务引用，不能删除；如需停用请改用禁用",
+          ),
         );
       }
       throw error;

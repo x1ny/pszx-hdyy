@@ -87,8 +87,28 @@ export const member = pgTable(
     name: text("name").notNull(),
     gender: text("gender").$type<MemberGender>(),
     companyPosition: text("company_position"),
+    /**
+     * 国别/地区与籍贯：**码是权威，名字是写入时的快照。**
+     *
+     * 两样都存，是因为两条纯路线各有一个真实代价：只存码，三处展示（人员列表、
+     * 人员详情、活动人员详情）全要走字典映射，列表页因此得常驻一份字典；只存名，
+     * 编辑回填要拿库里的字符串反查字典，对不上的行下拉就是空的——用户点一下保存，
+     * 原值被静默清掉。存码解决回填，存名让展示继续傻打字符串。
+     *
+     * 代价是一条必须守住的约定：**任何查询、筛选、去重都走 `*_code`**，名字列
+     * 只用于显示。字典改名时跑一次回填脚本把新名字刷进快照列即可（几年一次）。
+     *
+     * 客户端只传码，名字由服务端查 `shared/dict/regions.ts` 派生后写入——两样都
+     * 让客户端传，迟早出现码是 US、名字是"中国"的行。
+     *
+     * 籍贯拆成省、市两级：直辖市和港澳台没有市级（字典里就没有），籍贯选到省即止。
+     */
+    countryRegionCode: text("country_region_code"),
     countryRegion: text("country_region"),
-    nativePlace: text("native_place"),
+    nativeProvinceCode: text("native_province_code"),
+    nativeProvince: text("native_province"),
+    nativeCityCode: text("native_city_code"),
+    nativeCity: text("native_city"),
     idType: text("id_type").$type<MemberIdType>(),
     idNumber: text("id_number"),
     mobile: text("mobile"),

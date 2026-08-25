@@ -1,4 +1,11 @@
-import { useForm } from "@tanstack/react-form";
+import {
+  CHINA_CODE,
+  COUNTRY_REGIONS,
+  type CountryRegion,
+  citiesOfProvince,
+  PROVINCES,
+} from "@repo/server/dict";
+import { useForm, useStore } from "@tanstack/react-form";
 import { LoaderCircleIcon } from "lucide-react";
 import { z } from "zod";
 import {
@@ -6,6 +13,14 @@ import {
   MEMBER_STATUS_VALUES,
 } from "#/features/member/utils.ts";
 import { Button } from "#/shared/components/ui/button.tsx";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "#/shared/components/ui/combobox.tsx";
 import {
   Dialog,
   DialogBody,
@@ -17,6 +32,7 @@ import {
 } from "#/shared/components/ui/dialog.tsx";
 import {
   Field,
+  FieldDescription,
   FieldError,
   FieldLabel,
 } from "#/shared/components/ui/field.tsx";
@@ -42,8 +58,12 @@ const MemberFormSchema = z
     name: z.string().trim().min(1, "姓名不能为空").max(64, "姓名过长"),
     status: z.enum(MEMBER_STATUS_VALUES),
     gender: z.enum(MEMBER_GENDER_VALUES).or(z.literal("")).optional(),
-    countryRegion: z.string().trim().max(64, "国别/地区过长").optional(),
-    nativePlace: z.string().trim().max(128, "籍贯过长").optional(),
+    // 三个字典码。不在这里重写服务端那套交叉规则（外籍不能有籍贯、市必须属于
+    // 省）——它们在 UI 上是靠禁用和自动清空做掉的，用户点不出非法组合；真绕过
+    // 前端打接口时，validation.ts 的 validateRegion 会拒。
+    countryRegionCode: z.string().optional(),
+    nativeProvinceCode: z.string().optional(),
+    nativeCityCode: z.string().optional(),
     companyPosition: z
       .string()
       .trim()
@@ -147,8 +167,12 @@ function MemberForm({
     name: member?.name ?? "",
     status: member?.status ?? "enabled",
     gender: member?.gender ?? "",
-    countryRegion: member?.countryRegion ?? "",
-    nativePlace: member?.nativePlace ?? "",
+    // 新增默认"中国"：服务对象绝大多数是中国籍，这个默认值省掉大多数人的一次
+    // 选择，而且它是**可见的**（下拉里明摆着写着中国），选错很难不察觉。编辑
+    // 存量时不给默认值——那会把"没填"悄悄改写成"中国"。
+    countryRegionCode: member ? (member.countryRegionCode ?? "") : CHINA_CODE,
+    nativeProvinceCode: member?.nativeProvinceCode ?? "",
+    nativeCityCode: member?.nativeCityCode ?? "",
     companyPosition: member?.companyPosition ?? "",
     idType: member?.idType ?? "",
     idNumber: member?.idNumber ?? "",
@@ -167,6 +191,31 @@ function MemberForm({
     },
     onSubmit: ({ value }) => onSubmit(value),
   });
+
+  const countryRegionCode = useStore(
+    form.store,
+    (state) => state.values.countryRegionCode,
+  );
+  const nativeProvinceCode = useStore(
+    form.store,
+    (state) => state.values.nativeProvinceCode,
+  );
+
+  // 籍贯完全挂在国别下面：非中国籍不适用，国别没填时也不知道适不适用。
+  const nativePlaceDisabled = countryRegionCode !== CHINA_CODE;
+  const nativePlaceHint = countryRegionCode
+    ? nativePlaceDisabled
+      ? "外籍无需填写"
+      : null
+    : "请先选择国别 / 地区";
+
+  // 直辖市和港澳台在字典里就没有市级，这里自然是空数组，市那一栏跟着置灰。
+  const cities = citiesOfProvince(nativeProvinceCode);
+  const cityItems = Object.fromEntries(
+    cities.map((city) => [city.code, city.name]),
+  );
+  const cityPlaceholder =
+    nativeProvinceCode && cities.length === 0 ? "该地区无市级" : "请选择城市";
 
   return (
     <form
@@ -259,21 +308,92 @@ function MemberForm({
             )}
           </form.Field>
 
-          <form.Field name="countryRegion">
+          <form.Field name="countryRegionCode">
             {(field) => (
-              <TextField
-                field={field}
-                label="国别 / 地区"
-                placeholder="请输入国别 / 地区"
-              />
+              <Field>
+                <FieldLabel>国别 / 地区</FieldLabel>
+                <CountryRegionCombobox
+                  value={field.state.value ?? ""}
+                  invalid={hasError(field)}
+                  onChange={(code) => {
+                    field.handleChange(code);
+                    field.handleBlur();
+                    // 切成外籍（或清空国别）时立刻清掉已选的省市。留着的话屏幕上会
+                    // 同时出现灰掉的"浙江省 杭州市"和"外籍无需填写"，自相矛盾。
+                    if (code !== CHINA_CODE) {
+                      form.setFieldValue("nativeProvinceCode", "");
+                      form.setFieldValue("nativeCityCode", "");
+                    }
+                  }}
+                />
+                <FieldError errors={fieldErrors(field)} />
+              </Field>
             )}
           </form.Field>
 
-          <form.Field name="nativePlace">
-            {(field) => (
-              <TextField field={field} label="籍贯" placeholder="请输入籍贯" />
+          {/* 籍贯占满一行：标签下面是省、市两个下拉，跟设计稿一致。 */}
+          <Field className="sm:col-span-2">
+            <FieldLabel>籍贯</FieldLabel>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <form.Field name="nativeProvinceCode">
+                {(field) => (
+                  <Select
+                    items={PROVINCE_ITEMS}
+                    value={field.state.value || null}
+                    disabled={nativePlaceDisabled}
+                    onValueChange={(value) => {
+                      field.handleChange(value ?? "");
+                      field.handleBlur();
+                      // 换省必须清市，否则会留下"浙江省 + 泉州市"这种组合，
+                      // 服务端会拒（validateRegion 的"市不属于该省份"）。
+                      form.setFieldValue("nativeCityCode", "");
+                    }}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="请选择省份" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={null}>不填写</SelectItem>
+                      {PROVINCES.map((province) => (
+                        <SelectItem key={province.code} value={province.code}>
+                          {province.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </form.Field>
+
+              <form.Field name="nativeCityCode">
+                {(field) => (
+                  <Select
+                    items={cityItems}
+                    value={field.state.value || null}
+                    disabled={nativePlaceDisabled || cities.length === 0}
+                    onValueChange={(value) => {
+                      field.handleChange(value ?? "");
+                      field.handleBlur();
+                    }}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder={cityPlaceholder} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={null}>不填写</SelectItem>
+                      {cities.map((city) => (
+                        <SelectItem key={city.code} value={city.code}>
+                          {city.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </form.Field>
+            </div>
+            {nativePlaceHint && (
+              <FieldDescription>{nativePlaceHint}</FieldDescription>
             )}
-          </form.Field>
+          </Field>
 
           <form.Field name="companyPosition">
             {(field) => (
@@ -391,6 +511,73 @@ function MemberForm({
         </Button>
       </DialogFooter>
     </form>
+  );
+}
+
+const PROVINCE_ITEMS = Object.fromEntries(
+  PROVINCES.map((province) => [province.code, province.name]),
+);
+
+/**
+ * 国别 / 地区选择器。
+ *
+ * 246 项的列表用原生下拉翻不动，必须能搜。搜索**同时匹配中文名和 alpha-2 码**：
+ * 输 `US` 和输"美国"都能定位到美国，这么长的列表里码往往是更快的输入路径，而且
+ * 它顺带让人看见这个字段是有标准的。码只用于显示和搜索——落库的是码本身，显示用
+ * 的名字由服务端查同一份字典派生。
+ *
+ * 清空走输入框里的 ✕（`showClear`），不是列表里的"不填写"项——后者在这个组件上
+ * 根本选不中，见 ui/combobox.tsx 里 ComboboxClear 那段注释。所以这个下拉的清空
+ * 方式跟同一张表单里的性别、证件类型不一样，是组件差异逼出来的。
+ */
+function CountryRegionCombobox({
+  value,
+  invalid,
+  onChange,
+}: {
+  value: string;
+  invalid: boolean;
+  onChange: (code: string) => void;
+}) {
+  const selected = value
+    ? (COUNTRY_REGIONS.find((item) => item.code === value) ?? null)
+    : null;
+
+  return (
+    <Combobox
+      items={COUNTRY_REGIONS}
+      value={selected}
+      onValueChange={(item: CountryRegion | null) => onChange(item?.code ?? "")}
+      itemToStringLabel={(item: CountryRegion) => item.name}
+      filter={(item: CountryRegion, query: string) => {
+        const keyword = query.trim().toLowerCase();
+        if (!keyword) return true;
+        return (
+          item.name.includes(query.trim()) ||
+          item.code.toLowerCase().includes(keyword)
+        );
+      }}
+    >
+      <ComboboxInput
+        placeholder="请选择国别 / 地区"
+        aria-invalid={invalid}
+        className="w-full"
+        showClear
+      />
+      <ComboboxContent>
+        <ComboboxEmpty>没有匹配的国别 / 地区</ComboboxEmpty>
+        <ComboboxList>
+          {(item: CountryRegion) => (
+            <ComboboxItem key={item.code} value={item}>
+              <span className="w-6 shrink-0 text-muted-foreground text-xs">
+                {item.code}
+              </span>
+              {item.name}
+            </ComboboxItem>
+          )}
+        </ComboboxList>
+      </ComboboxContent>
+    </Combobox>
   );
 }
 

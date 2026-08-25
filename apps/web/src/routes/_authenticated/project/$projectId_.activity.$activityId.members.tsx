@@ -28,6 +28,7 @@ import {
   removeActivityMember,
   updateActivityMember,
 } from "#/features/member/relation-queries.ts";
+import { formatNativePlace } from "#/features/member/utils.ts";
 import {
   FilterActions,
   FilterBar,
@@ -740,7 +741,7 @@ function ActivityMemberDetailContent({ id }: { id: number }) {
             {displayValue(detail.countryRegion)}
           </DetailField>
           <DetailField label="籍贯">
-            {displayValue(detail.nativePlace)}
+            {formatNativePlace(detail.nativeProvince, detail.nativeCity)}
           </DetailField>
           <DetailField label="职务">
             {displayValue(detail.companyPosition)}

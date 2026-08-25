@@ -1,19 +1,45 @@
 "use client"
 
 import { Combobox as ComboboxPrimitive } from "@base-ui/react/combobox"
-import { CheckIcon, ChevronDownIcon } from "lucide-react"
+import { CheckIcon, ChevronDownIcon, XIcon } from "lucide-react"
 
 import { cn } from "#/shared/lib/utils.ts"
 
 const Combobox = ComboboxPrimitive.Root
 
+/**
+ * 清空按钮。只在有值时显示（visible 状态由 base-ui 自己管）。
+ *
+ * 相对 shadcn 原版多出来的一个部件。清空**不能**做成列表里的一个“不填写”项——
+ * 试过，base-ui 不把这种项当成可选中的值，Enter 下去没反应，输入框里还留着
+ * “不填写”当选中值显示。这个部件才是这个组件库给的清空方式。
+ */
+function ComboboxClear({ className, ...props }: ComboboxPrimitive.Clear.Props) {
+  return (
+    <ComboboxPrimitive.Clear
+      data-slot="combobox-clear"
+      type="button"
+      aria-label="清空"
+      className={cn(
+        "absolute top-1/2 right-8 flex size-7 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 [&_svg:not([class*='size-'])]:size-4",
+        className
+      )}
+      {...props}
+    >
+      <XIcon />
+    </ComboboxPrimitive.Clear>
+  )
+}
+
 function ComboboxInput({
   className,
   disabled = false,
   showTrigger = true,
+  showClear = false,
   ...props
 }: ComboboxPrimitive.Input.Props & {
   showTrigger?: boolean
+  showClear?: boolean
 }) {
   return (
     <div className={cn("relative", className)}>
@@ -23,6 +49,7 @@ function ComboboxInput({
         className="h-9 w-full min-w-0 rounded-md border border-input bg-transparent py-1 pr-9 pl-2.5 text-base shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40"
         {...props}
       />
+      {showClear ? <ComboboxClear disabled={disabled} /> : null}
       {showTrigger ? (
         <ComboboxPrimitive.Trigger
           data-slot="combobox-trigger"
@@ -180,6 +207,7 @@ function ComboboxValue({ ...props }: ComboboxPrimitive.Value.Props) {
 
 export {
   Combobox,
+  ComboboxClear,
   ComboboxContent,
   ComboboxEmpty,
   ComboboxGroup,

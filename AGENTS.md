@@ -140,6 +140,7 @@ bun run typecheck && bun run test
 - 需要登录的模块在路由链头上挂 `modules/auth` 的 `requireUser`，然后用 `c.get("authedUser")`（非空），不要每个 handler 里各写一遍 `c.get("user")` 判空。**`.use(requireUser)` 的作用域就是模块自己的前缀**（`index.ts` 里 `.route("/api/<模块>", xxxRoutes)` 决定的），不依赖链上其他模块的注册顺序——`file` 模块刻意不挂 `requireUser`，靠的正是这一点，而不是"排在前面就没事"。
 - 路由必须**接在链上**（`app.post(...).post(...)`），单独写 `app.post(...)` 不会进 `AppType`
 - `apps/web` 只用 `import type` 引 `@repo/server`，**绝不 runtime import** —— 服务端代码不能进浏览器包
+  - **唯一的 runtime 例外是 `@repo/server/dict`**（`apps/server/src/shared/dict/`，目前只有 `regions.ts`：ISO 3166 国别 + GB/T 2260 省市）。这条规则的**理由**是"从根 import 会顺着 `index.ts → infra/db → pg` 把服务端依赖拽进浏览器包"，而 dict 下的文件**零 import、纯数据**，这个理由不成立。开这个口子是因为另外两条路都更贵：前后端各存一份（400 多条数据，靠纪律同步，迟早漂移）、或让前端走接口拉（每个用字典的页面多一次异步）。**代价是 `src/shared/dict/**` 里从此不许出现任何 `import`**——加一行就把这个例外的前提毁了，而且不会有任何报错提示你。新增字典文件时沿用这条约束，别往里放需要 db、需要 env 的东西。
 - 客户端用 `apps/server/src/client-type.ts` 导出的 `hcWithType`，不要直接用 `hc`——前者把类型计算挪到编译期，路由多了以后 IDE 不会变卡（[Hono 官方的 known issue](https://hono.dev/docs/guides/rpc#using-rpc-with-larger-applications)）
 - **不要引入 tRPC 或 oRPC**，这是明确讨论过否掉的方向,不要因为"更方便"就重新引入
 
