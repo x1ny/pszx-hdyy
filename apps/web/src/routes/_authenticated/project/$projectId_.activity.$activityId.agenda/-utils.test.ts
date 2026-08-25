@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { AgendaLine, Segment } from "./-queries";
-import { buildAgendaTimeline, buildSequenceLabels } from "./-utils";
+import {
+  buildAgendaTimeline,
+  buildSequenceLabels,
+  formatSegmentRange,
+  formatTimelineBlockRange,
+} from "./-utils";
 
 // 时间轴是这个模块唯一有真实算法的地方，也是唯一不点页面就能验证的地方。
 // 用例都写成本地时区的字面时间，函数内部也按本地时区分自然日，所以不受
@@ -197,6 +202,18 @@ describe("buildAgendaTimeline", () => {
     expect(blocks[2].continuesNextDay).toBe(false);
     expect(blocks[2].leftPct).toBe(0);
     expect(days[2].carryOverCount).toBe(1);
+
+    // 时间轴续接块只把卡片起点改成当天 00:00，环节的完整时间仍供详情/编辑使用。
+    expect(formatTimelineBlockRange(blocks[0].segment, blocks[0])).toMatch(
+      /^22:00 - .* 09:00$/,
+    );
+    expect(formatTimelineBlockRange(blocks[1].segment, blocks[1])).toMatch(
+      /^00:00 - .* 09:00$/,
+    );
+    expect(formatTimelineBlockRange(blocks[2].segment, blocks[2])).toMatch(
+      /^00:00 - 09:00$/,
+    );
+    expect(formatSegmentRange(blocks[2].segment)).toMatch(/^22:00 - .* 09:00$/);
   });
 
   it("只被跨日环节覆盖、当天没有新环节开始的日子照样出卡片", () => {

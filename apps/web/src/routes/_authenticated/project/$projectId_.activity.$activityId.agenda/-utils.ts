@@ -82,6 +82,13 @@ const localDayKey = (date: Date) =>
 const startOfLocalDay = (date: Date) =>
   new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 
+const formatRange = (start: Date, end: Date) => {
+  const sameDay = localDayKey(start) === localDayKey(end);
+  return sameDay
+    ? `${formatTime(start)} - ${formatTime(end)}`
+    : `${formatTime(start)} - ${dayFormat.format(end)} ${formatTime(end)}`;
+};
+
 /**
  * 同一天内的 "09:00 - 10:30"；跨日时把日期一起带上。
  *
@@ -92,12 +99,7 @@ export const formatSegmentRange = (segment: {
   startTime: string;
   endTime: string;
 }) => {
-  const start = new Date(segment.startTime);
-  const end = new Date(segment.endTime);
-  const sameDay = localDayKey(start) === localDayKey(end);
-  return sameDay
-    ? `${formatTime(start)} - ${formatTime(end)}`
-    : `${formatTime(start)} - ${dayFormat.format(end)} ${formatTime(end)}`;
+  return formatRange(new Date(segment.startTime), new Date(segment.endTime));
 };
 
 // ---------------------------------------------------------------------------
@@ -151,10 +153,29 @@ export type TimelineBlock = {
   segment: Segment;
   leftPct: number;
   widthPct: number;
+  /** 该块所在自然日的零点，跨日续接块的展示起点使用它（即当天 00:00）。 */
+  dayStartMs: number;
   /** 环节从前一天延续过来：当天看到的开头不是它真正的开始时间 */
   continuesFromPrevDay: boolean;
   /** 环节还要延续到后面：当天看到的结尾不是它真正的结束时间 */
   continuesNextDay: boolean;
+};
+
+/**
+ * 时间轴卡片的起止时间。
+ *
+ * 续接到当天的块从当天 00:00 开始展示，避免第二天仍显示前一天的原始开始
+ * 时间造成歧义；卡片里的名称、类型、地点等信息仍然来自同一个 segment。列表、
+ * 详情和编辑表单继续使用 formatSegmentRange() 展示环节的完整真实时间。
+ */
+export const formatTimelineBlockRange = (
+  segment: Pick<Segment, "startTime" | "endTime">,
+  block: Pick<TimelineBlock, "dayStartMs" | "continuesFromPrevDay">,
+) => {
+  const start = block.continuesFromPrevDay
+    ? new Date(block.dayStartMs)
+    : new Date(segment.startTime);
+  return formatRange(start, new Date(segment.endTime));
 };
 
 export type TimelineLane = {
@@ -400,6 +421,7 @@ function packRows(
       leftPct: pct(item.visibleStartMs),
       // 零时长环节宽度就是 0，靠 CSS min-width 撑出可点击的宽度。
       widthPct: Math.max(pct(item.visibleEndMs) - pct(item.visibleStartMs), 0),
+      dayStartMs: item.dayStartMs,
       continuesFromPrevDay: item.continuesFromPrevDay,
       continuesNextDay: item.continuesNextDay,
     };

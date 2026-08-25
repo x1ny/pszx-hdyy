@@ -11,7 +11,7 @@ import { cn } from "#/shared/lib/utils.ts";
 import type { PlanStatus } from "../../-venue-queries";
 import type { Segment } from "../-queries";
 import {
-  formatSegmentRange,
+  formatTimelineBlockRange,
   lineLabel,
   SEGMENT_TYPE_LABELS,
   type TimelineDay,
@@ -135,8 +135,8 @@ export function AgendaTimeline({
                                 key={segment.id}
                                 type="button"
                                 onClick={() => onSelect(segment)}
-                                aria-label={`${segment.name}，${formatSegmentRange(segment)}${block.continuesFromPrevDay ? "，从前一天延续" : ""}`}
-                                title={`${segment.name} ${formatSegmentRange(segment)}`}
+                                aria-label={`${segment.name}，${formatTimelineBlockRange(segment, block)}${block.continuesFromPrevDay ? "，从前一天延续" : ""}`}
+                                title={`${segment.name} ${formatTimelineBlockRange(segment, block)}`}
                                 className={cn(
                                   "absolute inset-y-0 flex min-w-28 cursor-pointer flex-col justify-center overflow-hidden rounded-md border px-1.5 py-1.5 text-left transition-colors",
                                   lane.line.lineType === "main"
@@ -163,11 +163,9 @@ export function AgendaTimeline({
                                   )}
                                   {segment.name}
                                 </span>
-                                {/* 始终写环节的真实起止：跨日时 formatSegmentRange
-                                    会带上结束日期，所以每一天看到的时间信息一致，
-                                    也不会再出现跨两天却标"次日"的错 */}
+                                {/* 续接日从当天 00:00 展示，环节列表/详情仍保留真实起止。 */}
                                 <span className="truncate text-[11px] text-muted-foreground leading-4 tabular-nums">
-                                  {formatSegmentRange(segment)}
+                                  {formatTimelineBlockRange(segment, block)}
                                 </span>
                                 <span className="truncate text-[11px] text-muted-foreground leading-4">
                                   {SEGMENT_TYPE_LABELS[segment.segmentType]}
