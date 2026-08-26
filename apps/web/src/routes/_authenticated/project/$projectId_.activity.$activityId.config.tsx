@@ -1,17 +1,12 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  CircleCheckIcon,
-  CircleDashedIcon,
-  CircleDotIcon,
-  ConstructionIcon,
-} from "lucide-react";
+import type { InferResponseType } from "hono/client";
+import { CircleCheckIcon, CircleDashedIcon, CircleDotIcon } from "lucide-react";
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import { buttonVariants } from "#/shared/components/ui/button.tsx";
 import { Skeleton } from "#/shared/components/ui/skeleton.tsx";
 import { type ApiData, api, unwrap } from "#/shared/lib/api";
 import { cn } from "#/shared/lib/utils.ts";
-import type { InferResponseType } from "hono/client";
 
 type ConfigStatus = ApiData<
   InferResponseType<typeof api.api.activityConfig.status.$post>
@@ -51,11 +46,6 @@ const STATUS_META = {
     label: "不适用",
     chip: "border-border bg-muted text-muted-foreground",
     icon: CircleDashedIcon,
-  },
-  module_pending: {
-    label: "待建设",
-    chip: "border-border bg-muted text-muted-foreground",
-    icon: ConstructionIcon,
   },
 } as const satisfies Record<
   ItemStatus,
@@ -160,6 +150,48 @@ function ConfigOverviewTab() {
 }
 
 /**
+ * 标签跳转表。
+ *
+ * 路由写成字面量而不是 `to={`.../${item.tab}`}`——TanStack Router 的 `to` 要的是
+ * 字面量路由，拼出来的字符串拿不到类型检查，改路由时不会报错。
+ *
+ * 早先是每个标签一个 `if` 分支各返回一个 `<Link>`，三个时还好；场地、排位、邀请函
+ * 接进来变成六个，就是六十行逐字重复的 JSX 了。这六条路由的 params 形状完全相同，
+ * 所以塌成一张表 + 一个 `<Link>`，字面量类型靠 `as const` 保住。
+ */
+const TAB_ENTRIES = {
+  agenda: {
+    to: "/project/$projectId/activity/$activityId/agenda",
+    label: "进入议程 / 环节",
+  },
+  members: {
+    to: "/project/$projectId/activity/$activityId/members",
+    label: "进入活动人员",
+  },
+  resources: {
+    to: "/project/$projectId/activity/$activityId/resources",
+    label: "进入资源需求",
+  },
+  venue: {
+    to: "/project/$projectId/activity/$activityId/venue",
+    label: "进入场地空间",
+  },
+  seating: {
+    to: "/project/$projectId/activity/$activityId/seating",
+    label: "进入排位",
+  },
+  invitations: {
+    to: "/project/$projectId/activity/$activityId/invitations",
+    label: "进入邀请函",
+  },
+} as const;
+
+type TabKey = keyof typeof TAB_ENTRIES;
+
+const isTabKey = (tab: string | null): tab is TabKey =>
+  tab !== null && tab in TAB_ENTRIES;
+
+/**
  * 跳转按钮用实心蓝（`default` 变体 = `bg-primary`）。
  *
  * 这里不走 crud-page-guide 里"行内操作用 ghost + text-primary"那条：那条针对
@@ -181,7 +213,7 @@ function ItemRow({
 }) {
   const meta = STATUS_META[item.status];
   const Icon = meta.icon;
-  const muted = item.status === "not_applicable" || item.status === "module_pending";
+  const muted = item.status === "not_applicable";
 
   return (
     <div
@@ -213,26 +245,16 @@ function ItemRow({
         )}
       </div>
 
-      {/* tab 为 null 的项要么没有对应页面（基础信息在活动概览里改），要么模块
-          还没建成——这时不给一个点了没反应的按钮 */}
-      {item.tab === "agenda" && (
-        <TabLink to="agenda" projectId={projectId} activityId={activityIdParam}>
-          进入议程 / 环节
-        </TabLink>
-      )}
-      {item.tab === "members" && (
-        <TabLink to="members" projectId={projectId} activityId={activityIdParam}>
-          进入活动人员
-        </TabLink>
-      )}
-      {item.tab === "resources" && (
-        <TabLink
-          to="resources"
-          projectId={projectId}
-          activityId={activityIdParam}
+      {/* tab 为 null 的项没有对应的标签页——基础信息在活动概览里改，那条单独
+          写在下面。不给一个点了没反应的按钮。 */}
+      {isTabKey(item.tab) && (
+        <Link
+          to={TAB_ENTRIES[item.tab].to}
+          params={{ projectId, activityId: activityIdParam }}
+          className={ENTRY_LINK_CLASS}
         >
-          进入资源需求
-        </TabLink>
+          {TAB_ENTRIES[item.tab].label}
+        </Link>
       )}
       {item.key === "basic" && item.status === "missing" && (
         <Link
@@ -244,56 +266,5 @@ function ItemRow({
         </Link>
       )}
     </div>
-  );
-}
-
-/**
- * 标签跳转。三个分支写死而不是 `to={\`.../${item.tab}\`}`——TanStack Router
- * 的 `to` 要的是字面量路由，拼出来的字符串拿不到类型检查，改路由时不会报错。
- */
-function TabLink({
-  to,
-  projectId,
-  activityId,
-  children,
-}: {
-  to: "agenda" | "members" | "resources";
-  projectId: string;
-  activityId: string;
-  children: React.ReactNode;
-}) {
-  const className = ENTRY_LINK_CLASS;
-  const params = { projectId, activityId };
-
-  if (to === "agenda") {
-    return (
-      <Link
-        to="/project/$projectId/activity/$activityId/agenda"
-        params={params}
-        className={className}
-      >
-        {children}
-      </Link>
-    );
-  }
-  if (to === "members") {
-    return (
-      <Link
-        to="/project/$projectId/activity/$activityId/members"
-        params={params}
-        className={className}
-      >
-        {children}
-      </Link>
-    );
-  }
-  return (
-    <Link
-      to="/project/$projectId/activity/$activityId/resources"
-      params={params}
-      className={className}
-    >
-      {children}
-    </Link>
   );
 }

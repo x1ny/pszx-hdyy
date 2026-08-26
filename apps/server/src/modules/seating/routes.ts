@@ -1,14 +1,4 @@
-import {
-  and,
-  asc,
-  eq,
-  ilike,
-  inArray,
-  isNotNull,
-  isNull,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, asc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../../infra/db";
 import { err, ok } from "../../shared/result";
@@ -34,6 +24,7 @@ import {
   segmentSeatingLog,
   segmentSeatingPlan,
 } from "./schema";
+import { currentPlanJoin, inSeatingScope } from "./stats";
 import {
   ActivityIdInput,
   AssignActivityMemberInput,
@@ -225,15 +216,9 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
         )`.as("assigned_count"),
       })
       .from(activitySegment)
-      // 左连接：没有方案的环节也要出现，那正是"未配置"。作废的方案不算当前
-      // 方案，所以连接条件里就把它排除掉——否则一个环节作废重来之后会出现两行。
-      .leftJoin(
-        segmentSeatingPlan,
-        and(
-          eq(segmentSeatingPlan.segmentId, activitySegment.id),
-          sql`${segmentSeatingPlan.status} <> 'voided'`,
-        ),
-      )
+      // 左连接：没有方案的环节也要出现，那正是"未配置"。连接条件（含"作废
+      // 方案不算当前方案"）和下面的 inSeatingScope 是一套，都在 stats.ts。
+      .leftJoin(segmentSeatingPlan, currentPlanJoin)
       .leftJoin(
         activityVenueZone,
         eq(activityVenueZone.id, segmentSeatingPlan.activityVenueZoneId),
@@ -245,23 +230,9 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
       .where(
         and(
           eq(activitySegment.activityId, activityId),
-          /**
-           * "开关开着" **或** "已经有非作废方案"。
-           *
-           * 早先这里是硬过滤 `seatingEnabled = true`，把开关当成了列表的筛选
-           * 条件。后果是：环节已经排好位，有人回议程页把排位开关一关，这一行
-           * 就从列表里消失了——但方案还在库里、还占着"一个环节一个有效方案"的
-           * 唯一索引、场地空间页还显示那块区域"被开幕式引用"、那块区域因此
-           * 还删不掉。用户看得见后果，却找不到入口去作废它（评审 §3.4）。
-           *
-           * 开关和方案是两个独立的事实，用前者过滤后者就会漏。改成并集之后，
-           * 开关关掉的那一行仍然在列表里，带一个「排位开关已关闭」的芯片和
-           * 作废出口。
-           */
-          or(
-            eq(activitySegment.seatingEnabled, true),
-            isNotNull(segmentSeatingPlan.id),
-          ),
+          // 「开关开着 或 已有非作废方案」——规则本身连同它的来历都写在
+          // stats.ts；活动配置总览是同一条规则的第二个读者。
+          inSeatingScope,
           status ? eq(segmentSeatingPlan.status, status) : undefined,
         ),
       )
