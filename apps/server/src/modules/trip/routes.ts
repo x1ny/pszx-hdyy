@@ -55,6 +55,27 @@ const selectTrips = () =>
     .leftJoin(activitySegment, eq(activitySegment.id, memberTrip.segmentId));
 
 /**
+ * 行程只能关联仍可维护环节人员的环节：作废环节和关闭环节人员管理的环节
+ * 都不应出现在关联环节下拉框中。
+ */
+export const tripOptionsSegmentsQuery = (activityId: number) =>
+  db
+    .select({
+      id: activitySegment.id,
+      name: activitySegment.name,
+      status: activitySegment.status,
+    })
+    .from(activitySegment)
+    .where(
+      and(
+        eq(activitySegment.activityId, activityId),
+        eq(activitySegment.status, "active"),
+        eq(activitySegment.memberEnabled, true),
+      ),
+    )
+    .orderBy(asc(activitySegment.startTime), asc(activitySegment.id));
+
+/**
  * 从活动人员关系反查项目和人员，避免让客户端传两个能互相矛盾的 id。
  * 可选环节也在这里校验归属；数据库复合外键是最后一道并发兜底。
  */
@@ -157,15 +178,7 @@ export const tripRoutes = new Hono<{ Variables: AuthedVariables }>()
         .innerJoin(member, eq(member.id, activityMember.memberId))
         .where(eq(activityMember.activityId, activityId))
         .orderBy(asc(member.name), asc(member.id)),
-      db
-        .select({
-          id: activitySegment.id,
-          name: activitySegment.name,
-          status: activitySegment.status,
-        })
-        .from(activitySegment)
-        .where(eq(activitySegment.activityId, activityId))
-        .orderBy(asc(activitySegment.startTime), asc(activitySegment.id)),
+      tripOptionsSegmentsQuery(activityId),
     ]);
 
     return c.json(ok({ members, segments }));
