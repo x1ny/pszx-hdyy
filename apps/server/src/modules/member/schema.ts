@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { activitySegment } from "../agenda/schema";
 import { user } from "../auth/schema";
+import { organization } from "../organization/schema";
 import { activity, project } from "../project/schema";
 
 // ---------------------------------------------------------------------------
@@ -87,6 +88,16 @@ export const member = pgTable(
     name: text("name").notNull(),
     gender: text("gender").$type<MemberGender>(),
     companyPosition: text("company_position"),
+    /**
+     * 当前所属团体。单个可空外键直接表达「一人最多一个团体」，不建多对多关系表。
+     *
+     * 不设 onDelete，默认 NO ACTION：只要还有成员引用，团体就不能被物理删除。
+     * 未来活动/项目范围快照引用团体时也必须沿用这一策略，历史引用不能级联消失，
+     * 也不能在删除团体时被静默置空。
+     */
+    organizationId: bigint("organization_id", { mode: "number" }).references(
+      () => organization.id,
+    ),
     /**
      * 国别/地区与籍贯：**码是权威，名字是写入时的快照。**
      *
@@ -169,6 +180,9 @@ export const member = pgTable(
       .where(
         sql`${table.idType} is not null and ${table.idNumber} is not null`,
       ),
+
+    // 团体详情统计/列成员，以及物理删除前的引用检查都会按这一列查询。
+    index("idx_member_organization").on(table.organizationId),
   ],
 );
 

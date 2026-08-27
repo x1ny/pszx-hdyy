@@ -156,6 +156,8 @@ const MemberFields = z.object({
   name: required("姓名", 64),
   status: MemberStatusEnum.default("enabled"),
   gender: MemberGenderEnum.optional(),
+  // 缺省表示保持未绑定；显式 null 用于解除现有绑定。
+  organizationId: id.nullable().optional(),
   countryRegionCode: dictCode("国别/地区", (code) =>
     Boolean(findCountryRegion(code)),
   ),

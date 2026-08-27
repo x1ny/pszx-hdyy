@@ -22,4 +22,9 @@ export const DEMO = {
   segmentIds: { opening: 1, forum: 2, negotiation: 3 },
   venueId: 1,
   activityVenueId: 1,
+  organizationIds: {
+    fashionAssociation: 1,
+    textileChamber: 2,
+    designerAssociation: 3,
+  },
 } as const;

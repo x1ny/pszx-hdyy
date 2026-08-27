@@ -92,6 +92,15 @@ export const seed: SeedFn = async (db, { userId }) => {
       name,
       gender: index % 3 === 0 ? ("女" as const) : ("男" as const),
       companyPosition: COMPANY_POSITIONS[index % COMPANY_POSITIONS.length],
+      // 7 / 4 / 1 人三个规模，剩余人员不绑定团体，覆盖可空关系的四种展示状态。
+      organizationId:
+        index < 7
+          ? DEMO.organizationIds.fashionAssociation
+          : index < 11
+            ? DEMO.organizationIds.textileChamber
+            : index === 11
+              ? DEMO.organizationIds.designerAssociation
+              : null,
       ...(index === FOREIGN_INDEX
         ? {
             countryRegionCode: "US",

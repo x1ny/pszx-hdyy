@@ -34,6 +34,7 @@ const memberFields = {
   name: member.name,
   gender: member.gender,
   companyPosition: member.companyPosition,
+  organizationId: member.organizationId,
   countryRegionCode: member.countryRegionCode,
   countryRegion: member.countryRegion,
   nativeProvinceCode: member.nativeProvinceCode,

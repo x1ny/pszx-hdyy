@@ -91,3 +91,24 @@ describe("CreateMemberInput 的国别与籍贯", () => {
     ).toBe(false);
   });
 });
+
+describe("CreateMemberInput 的团体绑定", () => {
+  test("允许绑定一个团体或保持为空", () => {
+    expect(
+      CreateMemberInput.parse({ ...base, organizationId: 3 }).organizationId,
+    ).toBe(3);
+    expect(
+      CreateMemberInput.parse({ ...base, organizationId: null }).organizationId,
+    ).toBeNull();
+    expect(CreateMemberInput.safeParse(base).success).toBe(true);
+  });
+
+  test("拒绝非正整数团体 ID", () => {
+    expect(
+      CreateMemberInput.safeParse({ ...base, organizationId: 0 }).success,
+    ).toBe(false);
+    expect(
+      CreateMemberInput.safeParse({ ...base, organizationId: 1.5 }).success,
+    ).toBe(false);
+  });
+});
