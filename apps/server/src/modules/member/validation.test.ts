@@ -6,6 +6,7 @@ import {
   CreateMemberInput,
   ListMembersInput,
   ListOrganizationMemberCandidatesInput,
+  SyncActivityMemberSegmentsInput,
 } from "./validation";
 
 const base = { name: "王芳" };
@@ -195,5 +196,37 @@ describe("按团体添加人员输入", () => {
 
     expect(parsed.name).toBe("王芳");
     expect(parsed.companyPosition).toBe("会长");
+  });
+});
+
+describe("活动人员参与环节同步输入", () => {
+  test("期望环节集合去重并保持首次选择顺序", () => {
+    expect(
+      SyncActivityMemberSegmentsInput.parse({
+        activityMemberId: 10,
+        segmentIds: [3, 1, 3, 2, 1],
+      }),
+    ).toEqual({ activityMemberId: 10, segmentIds: [3, 1, 2] });
+  });
+
+  test("允许空集合，但拒绝无效 id", () => {
+    expect(
+      SyncActivityMemberSegmentsInput.parse({
+        activityMemberId: 10,
+        segmentIds: [],
+      }).segmentIds,
+    ).toEqual([]);
+    expect(
+      SyncActivityMemberSegmentsInput.safeParse({
+        activityMemberId: 0,
+        segmentIds: [1],
+      }).success,
+    ).toBe(false);
+    expect(
+      SyncActivityMemberSegmentsInput.safeParse({
+        activityMemberId: 10,
+        segmentIds: [0],
+      }).success,
+    ).toBe(false);
   });
 });

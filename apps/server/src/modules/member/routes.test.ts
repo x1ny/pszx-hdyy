@@ -239,3 +239,13 @@ describe("按团体添加路由", () => {
     );
   });
 });
+
+describe("活动人员参与环节同步路由", () => {
+  test("注册独立原子同步动作", () => {
+    expect(
+      activityMemberRoutes.routes.some(
+        (route) => route.method === "POST" && route.path === "/syncSegments",
+      ),
+    ).toBe(true);
+  });
+});

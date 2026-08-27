@@ -366,6 +366,18 @@ export const RemoveActivityMemberInput = z.object({
   cascade: z.boolean().default(false),
 });
 
+/**
+ * 活动人员参与环节的最终可编辑集合。空数组表示退出全部仍可编辑环节；作废或已
+ * 关闭人员管理的历史关系不在这个数组里表达，由服务端只读保留。
+ */
+export const SyncActivityMemberSegmentsInput = z.object({
+  activityMemberId: id,
+  segmentIds: z
+    .array(id)
+    .max(200, "一次最多选择 200 个环节")
+    .transform((values) => [...new Set(values)]),
+});
+
 // --- 环节人员 ---
 
 /**

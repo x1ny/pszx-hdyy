@@ -52,6 +52,10 @@ import {
   ensureSegmentMembers,
   MemberLadderError,
 } from "./ladder";
+import {
+  ActivityMemberSegmentSyncError,
+  syncActivityMemberSegments,
+} from "./participation";
 import { activityMember, member, projectMember, segmentMember } from "./schema";
 import {
   AddActivityMembersByOrganizationInput,
@@ -71,6 +75,7 @@ import {
   RelationIdInput,
   RemoveActivityMemberInput,
   RemoveSegmentMemberInput,
+  SyncActivityMemberSegmentsInput,
   UpdateActivityMemberInput,
   UpdateProjectMemberInput,
   UpdateSegmentMemberInput,
@@ -105,9 +110,9 @@ export const activityMemberSegments = sql<
 ), '[]'::json)`.as("segments");
 
 /**
- * ladder 抛出的业务失败翻译成统一信封。ladder 用 throw 而不是返回结果对象，
- * 是因为它整个跑在事务里——throw 顺带就是回滚，返回错误还得让每个调用方
- * 记得自己 rollback。
+ * 关系事务抛出的业务失败翻译成统一信封。这里用 throw 而不是返回错误对象，
+ * 是因为这些服务整个跑在事务里——throw 顺带就是回滚，返回错误还得让每个
+ * 调用方记得自己 rollback。
  */
 async function runLadder<T>(
   work: () => Promise<T>,
@@ -115,7 +120,10 @@ async function runLadder<T>(
   try {
     return { ok: true, data: await work() };
   } catch (error) {
-    if (error instanceof MemberLadderError) {
+    if (
+      error instanceof MemberLadderError ||
+      error instanceof ActivityMemberSegmentSyncError
+    ) {
       return { ok: false, message: error.message };
     }
     throw error;
@@ -687,6 +695,34 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
 
     return row ? c.json(ok(row)) : c.json(notFound("活动人员关系"));
   })
+
+  /**
+   * 原子同步一名活动人员参与的可编辑环节集合。
+   *
+   * 期望集合只接受当前活动内、未作废且已开启人员管理的环节。既有只读历史关系
+   * 永远保留；取消环节若命中有效个人排位、因范围归零而失效的团体占位，或该人
+   * 的环节行程，则返回 `ok({ applied:false, blocked })` 明细且整次零写。
+   */
+  .post(
+    "/syncSegments",
+    jsonBody(SyncActivityMemberSegmentsInput),
+    async (c) => {
+      const { activityMemberId, segmentIds } = c.req.valid("json");
+      const result = await runLadder(() =>
+        db.transaction((tx) =>
+          syncActivityMemberSegments(tx, {
+            activityMemberId,
+            segmentIds,
+            userId: c.get("authedUser").id,
+          }),
+        ),
+      );
+
+      return result.ok
+        ? c.json(ok(result.data))
+        : c.json(validationError(result.message));
+    },
+  )
 
   /**
    * 移除前的受影响清单。BR-DEV-029 要求"展示影响清单并二次确认"——清单由这个
