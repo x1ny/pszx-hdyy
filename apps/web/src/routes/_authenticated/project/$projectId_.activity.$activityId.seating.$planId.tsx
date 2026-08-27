@@ -6,6 +6,7 @@ import {
   CircleIcon,
   CircleSlashIcon,
   DiamondIcon,
+  DownloadIcon,
   Maximize2Icon,
   Minimize2Icon,
   TriangleAlertIcon,
@@ -26,6 +27,7 @@ import {
   organizationSeatLegend,
   type SeatOccupantVisual,
 } from "#/features/venue-editor/canvas/seat-occupant-visual";
+import { downloadSeatingPlanJpeg } from "#/features/venue-editor/canvas/seating-plan-jpeg";
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import { Skeleton } from "#/shared/components/ui/skeleton.tsx";
@@ -85,6 +87,7 @@ function SeatingCanvasPage() {
 
   const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
   const [organizationBatchOpen, setOrganizationBatchOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   /**
    * 对调模式：记住"从哪个座位发起的"，下一次点中座位就是目标。
@@ -304,6 +307,33 @@ function SeatingCanvasPage() {
     onError: (error) => toast.error(error.message),
   });
 
+  const exportJpeg = async () => {
+    if (!doc || !bundle) return;
+
+    setIsExporting(true);
+    try {
+      const result = await downloadSeatingPlanJpeg({
+        doc,
+        seatStatus,
+        title: `${bundle.plan.segmentName} · ${bundle.plan.zoneName} 排位图`,
+        subtitle: [bundle.plan.venueName, bundle.plan.zoneName]
+          .filter(Boolean)
+          .join(" / "),
+        segmentName: bundle.plan.segmentName,
+        zoneName: bundle.plan.zoneName,
+      });
+      toast.success(
+        result.raster.downsampled
+          ? "已导出 JPG（已在浏览器安全像素范围内缩放）"
+          : "已导出 JPG",
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "导出 JPG 失败");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   if (planQuery.isLoading || !bundle) {
     return <Skeleton className="h-96 w-full" />;
   }
@@ -421,21 +451,35 @@ function SeatingCanvasPage() {
         isFullscreen={isFullscreen}
         onExitFullscreen={exitFullscreen}
         toolbarActions={
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            aria-label={isFullscreen ? "退出全屏排位画布" : "进入全屏排位画布"}
-            aria-pressed={isFullscreen}
-            onClick={isFullscreen ? exitFullscreen : enterFullscreen}
-          >
-            {isFullscreen ? (
-              <Minimize2Icon data-icon="inline-start" />
-            ) : (
-              <Maximize2Icon data-icon="inline-start" />
-            )}
-            {isFullscreen ? "退出全屏" : "全屏"}
-          </Button>
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={isExporting}
+              onClick={exportJpeg}
+            >
+              <DownloadIcon data-icon="inline-start" />
+              {isExporting ? "正在导出…" : "导出 JPG"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label={
+                isFullscreen ? "退出全屏排位画布" : "进入全屏排位画布"
+              }
+              aria-pressed={isFullscreen}
+              onClick={isFullscreen ? exitFullscreen : enterFullscreen}
+            >
+              {isFullscreen ? (
+                <Minimize2Icon data-icon="inline-start" />
+              ) : (
+                <Maximize2Icon data-icon="inline-start" />
+              )}
+              {isFullscreen ? "退出全屏" : "全屏"}
+            </Button>
+          </>
         }
         legend={<SeatStatusLegend organizations={organizationLegend} />}
         rightPanel={
