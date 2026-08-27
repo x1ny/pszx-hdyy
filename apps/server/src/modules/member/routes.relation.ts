@@ -513,7 +513,7 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
   })
 
   /**
-   * 查询一条活动人员详情：人员主档摘要、当前活动关系和环节参与。
+   * 查询一条活动人员详情：人员主档摘要、当前活动关系和完整环节参与。
    *
    * 详情单独查询而不继续加宽 `/list`：国别、证件、联系方式和排位信息只在用户
    * 点开某一行时需要，塞进分页列表会让每次筛选、翻页都重复传输这些低频字段。
@@ -558,6 +558,8 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
         organizationId: segmentMember.organizationId,
         segmentId: activitySegment.id,
         name: activitySegment.name,
+        status: activitySegment.status,
+        memberEnabled: activitySegment.memberEnabled,
         segmentRole: segmentMember.segmentRole,
         ownerName: sql<
           string | null
@@ -605,12 +607,9 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
         ),
       )
       .leftJoin(segmentSeat, eq(segmentSeat.id, seatAssignment.segmentSeatId))
-      .where(
-        and(
-          eq(segmentMember.activityMemberId, id),
-          eq(activitySegment.status, "active"),
-        ),
-      )
+      // 编辑关系必须看见作废/关闭人员管理的历史关系，才能按只读口径保留；
+      // 分页列表仍只展示正常环节，不改变列表的“当前参与”口径。
+      .where(eq(segmentMember.activityMemberId, id))
       .orderBy(asc(activitySegment.startTime), asc(activitySegment.id));
 
     return c.json(ok({ ...detail, segments }));

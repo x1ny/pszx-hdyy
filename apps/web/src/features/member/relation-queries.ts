@@ -120,6 +120,17 @@ export type ActivityMemberSources = ApiData<
   InferResponseType<typeof api.api.activityMember.listSources.$post>
 >;
 
+type ActivityAgenda = ApiData<
+  InferResponseType<typeof api.api.agenda.list.$post>
+>;
+
+/** 编辑活动人员参与环节时使用的完整活动环节选项。 */
+export type ActivityMemberSegmentOption = ActivityAgenda["segments"][number];
+
+export type ActivityMemberSegmentSyncResult = ApiData<
+  InferResponseType<typeof api.api.activityMember.syncSegments.$post>
+>;
+
 export const activityMemberKeys = {
   all: ["activityMember"] as const,
   list: (filters: ActivityMemberFilters) =>
@@ -129,6 +140,8 @@ export const activityMemberKeys = {
     [...activityMemberKeys.all, "sources", activityId] as const,
   snapshot: (activityId: number) =>
     [...activityMemberKeys.all, "snapshot", activityId] as const,
+  segmentOptions: (activityId: number) =>
+    [...activityMemberKeys.all, "segmentOptions", activityId] as const,
 };
 
 export const activityMemberListQueryOptions = (
@@ -169,6 +182,17 @@ export const activityMemberDetailQueryOptions = (id: number) =>
     enabled: id > 0,
   });
 
+export const activityMemberSegmentOptionsQueryOptions = (activityId: number) =>
+  queryOptions({
+    queryKey: activityMemberKeys.segmentOptions(activityId),
+    queryFn: async () => {
+      const result = await unwrap(
+        api.api.agenda.list.$post({ json: { activityId } }),
+      );
+      return result.segments;
+    },
+  });
+
 export const addActivityMembers = (
   json: InferRequestType<typeof api.api.activityMember.add.$post>["json"],
 ) => unwrap(api.api.activityMember.add.$post({ json }));
@@ -186,6 +210,12 @@ export const addNewActivityMember = (
 export const updateActivityMember = (
   json: InferRequestType<typeof api.api.activityMember.update.$post>["json"],
 ) => unwrap(api.api.activityMember.update.$post({ json }));
+
+export const syncActivityMemberSegments = (
+  json: InferRequestType<
+    typeof api.api.activityMember.syncSegments.$post
+  >["json"],
+) => unwrap(api.api.activityMember.syncSegments.$post({ json }));
 
 /** 移除前的受影响清单。文案由后端给，前端只负责渲染（BR-DEV-029）。 */
 export const getActivityMemberImpact = (id: number) =>

@@ -1,6 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { PlusIcon, SearchIcon, UsersRoundIcon } from "lucide-react";
+import {
+  AlertCircleIcon,
+  PlusIcon,
+  SearchIcon,
+  UsersRoundIcon,
+} from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -17,9 +22,11 @@ import {
 import {
   type ActivityMember,
   type ActivityMemberDetail,
+  type ActivityMemberFilters,
   activityMemberDetailQueryOptions,
   activityMemberKeys,
   activityMemberListQueryOptions,
+  activityMemberSegmentOptionsQueryOptions,
   activityMemberSnapshotQueryOptions,
   activityMemberSourcesQueryOptions,
   addActivityMembers,
@@ -30,7 +37,6 @@ import {
   projectMemberKeys,
   RELATION_ORIGIN_LABELS,
   removeActivityMember,
-  updateActivityMember,
 } from "#/features/member/relation-queries.ts";
 import { formatNativePlace } from "#/features/member/utils.ts";
 import {
@@ -38,6 +44,11 @@ import {
   FilterBar,
   isSameFilter,
 } from "#/shared/components/filter-bar.tsx";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "#/shared/components/ui/alert.tsx";
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import {
@@ -82,6 +93,14 @@ import {
   TableHeader,
   TableRow,
 } from "#/shared/components/ui/table.tsx";
+import {
+  type ActivityMemberEditIssue,
+  ActivityMemberEditIssueAlert,
+  ActivityMemberParticipationFields,
+  isEditableActivitySegment,
+  refreshActivityMemberEditQueries,
+  submitActivityMemberEdit,
+} from "./-components/activity-member-edit";
 
 const SearchSchema = z.object({
   name: z.string().optional().catch(undefined),
@@ -93,7 +112,7 @@ const SearchSchema = z.object({
 });
 
 export const Route = createFileRoute(
-  "/_authenticated/project/$projectId_/activity/$activityId/members",
+  "/_authenticated/project/$projectId_/activity/$activityId/members/",
 )({
   validateSearch: SearchSchema,
   component: ActivityMembersPage,
@@ -133,11 +152,14 @@ function ActivityMembersPage() {
   const [editing, setEditing] = useState<ActivityMember>();
   const [editForm, setEditForm] =
     useState<RelationFormValues>(emptyRelationForm);
+  const [editSegmentIds, setEditSegmentIds] = useState<number[]>([]);
+  const [editSelectionFor, setEditSelectionFor] = useState<number>();
+  const [editIssue, setEditIssue] = useState<ActivityMemberEditIssue>();
 
   const [viewing, setViewing] = useState<ActivityMember>();
   const [removing, setRemoving] = useState<ActivityMember>();
 
-  const filters = { activityId, ...search };
+  const filters: ActivityMemberFilters = { activityId, ...search };
   const listQuery = useQuery(activityMemberListQueryOptions(filters));
   const sourcesQuery = useQuery(activityMemberSourcesQueryOptions(activityId));
   const list = listQuery.data?.list ?? [];
@@ -146,6 +168,44 @@ function ActivityMembersPage() {
     ...activityMemberSnapshotQueryOptions(activityId),
     enabled: pickerOpen,
   });
+  const editDetailQuery = useQuery({
+    ...activityMemberDetailQueryOptions(editing?.id ?? 0),
+    enabled: !!editing,
+  });
+  const editSegmentOptionsQuery = useQuery({
+    ...activityMemberSegmentOptionsQueryOptions(activityId),
+    enabled: !!editing,
+  });
+
+  // 详情接口包含作废/关闭人员管理的历史关系；初始化时只把仍可编辑的关系放进
+  // checkbox 集合，只读关系由服务端 sync 自动保留，不送进期望集合。
+  useEffect(() => {
+    if (
+      !editing ||
+      !editDetailQuery.data ||
+      !editSegmentOptionsQuery.data ||
+      editSelectionFor === editing.id
+    ) {
+      return;
+    }
+
+    const editableIds = new Set(
+      editSegmentOptionsQuery.data
+        .filter(isEditableActivitySegment)
+        .map((segment) => segment.id),
+    );
+    setEditSegmentIds(
+      editDetailQuery.data.segments.flatMap((segment) =>
+        editableIds.has(segment.segmentId) ? [segment.segmentId] : [],
+      ),
+    );
+    setEditSelectionFor(editing.id);
+  }, [
+    editing,
+    editDetailQuery.data,
+    editSegmentOptionsQuery.data,
+    editSelectionFor,
+  ]);
   const sourceItems = useMemo(
     () => [
       { value: null, label: "全部来源" },
@@ -220,18 +280,54 @@ function ActivityMembersPage() {
     onError: (error) => toast.error(error.message),
   });
 
-  const updateMutation = useMutation({
+  const editMutation = useMutation({
     mutationFn: () =>
-      updateActivityMember({
-        id: editing?.id ?? 0,
-        ...toRelationInput(editForm),
+      submitActivityMemberEdit({
+        activityMemberId: editing?.id ?? 0,
+        segmentIds: editSegmentIds,
+        relation: editForm,
       }),
-    onSuccess: () => {
-      toast.success("活动人员关系已保存");
+    onMutate: () => setEditIssue(undefined),
+    onSuccess: async (result) => {
+      if (!editing) return;
+
+      if (result.kind === "blocked") {
+        setEditIssue({
+          kind: "blocked",
+          blockers: result.syncResult.blocked,
+        });
+        return;
+      }
+
+      if (result.kind === "relationFailed") {
+        if (result.participationChanged) {
+          await refreshActivityMemberEditQueries(
+            queryClient,
+            filters,
+            editing.id,
+          );
+        }
+        setEditIssue({
+          kind: "error",
+          title: result.participationChanged
+            ? "参与环节已保存，关系字段未保存"
+            : "关系字段保存失败",
+          message: `${result.message}。请保留弹窗并重试。`,
+        });
+        return;
+      }
+
+      await refreshActivityMemberEditQueries(queryClient, filters, editing.id);
+      toast.success("活动关系与参与环节已保存");
       setEditing(undefined);
-      invalidate();
     },
-    onError: (error) => toast.error(error.message),
+    onError: (error) => {
+      setEditIssue({
+        kind: "error",
+        title: "保存失败，未继续保存关系字段",
+        message: error.message,
+      });
+    },
   });
 
   const removeMutation = useMutation({
@@ -449,6 +545,9 @@ function ActivityMembersPage() {
                         size="sm"
                         className="text-primary hover:text-primary"
                         onClick={() => {
+                          setEditSegmentIds([]);
+                          setEditSelectionFor(undefined);
+                          setEditIssue(undefined);
                           setEditing(row);
                           setEditForm({
                             source: row.source ?? "",
@@ -597,32 +696,79 @@ function ActivityMembersPage() {
       <Dialog
         open={!!editing}
         onOpenChange={(open) => {
-          if (!open) setEditing(undefined);
+          if (!open && !editMutation.isPending) setEditing(undefined);
         }}
       >
-        <DialogContent>
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>编辑活动关系</DialogTitle>
             <DialogDescription>
-              {`「${editing?.name}」在本场活动下的关系字段。改动只影响当前活动，不会写回人员主档，也不影响其他活动。`}
+              {`配置「${editing?.name}」的关系字段与参与环节。保存时先同步环节；若被座位或行程阻断，关系字段不会提交。`}
             </DialogDescription>
           </DialogHeader>
-          <DialogBody>
-            <RelationFields
-              value={editForm}
-              onChange={setEditForm}
-              idPrefix="edit"
-            />
+          <DialogBody className="flex flex-col gap-6">
+            {editDetailQuery.isPending ||
+            editSegmentOptionsQuery.isPending ||
+            editSelectionFor !== editing?.id ? (
+              <div className="flex flex-col gap-4">
+                <Skeleton className="h-28 w-full" />
+                <Skeleton className="h-56 w-full" />
+              </div>
+            ) : editDetailQuery.isError || editSegmentOptionsQuery.isError ? (
+              <Alert variant="destructive">
+                <AlertCircleIcon />
+                <AlertTitle>参与环节加载失败</AlertTitle>
+                <AlertDescription>
+                  {editDetailQuery.error?.message ??
+                    editSegmentOptionsQuery.error?.message ??
+                    "请关闭弹窗后重试"}
+                </AlertDescription>
+              </Alert>
+            ) : editDetailQuery.data && editSegmentOptionsQuery.data ? (
+              <>
+                <RelationFields
+                  value={editForm}
+                  onChange={setEditForm}
+                  idPrefix="edit"
+                />
+                <ActivityMemberParticipationFields
+                  segments={editSegmentOptionsQuery.data}
+                  memberships={editDetailQuery.data.segments}
+                  selectedIds={editSegmentIds}
+                  disabled={editMutation.isPending}
+                  onChange={(next) => {
+                    setEditSegmentIds(next);
+                    if (editIssue?.kind === "blocked") {
+                      setEditIssue(undefined);
+                    }
+                  }}
+                />
+                {editIssue && (
+                  <ActivityMemberEditIssueAlert issue={editIssue} />
+                )}
+              </>
+            ) : null}
           </DialogBody>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditing(undefined)}>
+            <Button
+              variant="outline"
+              disabled={editMutation.isPending}
+              onClick={() => setEditing(undefined)}
+            >
               取消
             </Button>
             <Button
-              disabled={updateMutation.isPending}
-              onClick={() => updateMutation.mutate()}
+              disabled={
+                editMutation.isPending ||
+                editDetailQuery.isPending ||
+                editSegmentOptionsQuery.isPending ||
+                editDetailQuery.isError ||
+                editSegmentOptionsQuery.isError ||
+                editSelectionFor !== editing?.id
+              }
+              onClick={() => editMutation.mutate()}
             >
-              保存
+              {editMutation.isPending ? "保存中…" : "保存关系与参与环节"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -861,7 +1007,12 @@ function SegmentParticipationTable({
 }: {
   detail: ActivityMemberDetail;
 }) {
-  if (detail.segments.length === 0) {
+  // 详情沿用“当前参与”口径；作废历史只在编辑弹窗的只读区展示。
+  const currentSegments = detail.segments.filter(
+    (segment) => segment.status === "active",
+  );
+
+  if (currentSegments.length === 0) {
     return (
       <Empty className="border-0 py-8">
         <EmptyHeader>
@@ -886,7 +1037,7 @@ function SegmentParticipationTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {detail.segments.map((segment) => (
+        {currentSegments.map((segment) => (
           <TableRow key={segment.id}>
             <TableCell className="font-medium">{segment.name}</TableCell>
             <TableCell>{displayValue(segment.segmentRole)}</TableCell>
