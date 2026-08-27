@@ -1,6 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { PlusIcon, SearchIcon, UsersRoundIcon } from "lucide-react";
+import {
+  Building2Icon,
+  PlusIcon,
+  SearchIcon,
+  UsersRoundIcon,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -55,6 +60,7 @@ import {
 } from "#/shared/components/ui/table.tsx";
 import { cn } from "#/shared/lib/utils.ts";
 import { MemberFormDialog } from "./-components/member-form-dialog";
+import { OrganizationManagerDialog } from "./-components/organization-manager-dialog";
 import {
   createMember,
   deleteMember,
@@ -109,6 +115,7 @@ function MemberPage() {
   const [editing, setEditing] = useState<Member>();
   const [detail, setDetail] = useState<Member>();
   const [pendingDelete, setPendingDelete] = useState<Member>();
+  const [organizationManagerOpen, setOrganizationManagerOpen] = useState(false);
 
   // URL 变了就把草稿拉回来对齐（后退、粘链接进来）。
   useEffect(() => setNameInput(search.name ?? ""), [search.name]);
@@ -192,15 +199,24 @@ function MemberPage() {
             </p>
           </div>
         </div>
-        <Button
-          onClick={() => {
-            setEditing(undefined);
-            setFormOpen(true);
-          }}
-        >
-          <PlusIcon />
-          新增人员
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setOrganizationManagerOpen(true)}
+          >
+            <Building2Icon data-icon="inline-start" />
+            团体管理
+          </Button>
+          <Button
+            onClick={() => {
+              setEditing(undefined);
+              setFormOpen(true);
+            }}
+          >
+            <PlusIcon data-icon="inline-start" />
+            新增人员
+          </Button>
+        </div>
       </div>
 
       <FilterBar
@@ -435,6 +451,11 @@ function MemberPage() {
           if (!open) setEditing(undefined);
         }}
         onSubmit={(values) => saveMutation.mutate(values)}
+      />
+
+      <OrganizationManagerDialog
+        open={organizationManagerOpen}
+        onOpenChange={setOrganizationManagerOpen}
       />
 
       <MemberDetailDialog
