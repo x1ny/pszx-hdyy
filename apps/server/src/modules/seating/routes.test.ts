@@ -4,6 +4,7 @@ import { activitySegment } from "../agenda/schema";
 import {
   listCandidatesQuery,
   listOrganizationCandidatesQuery,
+  listOrganizationSeatingStatsQuery,
   organizationInSegmentScopeQuery,
 } from "./routes";
 import { segmentSeatingPlan } from "./schema";
@@ -41,6 +42,7 @@ describe("listCandidatesQuery", () => {
 describe("团体占位范围查询", () => {
   const candidatesSql = listOrganizationCandidatesQuery(7).toSQL().sql;
   const scopeSql = organizationInSegmentScopeQuery(db, 7, 3).toSQL().sql;
+  const statsSql = listOrganizationSeatingStatsQuery(db, 12, 7).toSQL().sql;
 
   test("候选团体只从当前环节的 organizationId 快照去重读取", () => {
     expect(candidatesSql).toContain('from "segment_member"');
@@ -55,6 +57,25 @@ describe("团体占位范围查询", () => {
     expect(scopeSql).toContain('"segment_member"."segment_id"');
     expect(scopeSql).toContain('"segment_member"."organization_id"');
     expect(scopeSql).toContain("limit");
+  });
+
+  test("统计只看当前环节快照，个人排座和团体占位分别计数", () => {
+    expect(statsSql).toContain('from "segment_member"');
+    expect(statsSql).toContain('"segment_member"."segment_id"');
+    expect(statsSql).toContain('"seat_assignment"."occupant_type" = $');
+    expect(statsSql).toContain(
+      '"organization_assignment"."occupant_type" = \'organization\'',
+    );
+    expect(statsSql).toContain(
+      '"organization_assignment"."revoked_at" is null',
+    );
+  });
+
+  test("批量预览只把传入位置当作候选，真正空闲条件仍检查方案、启用和有效占用", () => {
+    // 路由中的 availability helper 是事务内查询；这里钉住统计查询没有把团体
+    // 位置偷算进个人数，剩余人数才不会被团体占位错误削减。
+    expect(statsSql).toContain('count("seat_assignment"."id")::int');
+    expect(statsSql).not.toContain('count(distinct "organization_assignment"');
   });
 });
 

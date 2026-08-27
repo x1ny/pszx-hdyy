@@ -181,6 +181,66 @@ export function swapAssignmentSeats<T extends { seatId: number }>(
 }
 
 /**
+ * 团体的颜色槽固定为 12 格；只从团体主键推导，增删或改名都不会导致其他团体变色。
+ * 色值由客户端色板按这个 index 取，不把展示色写入排位历史。
+ */
+export const ORGANIZATION_COLOR_PALETTE_SIZE = 12;
+
+export function organizationColorIndex(organizationId: number): number {
+  return (organizationId - 1) % ORGANIZATION_COLOR_PALETTE_SIZE;
+}
+
+export type OrganizationSeatSkipReason =
+  | "notFound"
+  | "removed"
+  | "disabled"
+  | "occupied";
+
+export type OrganizationSeatAvailability = {
+  seatId: number;
+  status: "available" | OrganizationSeatSkipReason;
+};
+
+export type OrganizationSeatPreview = {
+  availableSeatIds: number[];
+  plannedSeatIds: number[];
+  skipped: { seatId: number; reason: OrganizationSeatSkipReason }[];
+  insufficient: number;
+};
+
+/**
+ * 按调用方传入的位置顺序做团体占位预览。它只筛选，不改排位、不试图寻找相邻座位；
+ * 因而同一输入在同一数据库快照下总会给出同一份计划。
+ */
+export function planOrganizationSeatAssignments(
+  targetCount: number,
+  seats: readonly OrganizationSeatAvailability[],
+): OrganizationSeatPreview {
+  if (targetCount < 0) {
+    throw new RangeError("团体占位目标数不能为负数");
+  }
+
+  const availableSeatIds: number[] = [];
+  const skipped: OrganizationSeatPreview["skipped"] = [];
+
+  for (const seat of seats) {
+    if (seat.status === "available") {
+      availableSeatIds.push(seat.seatId);
+    } else {
+      skipped.push({ seatId: seat.seatId, reason: seat.status });
+    }
+  }
+
+  const plannedSeatIds = availableSeatIds.slice(0, targetCount);
+  return {
+    availableSeatIds,
+    plannedSeatIds,
+    skipped,
+    insufficient: Math.max(0, targetCount - plannedSeatIds.length),
+  };
+}
+
+/**
  * 这个状态还能不能被写。作废是终态，任何写操作都该被挡回去。
  *
  * 注意**没有** `statusAfterWrite()` 这种函数：任何写操作之后方案一律回到

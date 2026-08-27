@@ -16,7 +16,9 @@ import {
 import {
   findInvalidAssignments,
   isWritable,
+  organizationColorIndex,
   type PlanSeatRow,
+  planOrganizationSeatAssignments,
   planSeatMerge,
   swapAssignmentSeats,
 } from "./plan";
@@ -37,12 +39,15 @@ import {
   CreatePlanInput,
   ListCandidatesInput,
   ListPlansInput,
+  OrganizationSeatBatchInput,
+  type OrganizationSeatBatchPayload,
   PlanIdInput,
   RejectPlanInput,
   SavePlanLayoutInput,
   SetSeatEnabledInput,
   SwapInput,
   UnassignInput,
+  UnassignOrganizationInput,
   VoidPlanInput,
 } from "./validation";
 
@@ -162,6 +167,186 @@ export const organizationInSegmentScopeQuery = (
     )
     .limit(1);
 
+/**
+ * 当前方案环节内的团体排位统计。个人已排座只数个人分配；团体占位是另一种目标，
+ * 不会反过来把成员算作“已个人排座”。
+ */
+export const listOrganizationSeatingStatsQuery = (
+  conn: Pick<typeof db, "select">,
+  planId: number,
+  segmentId: number,
+) =>
+  conn
+    .select({
+      organizationId: organization.id,
+      name: organization.name,
+      totalMembers: sql<number>`count(distinct ${segmentMember.id})::int`.as(
+        "total_members",
+      ),
+      assignedPersonCount: sql<number>`count(${seatAssignment.id})::int`.as(
+        "assigned_person_count",
+      ),
+      organizationSeatCount: sql<number>`(
+        select count(*)::int
+        from ${seatAssignment} as "organization_assignment"
+        where "organization_assignment"."plan_id" = ${planId}
+          and "organization_assignment"."organization_id" = ${organization.id}
+          and "organization_assignment"."occupant_type" = 'organization'
+          and "organization_assignment"."revoked_at" is null
+      )`.as("organization_seat_count"),
+    })
+    .from(segmentMember)
+    .innerJoin(organization, eq(organization.id, segmentMember.organizationId))
+    .leftJoin(
+      seatAssignment,
+      and(
+        eq(seatAssignment.segmentMemberId, segmentMember.id),
+        eq(seatAssignment.planId, planId),
+        eq(seatAssignment.occupantType, "person"),
+        liveAssignment,
+      ),
+    )
+    .where(eq(segmentMember.segmentId, segmentId))
+    .groupBy(organization.id, organization.name)
+    .orderBy(asc(organization.name), asc(organization.id));
+
+type OrganizationSeatingStatRow = {
+  organizationId: number;
+  name: string;
+  totalMembers: number;
+  assignedPersonCount: number;
+  organizationSeatCount: number;
+};
+
+function withOrganizationSeatingStats(rows: OrganizationSeatingStatRow[]) {
+  return rows.map((row) => ({
+    ...row,
+    colorIndex: organizationColorIndex(row.organizationId),
+    remainingMemberCount: Math.max(
+      0,
+      row.totalMembers - row.assignedPersonCount,
+    ),
+  }));
+}
+
+function organizationSeatTargetCount(
+  input: OrganizationSeatBatchPayload,
+  remainingMemberCount: number,
+) {
+  return input.targetMode === "remaining"
+    ? remainingMemberCount
+    : input.targetCount;
+}
+
+/**
+ * 按用户给定顺序读取位置可用性。未知位置、跨方案位置和软删位置不会混为可用；
+ * 预览与真正批量写入共用此函数，避免两条路径各自解释“空闲位置”。
+ */
+async function listOrganizationSeatAvailability(
+  tx: Tx,
+  planId: number,
+  orderedSeatIds: number[],
+) {
+  if (!orderedSeatIds.length) return [];
+
+  const [seats, occupied] = await Promise.all([
+    tx
+      .select({
+        id: segmentSeat.id,
+        enabled: segmentSeat.enabled,
+        removedAt: segmentSeat.removedAt,
+      })
+      .from(segmentSeat)
+      .where(
+        and(
+          eq(segmentSeat.planId, planId),
+          inArray(segmentSeat.id, orderedSeatIds),
+        ),
+      ),
+    tx
+      .select({ seatId: seatAssignment.segmentSeatId })
+      .from(seatAssignment)
+      .where(
+        and(
+          eq(seatAssignment.planId, planId),
+          inArray(seatAssignment.segmentSeatId, orderedSeatIds),
+          liveAssignment,
+        ),
+      ),
+  ]);
+
+  const bySeatId = new Map(seats.map((seat) => [seat.id, seat]));
+  const occupiedSeatIds = new Set(occupied.map((row) => row.seatId));
+
+  return orderedSeatIds.map((seatId) => {
+    const seat = bySeatId.get(seatId);
+    if (!seat) return { seatId, status: "notFound" as const };
+    if (seat.removedAt !== null) return { seatId, status: "removed" as const };
+    if (!seat.enabled) return { seatId, status: "disabled" as const };
+    if (occupiedSeatIds.has(seatId)) {
+      return { seatId, status: "occupied" as const };
+    }
+    return { seatId, status: "available" as const };
+  });
+}
+
+async function organizationSeatPreview(
+  tx: Tx,
+  input: OrganizationSeatBatchPayload,
+) {
+  const [plan] = await tx
+    .select({
+      segmentId: segmentSeatingPlan.segmentId,
+      status: segmentSeatingPlan.status,
+    })
+    .from(segmentSeatingPlan)
+    .where(eq(segmentSeatingPlan.id, input.planId));
+  if (!plan) return { kind: "notFound" as const };
+  if (!isWritable(plan.status)) {
+    return { kind: "invalid" as const, error: "方案已作废，不能再修改" };
+  }
+
+  const [scopedOrganization] = await organizationInSegmentScopeQuery(
+    tx,
+    plan.segmentId,
+    input.organizationId,
+  );
+  if (!scopedOrganization) {
+    return { kind: "invalid" as const, error: "该团体不在当前环节范围内" };
+  }
+
+  const rows = await listOrganizationSeatingStatsQuery(
+    tx,
+    input.planId,
+    plan.segmentId,
+  );
+  const stats = withOrganizationSeatingStats(rows).find(
+    (row) => row.organizationId === input.organizationId,
+  );
+  if (!stats) {
+    // 上面的范围查询已命中；留这一层是为并发删除 relation 时提供确定的业务结果。
+    return { kind: "invalid" as const, error: "该团体不在当前环节范围内" };
+  }
+
+  const targetCount = organizationSeatTargetCount(
+    input,
+    stats.remainingMemberCount,
+  );
+  const availability = await listOrganizationSeatAvailability(
+    tx,
+    input.planId,
+    input.orderedSeatIds,
+  );
+
+  return {
+    kind: "ok" as const,
+    plan,
+    stats,
+    targetCount,
+    preview: planOrganizationSeatAssignments(targetCount, availability),
+  };
+}
+
 async function writeLog(
   tx: Tx,
   planId: number,
@@ -172,6 +357,13 @@ async function writeLog(
   await tx
     .insert(segmentSeatingLog)
     .values({ planId, action, operatorId, payload: payload ?? null });
+}
+
+/** postgres.js 会把约束错误直接抛出；个别运行时则再包一层 cause。 */
+function hasDatabaseCode(error: unknown, code: string): boolean {
+  if (!error || typeof error !== "object") return false;
+  if ("code" in error && error.code === code) return true;
+  return "cause" in error && hasDatabaseCode(error.cause, code);
 }
 
 /**
@@ -445,8 +637,8 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
   /**
    * 可以作为团体占位的团体：只读当前方案环节的 organizationId 范围快照。
    *
-   * 这是选择器，不返回人数、也不创建任何人员关系；批量团体统计/排座留给后续
-   * 功能，不能借这条接口隐式实现。
+   * 这是轻量选择器，不返回人数、也不创建任何人员关系；团体统计和批量占位分别
+   * 走下方的专用接口，不能借这条接口隐式写入。
    */
   .post("/listOrganizationCandidates", jsonBody(PlanIdInput), async (c) => {
     const { planId } = c.req.valid("json");
@@ -459,6 +651,27 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
 
     const list = await listOrganizationCandidatesQuery(plan.segmentId);
     return c.json(ok({ list }));
+  })
+
+  /**
+   * 当前方案环节内的团体排位统计。颜色只给稳定色板槽位，人数则把个人排座和
+   * 团体占位明确拆开：团体占几个位置，不会假装有几个具体成员已入座。
+   */
+  .post("/listOrganizationStats", jsonBody(PlanIdInput), async (c) => {
+    const { planId } = c.req.valid("json");
+
+    const [plan] = await db
+      .select({ segmentId: segmentSeatingPlan.segmentId })
+      .from(segmentSeatingPlan)
+      .where(eq(segmentSeatingPlan.id, planId));
+    if (!plan) return c.json(notFound());
+
+    const rows = await listOrganizationSeatingStatsQuery(
+      db,
+      planId,
+      plan.segmentId,
+    );
+    return c.json(ok({ list: withOrganizationSeatingStats(rows) }));
   })
 
   /**
@@ -716,6 +929,157 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
   })
 
   /**
+   * 按传入的有序位置 id 预览团体批量占位。只报告可用、跳过和不足，**绝不写库**；
+   * `targetMode: remaining` 使用尚未个人排座的人数，`custom` 则使用正整数目标。
+   */
+  .post(
+    "/previewOrganizationBatch",
+    jsonBody(OrganizationSeatBatchInput),
+    async (c) => {
+      const input = c.req.valid("json");
+
+      const result = await db.transaction((tx) =>
+        organizationSeatPreview(tx, input),
+      );
+
+      if (result.kind === "notFound") return c.json(notFound());
+      if (result.kind === "invalid") return c.json(invalid(result.error));
+      return c.json(
+        ok({
+          organization: result.stats,
+          targetCount: result.targetCount,
+          preview: result.preview,
+        }),
+      );
+    },
+  )
+
+  /**
+   * 事务化写入团体批量占位。只插入预览中启用且空闲的位置，从不撤销或覆盖现有
+   * 个人/团体；任一位置不足时整批不写。调用方应先用预览接口向用户展示跳过项。
+   */
+  .post(
+    "/assignOrganizationBatch",
+    jsonBody(OrganizationSeatBatchInput),
+    async (c) => {
+      const input = c.req.valid("json");
+      const userId = c.get("authedUser").id;
+
+      let result:
+        | {
+            kind: "notFound";
+          }
+        | {
+            kind: "invalid";
+            error: string;
+          }
+        | {
+            kind: "insufficient";
+            organization: ReturnType<
+              typeof withOrganizationSeatingStats
+            >[number];
+            targetCount: number;
+            preview: ReturnType<typeof planOrganizationSeatAssignments>;
+          }
+        | {
+            kind: "ok";
+            organization: ReturnType<
+              typeof withOrganizationSeatingStats
+            >[number];
+            targetCount: number;
+            seatIds: number[];
+            wasConfirmed: boolean;
+          };
+
+      try {
+        result = await db.transaction(async (tx) => {
+          const checked = await organizationSeatPreview(tx, input);
+          if (checked.kind !== "ok") return checked;
+
+          if (checked.preview.insufficient > 0) {
+            return {
+              kind: "insufficient" as const,
+              organization: checked.stats,
+              targetCount: checked.targetCount,
+              preview: checked.preview,
+            };
+          }
+
+          // `remaining` 可以自然算出 0；这种操作没有任何写入，也就不碰方案时间
+          // 或日志，避免把无变化的点击伪装成一次排位修改。
+          if (!checked.preview.plannedSeatIds.length) {
+            return {
+              kind: "ok" as const,
+              organization: checked.stats,
+              targetCount: checked.targetCount,
+              seatIds: [],
+              wasConfirmed: false,
+            };
+          }
+
+          await tx.insert(seatAssignment).values(
+            checked.preview.plannedSeatIds.map((segmentSeatId) => ({
+              planId: input.planId,
+              segmentId: checked.plan.segmentId,
+              segmentSeatId,
+              occupantType: "organization" as const,
+              segmentMemberId: null,
+              organizationId: input.organizationId,
+              assignedBy: userId,
+            })),
+          );
+
+          const { wasConfirmed } = await touchPlan(tx, input.planId, userId);
+          await writeLog(tx, input.planId, "assign", userId, {
+            batch: true,
+            occupantType: "organization",
+            organizationId: input.organizationId,
+            targetCount: checked.targetCount,
+            seatIds: checked.preview.plannedSeatIds,
+          });
+
+          return {
+            kind: "ok" as const,
+            organization: checked.stats,
+            targetCount: checked.targetCount,
+            seatIds: checked.preview.plannedSeatIds,
+            wasConfirmed,
+          };
+        });
+      } catch (error) {
+        // 预览后如果另一个操作者抢先占走了某位置，partial unique 会让整条
+        // INSERT 回滚；把它翻成可重试的业务错误，而不是暴露 PostgreSQL 细节。
+        if (hasDatabaseCode(error, "23505")) {
+          return c.json(invalid("可用位置已变化，请重新预览后再提交"));
+        }
+        throw error;
+      }
+
+      if (result.kind === "notFound") return c.json(notFound());
+      if (result.kind === "invalid") return c.json(invalid(result.error));
+      if (result.kind === "insufficient") {
+        return c.json(
+          ok({
+            applied: false as const,
+            organization: result.organization,
+            targetCount: result.targetCount,
+            preview: result.preview,
+          }),
+        );
+      }
+      return c.json(
+        ok({
+          applied: true as const,
+          organization: result.organization,
+          targetCount: result.targetCount,
+          seatIds: result.seatIds,
+          wasConfirmed: result.wasConfirmed,
+        }),
+      );
+    },
+  )
+
+  /**
    * 兼容旧客户端：排一个**还不是本环节人员**的活动人员，先补一条
    * `segment_member`，再建分配。
    *
@@ -824,6 +1188,65 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
     if (!result.ok) return c.json(invalid(result.error));
     return c.json(ok(result.data));
   })
+
+  /**
+   * 解除某团体在当前方案的全部有效占位。个人分配和其他团体的占位都不在更新条件
+   * 内；一条批量日志对应这一次明确的“全部解除”操作。
+   */
+  .post(
+    "/unassignOrganization",
+    jsonBody(UnassignOrganizationInput),
+    async (c) => {
+      const input = c.req.valid("json");
+      const userId = c.get("authedUser").id;
+
+      const result = await db.transaction(async (tx) => {
+        const [plan] = await tx
+          .select({ status: segmentSeatingPlan.status })
+          .from(segmentSeatingPlan)
+          .where(eq(segmentSeatingPlan.id, input.planId));
+        if (!plan) return { kind: "notFound" as const };
+        if (!isWritable(plan.status)) {
+          return { kind: "invalid" as const, error: "方案已作废，不能再修改" };
+        }
+
+        const revoked = await tx
+          .update(seatAssignment)
+          .set({ revokedBy: userId, revokedAt: new Date() })
+          .where(
+            and(
+              eq(seatAssignment.planId, input.planId),
+              eq(seatAssignment.occupantType, "organization"),
+              eq(seatAssignment.organizationId, input.organizationId),
+              liveAssignment,
+            ),
+          )
+          .returning({ seatId: seatAssignment.segmentSeatId });
+        if (!revoked.length) {
+          return {
+            kind: "invalid" as const,
+            error: "该团体在当前方案没有占位",
+          };
+        }
+
+        const { wasConfirmed } = await touchPlan(tx, input.planId, userId);
+        const seatIds = revoked.map((row) => row.seatId);
+        await writeLog(tx, input.planId, "unassign", userId, {
+          batch: true,
+          occupantType: "organization",
+          organizationId: input.organizationId,
+          seatIds,
+        });
+        return { kind: "ok" as const, seatIds, wasConfirmed };
+      });
+
+      if (result.kind === "notFound") return c.json(notFound());
+      if (result.kind === "invalid") return c.json(invalid(result.error));
+      return c.json(
+        ok({ seatIds: result.seatIds, wasConfirmed: result.wasConfirmed }),
+      );
+    },
+  )
 
   /**
    * 本环节启用/停用一个位置。**即时生效，独立于画布保存**——排位阶段不再允许

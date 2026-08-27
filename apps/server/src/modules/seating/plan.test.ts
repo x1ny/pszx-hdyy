@@ -2,8 +2,11 @@ import { describe, expect, test } from "bun:test";
 import {
   findInvalidAssignments,
   isWritable,
+  ORGANIZATION_COLOR_PALETTE_SIZE,
+  organizationColorIndex,
   type PlanSeatDraft,
   type PlanSeatRow,
+  planOrganizationSeatAssignments,
   planSeatMerge,
   swapAssignmentSeats,
 } from "./plan";
@@ -253,5 +256,50 @@ describe("swapAssignmentSeats", () => {
         organizationId: 22,
       },
     ]);
+  });
+});
+
+describe("团体批量占位预览", () => {
+  test("颜色槽只由团体 id 决定，色板循环不会随列表排序漂移", () => {
+    expect(organizationColorIndex(1)).toBe(0);
+    expect(organizationColorIndex(1 + ORGANIZATION_COLOR_PALETTE_SIZE)).toBe(0);
+    expect(organizationColorIndex(2)).toBe(1);
+  });
+
+  test("保留调用方的座位顺序，明确给出可用和跳过原因", () => {
+    const preview = planOrganizationSeatAssignments(2, [
+      { seatId: 9, status: "occupied" },
+      { seatId: 3, status: "available" },
+      { seatId: 5, status: "disabled" },
+      { seatId: 1, status: "available" },
+      { seatId: 8, status: "notFound" },
+    ]);
+
+    expect(preview.availableSeatIds).toEqual([3, 1]);
+    expect(preview.plannedSeatIds).toEqual([3, 1]);
+    expect(preview.skipped).toEqual([
+      { seatId: 9, reason: "occupied" },
+      { seatId: 5, reason: "disabled" },
+      { seatId: 8, reason: "notFound" },
+    ]);
+    expect(preview.insufficient).toBe(0);
+  });
+
+  test("自定义目标可超过剩余成员数；可用位置不足时不产生半批计划", () => {
+    const preview = planOrganizationSeatAssignments(4, [
+      { seatId: 1, status: "available" },
+      { seatId: 2, status: "removed" },
+      { seatId: 3, status: "available" },
+    ]);
+
+    // planned 只是预览候选；route 看到 insufficient 后不会执行任何 INSERT。
+    expect(preview.plannedSeatIds).toEqual([1, 3]);
+    expect(preview.insufficient).toBe(2);
+  });
+
+  test("目标为 0 时可用于“剩余人数为 0”的纯预览，不虚构占位", () => {
+    expect(
+      planOrganizationSeatAssignments(0, [{ seatId: 1, status: "available" }]),
+    ).toMatchObject({ plannedSeatIds: [], insufficient: 0 });
   });
 });

@@ -145,6 +145,50 @@ export const AssignOrganizationInput = z.object({
 
 export const UnassignInput = z.object({ planId: id, segmentSeatId: id });
 
+/** 团体批量占位的目标数：可跟随当前未个人排座人数，或由操作者明确指定。 */
+const OrganizationSeatTargetInput = z.discriminatedUnion("targetMode", [
+  z.object({ targetMode: z.literal("remaining") }),
+  z.object({
+    targetMode: z.literal("custom"),
+    targetCount: id,
+  }),
+]);
+
+/**
+ * 有序位置 id 是排位者的显式选择顺序，不在服务端做邻近位置等智能优化。
+ * 重复 id 没有业务意义，而且会让预览容量和实际插入容量不一致，因此入参直接拒绝。
+ */
+export const OrganizationSeatBatchInput = z
+  .object({
+    planId: id,
+    organizationId: id,
+    orderedSeatIds: z.array(id).max(5000, "位置数量超出上限"),
+  })
+  .and(OrganizationSeatTargetInput)
+  .superRefine((input, ctx) => {
+    const seen = new Set<number>();
+    for (const [index, seatId] of input.orderedSeatIds.entries()) {
+      if (seen.has(seatId)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["orderedSeatIds", index],
+          message: `位置重复：${seatId}`,
+        });
+      }
+      seen.add(seatId);
+    }
+  });
+
+export type OrganizationSeatBatchPayload = z.infer<
+  typeof OrganizationSeatBatchInput
+>;
+
+/** 解除当前方案内一个团体的全部有效占位，不影响任何个人分配。 */
+export const UnassignOrganizationInput = z.object({
+  planId: id,
+  organizationId: id,
+});
+
 export const SwapInput = z.object({
   planId: id,
   seatAId: id,
