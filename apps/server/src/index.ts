@@ -19,6 +19,7 @@ import {
   projectMemberRoutes,
   segmentMemberRoutes,
 } from "./modules/member/routes.relation";
+import { organizationRoutes } from "./modules/organization/routes";
 import { activityRoutes, projectRoutes } from "./modules/project/routes";
 import {
   activityResourceRoutes,
@@ -114,6 +115,7 @@ export const routes = app
   // 报价附件是 supplier 模块下的子资源，按约定另占一个前缀（理由写在
   // modules/supplier/routes.quote.ts 的文件头注释里）。
   .route("/api/supplierQuote", supplierQuoteRoutes)
+  .route("/api/organization", organizationRoutes)
   .route("/api/member", memberRoutes)
   // 人员分层的三层关系各占一个前缀。它们和 /api/member 同属 modules/member
   // （三张关系表 + 补齐链路必须跟主档待在一个模块，否则 BR-DEV-026 的跨层
