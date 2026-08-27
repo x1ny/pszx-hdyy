@@ -26,6 +26,8 @@ export const projectMemberKeys = {
   all: ["projectMember"] as const,
   list: (filters: ProjectMemberFilters) =>
     [...projectMemberKeys.all, "list", filters] as const,
+  snapshot: (projectId: number) =>
+    [...projectMemberKeys.all, "snapshot", projectId] as const,
 };
 
 export const projectMemberListQueryOptions = (filters: ProjectMemberFilters) =>
@@ -35,9 +37,57 @@ export const projectMemberListQueryOptions = (filters: ProjectMemberFilters) =>
     placeholderData: keepPreviousData,
   });
 
+type MemberIdPage = {
+  list: readonly { memberId: number }[];
+  total: number;
+};
+
+const SNAPSHOT_PAGE_SIZE = 100;
+
+/**
+ * 关系列表是分页接口，选择器却必须知道当前范围的完整成员集合，不能只拿页面上
+ * 正好显示的十条来判断“已在范围内”。这里按后端允许的最大页长读完所有页。
+ */
+async function collectMemberIds(
+  fetchPage: (page: number) => Promise<MemberIdPage>,
+) {
+  const ids: number[] = [];
+  let page = 1;
+  let total = Number.POSITIVE_INFINITY;
+
+  while (ids.length < total) {
+    const result = await fetchPage(page);
+    total = result.total;
+    ids.push(...result.list.map((row) => row.memberId));
+    if (result.list.length === 0) break;
+    page += 1;
+  }
+
+  return ids;
+}
+
+export const projectMemberSnapshotQueryOptions = (projectId: number) =>
+  queryOptions({
+    queryKey: projectMemberKeys.snapshot(projectId),
+    queryFn: () =>
+      collectMemberIds((page) =>
+        unwrap(
+          api.api.projectMember.list.$post({
+            json: { projectId, page, pageSize: SNAPSHOT_PAGE_SIZE },
+          }),
+        ),
+      ),
+  });
+
 export const addProjectMembers = (
   json: InferRequestType<typeof api.api.projectMember.add.$post>["json"],
 ) => unwrap(api.api.projectMember.add.$post({ json }));
+
+export const addProjectMembersByOrganization = (
+  json: InferRequestType<
+    typeof api.api.projectMember.addByOrganization.$post
+  >["json"],
+) => unwrap(api.api.projectMember.addByOrganization.$post({ json }));
 
 export const addNewProjectMember = (
   json: InferRequestType<typeof api.api.projectMember.addNew.$post>["json"],
@@ -77,6 +127,8 @@ export const activityMemberKeys = {
   detail: (id: number) => [...activityMemberKeys.all, "detail", id] as const,
   sources: (activityId: number) =>
     [...activityMemberKeys.all, "sources", activityId] as const,
+  snapshot: (activityId: number) =>
+    [...activityMemberKeys.all, "snapshot", activityId] as const,
 };
 
 export const activityMemberListQueryOptions = (
@@ -86,6 +138,19 @@ export const activityMemberListQueryOptions = (
     queryKey: activityMemberKeys.list(filters),
     queryFn: () => unwrap(api.api.activityMember.list.$post({ json: filters })),
     placeholderData: keepPreviousData,
+  });
+
+export const activityMemberSnapshotQueryOptions = (activityId: number) =>
+  queryOptions({
+    queryKey: activityMemberKeys.snapshot(activityId),
+    queryFn: () =>
+      collectMemberIds((page) =>
+        unwrap(
+          api.api.activityMember.list.$post({
+            json: { activityId, page, pageSize: SNAPSHOT_PAGE_SIZE },
+          }),
+        ),
+      ),
   });
 
 export const activityMemberSourcesQueryOptions = (activityId: number) =>
@@ -107,6 +172,12 @@ export const activityMemberDetailQueryOptions = (id: number) =>
 export const addActivityMembers = (
   json: InferRequestType<typeof api.api.activityMember.add.$post>["json"],
 ) => unwrap(api.api.activityMember.add.$post({ json }));
+
+export const addActivityMembersByOrganization = (
+  json: InferRequestType<
+    typeof api.api.activityMember.addByOrganization.$post
+  >["json"],
+) => unwrap(api.api.activityMember.addByOrganization.$post({ json }));
 
 export const addNewActivityMember = (
   json: InferRequestType<typeof api.api.activityMember.addNew.$post>["json"],
@@ -137,6 +208,8 @@ export const segmentMemberKeys = {
     [...segmentMemberKeys.all, "list", segmentId] as const,
   conflicts: (activityId: number) =>
     [...segmentMemberKeys.all, "conflicts", activityId] as const,
+  snapshot: (segmentId: number) =>
+    [...segmentMemberKeys.all, "snapshot", segmentId] as const,
 };
 
 export const segmentMemberListQueryOptions = (segmentId: number) =>
@@ -149,6 +222,19 @@ export const segmentMemberListQueryOptions = (segmentId: number) =>
         }),
       ),
     placeholderData: keepPreviousData,
+  });
+
+export const segmentMemberSnapshotQueryOptions = (segmentId: number) =>
+  queryOptions({
+    queryKey: segmentMemberKeys.snapshot(segmentId),
+    queryFn: () =>
+      collectMemberIds((page) =>
+        unwrap(
+          api.api.segmentMember.list.$post({
+            json: { segmentId, page, pageSize: SNAPSHOT_PAGE_SIZE },
+          }),
+        ),
+      ),
   });
 
 /** 一处冲突 = 一个人 + 两个时间重叠的环节。 */
@@ -173,6 +259,12 @@ export const segmentMemberConflictQueryOptions = (activityId: number) =>
 export const addSegmentMembers = (
   json: InferRequestType<typeof api.api.segmentMember.add.$post>["json"],
 ) => unwrap(api.api.segmentMember.add.$post({ json }));
+
+export const addSegmentMembersByOrganization = (
+  json: InferRequestType<
+    typeof api.api.segmentMember.addByOrganization.$post
+  >["json"],
+) => unwrap(api.api.segmentMember.addByOrganization.$post({ json }));
 
 export const addNewSegmentMember = (
   json: InferRequestType<typeof api.api.segmentMember.addNew.$post>["json"],
@@ -210,6 +302,78 @@ export const memberCandidateQueryOptions = (filters: MemberCandidateFilters) =>
     queryKey: ["memberCandidates", filters] as const,
     queryFn: () => unwrap(api.api.member.candidates.$post({ json: filters })),
     placeholderData: keepPreviousData,
+  });
+
+// ---------------------------------------------------------------------------
+// 按团体添加（选择器的数据源与三层统一结果）
+// ---------------------------------------------------------------------------
+
+export type OrganizationOption = ApiData<
+  InferResponseType<typeof api.api.organization.options.$post>
+>[number];
+
+type OrganizationCandidatePage = ApiData<
+  InferResponseType<typeof api.api.member.organizationCandidates.$post>
+>;
+
+export type OrganizationMemberCandidate =
+  OrganizationCandidatePage["list"][number];
+
+export type OrganizationBatchResult = ApiData<
+  InferResponseType<typeof api.api.projectMember.addByOrganization.$post>
+>;
+
+export const organizationMemberPickerKeys = {
+  // 与人员主档页已经使用的 key 保持一致，团体变更时两处能复用同一份选项缓存。
+  options: ["organization", "options"] as const,
+  candidates: (organizationId: number) =>
+    ["member", "organizationCandidates", organizationId] as const,
+};
+
+export const organizationOptionsQueryOptions = () =>
+  queryOptions({
+    queryKey: organizationMemberPickerKeys.options,
+    queryFn: () => unwrap(api.api.organization.options.$post()),
+  });
+
+/**
+ * 选中团体后默认勾选的是整个团体的合法候选，而不是当前十条表格页。因此先按
+ * 100 条一页读完，再在弹窗内做姓名搜索和分页；提交时服务端仍会事务内复验。
+ */
+export const organizationMemberCandidatesQueryOptions = (
+  organizationId: number,
+) =>
+  queryOptions({
+    queryKey: organizationMemberPickerKeys.candidates(organizationId),
+    queryFn: async () => {
+      const list: OrganizationMemberCandidate[] = [];
+      let page = 1;
+      let firstPage: OrganizationCandidatePage | undefined;
+      let total = Number.POSITIVE_INFINITY;
+
+      while (list.length < total) {
+        const result = await unwrap(
+          api.api.member.organizationCandidates.$post({
+            json: {
+              organizationId,
+              page,
+              pageSize: SNAPSHOT_PAGE_SIZE,
+            },
+          }),
+        );
+        firstPage ??= result;
+        total = result.total;
+        list.push(...result.list);
+        if (result.list.length === 0) break;
+        page += 1;
+      }
+
+      if (!firstPage) {
+        throw new Error("团体候选加载失败");
+      }
+
+      return { ...firstPage, list, total };
+    },
   });
 
 // ---------------------------------------------------------------------------

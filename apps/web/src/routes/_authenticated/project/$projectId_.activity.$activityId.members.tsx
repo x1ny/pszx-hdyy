@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { MemberDetailDialog } from "#/features/member/member-detail-dialog.tsx";
 import { MemberPickerDialog } from "#/features/member/member-picker-dialog.tsx";
+import { formatOrganizationBatchSummary } from "#/features/member/member-picker-state.ts";
 import { MemberQuickCreateDialog } from "#/features/member/member-quick-create-dialog.tsx";
 import {
   emptyRelationForm,
@@ -19,11 +20,14 @@ import {
   activityMemberDetailQueryOptions,
   activityMemberKeys,
   activityMemberListQueryOptions,
+  activityMemberSnapshotQueryOptions,
   activityMemberSourcesQueryOptions,
   addActivityMembers,
+  addActivityMembersByOrganization,
   addNewActivityMember,
   getActivityMemberImpact,
   type NewMemberFields,
+  projectMemberKeys,
   RELATION_ORIGIN_LABELS,
   removeActivityMember,
   updateActivityMember,
@@ -138,6 +142,10 @@ function ActivityMembersPage() {
   const sourcesQuery = useQuery(activityMemberSourcesQueryOptions(activityId));
   const list = listQuery.data?.list ?? [];
   const total = listQuery.data?.total ?? 0;
+  const memberSnapshotQuery = useQuery({
+    ...activityMemberSnapshotQueryOptions(activityId),
+    enabled: pickerOpen,
+  });
   const sourceItems = useMemo(
     () => [
       { value: null, label: "全部来源" },
@@ -181,6 +189,17 @@ function ActivityMembersPage() {
       setPendingIds([]);
       setAddForm(emptyRelationForm);
       invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const organizationAddMutation = useMutation({
+    mutationFn: (input: { organizationId: number; memberIds: number[] }) =>
+      addActivityMembersByOrganization({ activityId, ...input }),
+    onSuccess: (result) => {
+      toast.success(formatOrganizationBatchSummary(result));
+      queryClient.invalidateQueries({ queryKey: activityMemberKeys.all });
+      queryClient.invalidateQueries({ queryKey: projectMemberKeys.all });
     },
     onError: (error) => toast.error(error.message),
   });
@@ -503,7 +522,14 @@ function ActivityMembersPage() {
           { value: "project", label: "本项目人员", projectId },
           { value: "all", label: "全量人员库" },
         ]}
-        excludeIds={list.map((row) => row.memberId)}
+        excludeIds={memberSnapshotQuery.data ?? list.map((row) => row.memberId)}
+        excludeIdsPending={memberSnapshotQuery.isPending}
+        excludeIdsError={memberSnapshotQuery.error?.message}
+        organization={{
+          hint: "按团体添加会把最终勾选人员加入本活动；尚未进入本项目的人员会自动补齐项目关系，并分别记录范围团体快照。",
+          submitting: organizationAddMutation.isPending,
+          onConfirm: (input) => organizationAddMutation.mutateAsync(input),
+        }}
         onOpenChange={setPickerOpen}
         onConfirm={(memberIds) => {
           setPendingIds(memberIds);

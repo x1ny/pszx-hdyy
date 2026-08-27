@@ -3,18 +3,23 @@ import { InfoIcon, PlusIcon, UsersRoundIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { MemberPickerDialog } from "#/features/member/member-picker-dialog.tsx";
+import { formatOrganizationBatchSummary } from "#/features/member/member-picker-state.ts";
 import { MemberQuickCreateDialog } from "#/features/member/member-quick-create-dialog.tsx";
 import { SegmentRoleField } from "#/features/member/relation-fields.tsx";
 import {
+  activityMemberKeys,
   addNewSegmentMember,
   addSegmentMembers,
+  addSegmentMembersByOrganization,
   type NewMemberFields,
+  projectMemberKeys,
   RELATION_ORIGIN_LABELS,
   removeSegmentMember,
   SEGMENT_MEMBER_ROLE_VALUES,
   type SegmentMember,
   segmentMemberKeys,
   segmentMemberListQueryOptions,
+  segmentMemberSnapshotQueryOptions,
   updateSegmentMember,
 } from "#/features/member/relation-queries.ts";
 import { Badge } from "#/shared/components/ui/badge.tsx";
@@ -94,6 +99,10 @@ export function SegmentMembersDialog({
     enabled: open && !!segmentId,
   });
   const list = listQuery.data?.list ?? [];
+  const memberSnapshotQuery = useQuery({
+    ...segmentMemberSnapshotQueryOptions(segmentId ?? 0),
+    enabled: pickerOpen && !!segmentId,
+  });
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: segmentMemberKeys.all });
@@ -109,6 +118,21 @@ export function SegmentMembersDialog({
       toast.success(`已加入 ${result.added} 人，并已补齐活动 / 项目关系`);
       setPickerOpen(false);
       invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const organizationAddMutation = useMutation({
+    mutationFn: (input: { organizationId: number; memberIds: number[] }) =>
+      addSegmentMembersByOrganization({
+        segmentId: segmentId ?? 0,
+        ...input,
+      }),
+    onSuccess: (result) => {
+      toast.success(formatOrganizationBatchSummary(result));
+      queryClient.invalidateQueries({ queryKey: segmentMemberKeys.all });
+      queryClient.invalidateQueries({ queryKey: activityMemberKeys.all });
+      queryClient.invalidateQueries({ queryKey: projectMemberKeys.all });
     },
     onError: (error) => toast.error(error.message),
   });
@@ -335,8 +359,15 @@ export function SegmentMembersDialog({
           { value: "project", label: "本项目人员", projectId },
           { value: "all", label: "全量人员库" },
         ]}
-        excludeIds={list.map((row) => row.memberId)}
+        excludeIds={memberSnapshotQuery.data ?? list.map((row) => row.memberId)}
+        excludeIdsPending={memberSnapshotQuery.isPending}
+        excludeIdsError={memberSnapshotQuery.error?.message}
         submitting={addMutation.isPending}
+        organization={{
+          hint: "按团体添加会把最终勾选人员加入本环节；尚未进入本活动或本项目的人员会自动补齐上层关系，并逐层记录团体快照。",
+          submitting: organizationAddMutation.isPending,
+          onConfirm: (input) => organizationAddMutation.mutateAsync(input),
+        }}
         onOpenChange={setPickerOpen}
         onConfirm={(memberIds) => addMutation.mutate(memberIds)}
         onCreateNew={() => {

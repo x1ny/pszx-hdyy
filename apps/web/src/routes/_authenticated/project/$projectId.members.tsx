@@ -5,14 +5,17 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { MemberPickerDialog } from "#/features/member/member-picker-dialog.tsx";
+import { formatOrganizationBatchSummary } from "#/features/member/member-picker-state.ts";
 import { MemberQuickCreateDialog } from "#/features/member/member-quick-create-dialog.tsx";
 import {
   addNewProjectMember,
   addProjectMembers,
+  addProjectMembersByOrganization,
   type NewMemberFields,
   type ProjectMember,
   projectMemberKeys,
   projectMemberListQueryOptions,
+  projectMemberSnapshotQueryOptions,
   removeProjectMember,
 } from "#/features/member/relation-queries.ts";
 import {
@@ -149,6 +152,10 @@ function ProjectMembersPage() {
   );
   const list = listQuery.data?.list ?? [];
   const total = listQuery.data?.total ?? 0;
+  const memberSnapshotQuery = useQuery({
+    ...projectMemberSnapshotQueryOptions(projectId),
+    enabled: pickerOpen,
+  });
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: projectMemberKeys.all });
@@ -173,6 +180,16 @@ function ProjectMembersPage() {
     onSuccess: (result) => {
       toast.success(`已新增 ${result.added} 名项目人员`);
       setPickerOpen(false);
+      invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const organizationAddMutation = useMutation({
+    mutationFn: (input: { organizationId: number; memberIds: number[] }) =>
+      addProjectMembersByOrganization({ projectId, ...input }),
+    onSuccess: (result) => {
+      toast.success(formatOrganizationBatchSummary(result));
       invalidate();
     },
     onError: (error) => toast.error(error.message),
@@ -410,8 +427,15 @@ function ProjectMembersPage() {
         title="从已有人员选择"
         description="选中的人员将进入本项目范围。"
         scopes={[{ value: "all", label: "全量人员库" }]}
-        excludeIds={list.map((row) => row.memberId)}
+        excludeIds={memberSnapshotQuery.data ?? list.map((row) => row.memberId)}
+        excludeIdsPending={memberSnapshotQuery.isPending}
+        excludeIdsError={memberSnapshotQuery.error?.message}
         submitting={addMutation.isPending}
+        organization={{
+          hint: "按团体添加会把最终勾选人员加入本项目，并记录本次项目范围的团体快照；不会修改人员主档归属。",
+          submitting: organizationAddMutation.isPending,
+          onConfirm: (input) => organizationAddMutation.mutateAsync(input),
+        }}
         onOpenChange={setPickerOpen}
         onConfirm={(memberIds) => addMutation.mutate(memberIds)}
         onCreateNew={() => {
