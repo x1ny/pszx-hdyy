@@ -184,6 +184,14 @@ export function MemberPickerDialog({
       !!organization &&
       organizationId !== null,
   });
+  const organizationItems = useMemo(
+    () =>
+      (organizationOptionsQuery.data ?? []).map((item) => ({
+        value: item.id,
+        label: item.name,
+      })),
+    [organizationOptionsQuery.data],
+  );
 
   const excludedFingerprint = [...(excludeIds ?? [])]
     .sort((left, right) => left - right)
@@ -581,6 +589,7 @@ export function MemberPickerDialog({
                   </Alert>
                 ) : (
                   <Select
+                    items={organizationItems}
                     value={organizationId}
                     onValueChange={changeOrganization}
                     disabled={organizationOptionsQuery.isPending}
@@ -596,9 +605,9 @@ export function MemberPickerDialog({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
-                        {(organizationOptionsQuery.data ?? []).map((item) => (
-                          <SelectItem key={item.id} value={item.id}>
-                            {item.name}
+                        {organizationItems.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
                           </SelectItem>
                         ))}
                       </SelectGroup>

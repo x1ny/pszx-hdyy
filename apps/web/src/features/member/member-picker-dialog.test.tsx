@@ -111,6 +111,18 @@ function chooseOption(option: string) {
 }
 
 describe("MemberPickerDialog organization mode", () => {
+  it("选中团体后在触发器中回显团体名称", async () => {
+    renderPicker();
+    fireEvent.click(screen.getByRole("tab", { name: "按团体添加" }));
+    chooseOption("协会甲");
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("combobox", { name: "选择团体" }),
+      ).toHaveTextContent("协会甲"),
+    );
+  });
+
   it("合并范围快照，默认全选可添加人员；切换团体会重建合法选择", async () => {
     renderPicker();
     fireEvent.click(screen.getByRole("tab", { name: "按团体添加" }));
