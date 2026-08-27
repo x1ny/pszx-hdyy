@@ -110,6 +110,9 @@ export function MemberDetailDialog({
                   <Row label="企业（社会）职务">
                     {member.companyPosition || "-"}
                   </Row>
+                  <Row label="所属团体">
+                    {member.organizationName || "未加入团体"}
+                  </Row>
                   <Row label="国别 / 地区">{member.countryRegion || "-"}</Row>
                   <Row label="籍贯">
                     {formatNativePlace(
