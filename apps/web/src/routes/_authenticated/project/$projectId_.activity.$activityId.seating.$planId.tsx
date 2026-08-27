@@ -217,7 +217,7 @@ function SeatingCanvasPage() {
   const syncFullscreenState = useCallback(() => {
     const native = isTargetFullscreen(
       document.fullscreenElement,
-      fullscreenRef.current,
+      document.documentElement,
     );
     setNativeFullscreen(native);
     if (!native) setFallbackFullscreen(false);
@@ -230,7 +230,10 @@ function SeatingCanvasPage() {
   }, [syncFullscreenState]);
 
   const enterFullscreen = useCallback(async () => {
-    const element = fullscreenRef.current;
+    // 原生全屏的宿主必须包含 body：Dialog、Select、AlertDialog 和 Toaster 都会
+    // 经 Portal 挂到这里。画布本身仍用 frameClassName 铺满视口，所以视觉上只有
+    // 排位编辑器全屏。
+    const element = document.documentElement;
     if (!supportsFullscreenRequest(element)) {
       setFallbackFullscreen(true);
       return;
@@ -246,7 +249,7 @@ function SeatingCanvasPage() {
   }, [syncFullscreenState]);
 
   const exitFullscreen = useCallback(async () => {
-    const element = fullscreenRef.current;
+    const element = document.documentElement;
     setFallbackFullscreen(false);
     if (!isTargetFullscreen(document.fullscreenElement, element)) return;
 

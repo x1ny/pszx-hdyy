@@ -4,14 +4,14 @@ import {
   supportsFullscreenRequest,
 } from "./-fullscreen-utils";
 
-describe("seating canvas fullscreen helpers", () => {
-  it("only treats the canvas wrapper as this page's native fullscreen target", () => {
-    const canvas = document.createElement("div");
+describe("seating fullscreen helpers", () => {
+  it("only treats the expected element as this page's native fullscreen target", () => {
+    const pageRoot = document.documentElement;
     const anotherElement = document.createElement("div");
 
-    expect(isTargetFullscreen(canvas, canvas)).toBe(true);
-    expect(isTargetFullscreen(anotherElement, canvas)).toBe(false);
-    expect(isTargetFullscreen(null, canvas)).toBe(false);
+    expect(isTargetFullscreen(pageRoot, pageRoot)).toBe(true);
+    expect(isTargetFullscreen(anotherElement, pageRoot)).toBe(false);
+    expect(isTargetFullscreen(null, pageRoot)).toBe(false);
   });
 
   it("detects the Fullscreen API so callers can use the page-fill fallback", () => {

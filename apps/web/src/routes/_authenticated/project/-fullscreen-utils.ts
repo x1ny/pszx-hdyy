@@ -2,7 +2,7 @@ type FullscreenRequestTarget = Element & {
   requestFullscreen?: () => Promise<void>;
 };
 
-/** 当前浏览器原生全屏的元素是否就是这块排位画布。 */
+/** 当前浏览器原生全屏的元素是否就是调用方预期的目标。 */
 export function isTargetFullscreen(
   fullscreenElement: Element | null,
   target: Element | null,
