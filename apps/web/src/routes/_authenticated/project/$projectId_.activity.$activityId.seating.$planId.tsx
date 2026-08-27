@@ -19,6 +19,12 @@ import {
   type Selection,
 } from "#/features/venue-editor/canvas/core/interaction";
 import { ZoneSeatingEditor } from "#/features/venue-editor/canvas/react/zone-seating-editor";
+import {
+  buildSeatOccupantVisual,
+  type OrganizationSeatLegendItem,
+  organizationSeatLegend,
+  type SeatOccupantVisual,
+} from "#/features/venue-editor/canvas/seat-occupant-visual";
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import { Skeleton } from "#/shared/components/ui/skeleton.tsx";
@@ -104,21 +110,31 @@ function SeatingCanvasPage() {
   const seatStatus = useMemo(() => {
     const map = new Map<
       string,
-      { occupantName?: string; disabled?: boolean }
+      { occupant?: SeatOccupantVisual; disabled?: boolean }
     >();
     for (const seat of bundle?.seats ?? []) {
       const assignment = assignmentBySeatId.get(seat.id);
       map.set(seat.externalId, {
-        occupantName: assignment
-          ? assignment.occupantType === "organization"
-            ? (assignment.organizationName ?? "团体占位")
-            : (assignment.memberName ?? undefined)
+        occupant: assignment
+          ? buildSeatOccupantVisual({
+              occupantType: assignment.occupantType,
+              memberName: assignment.memberName,
+              organizationId: assignment.organizationId,
+              organizationName: assignment.organizationName,
+            })
           : undefined,
         disabled: !seat.enabled,
       });
     }
     return map;
   }, [bundle?.seats, assignmentBySeatId]);
+  const organizationLegend = useMemo(
+    () =>
+      organizationSeatLegend(
+        Array.from(seatStatus.values(), (status) => status.occupant),
+      ),
+    [seatStatus],
+  );
 
   const selectedExternalId = selection.seatIds[0] ?? null;
   const selectedSeat = selectedExternalId
@@ -395,7 +411,7 @@ function SeatingCanvasPage() {
             {isFullscreen ? "退出全屏" : "全屏"}
           </Button>
         }
-        legend={<SeatStatusLegend />}
+        legend={<SeatStatusLegend organizations={organizationLegend} />}
         rightPanel={
           <div className="flex w-72 shrink-0 flex-col gap-3">
             <SeatAssignPanel
@@ -459,7 +475,11 @@ function SeatingCanvasPage() {
   );
 }
 
-function SeatStatusLegend() {
+function SeatStatusLegend({
+  organizations,
+}: {
+  organizations: readonly OrganizationSeatLegendItem[];
+}) {
   return (
     <section
       className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground text-xs"
@@ -472,7 +492,7 @@ function SeatStatusLegend() {
       </span>
       <span className="flex items-center gap-1">
         <CircleDotIcon className="size-3 text-primary" aria-hidden />
-        已排位
+        无团体个人
       </span>
       <span className="flex items-center gap-1">
         <DiamondIcon className="size-3 text-warning-foreground" aria-hidden />
@@ -491,6 +511,28 @@ function SeatStatusLegend() {
         </span>
         已选中
       </span>
+      {organizations.length > 0 ? (
+        <>
+          <span className="mx-1 h-3 w-px bg-border" aria-hidden />
+          <span className="font-medium text-foreground">当前占用团体</span>
+          {organizations.map((organization) => (
+            <span
+              key={organization.organizationId}
+              className="flex items-center gap-1"
+            >
+              <span
+                className="size-3 rounded-full border"
+                style={{
+                  backgroundColor: organization.color.fill,
+                  borderColor: organization.color.stroke,
+                }}
+                aria-hidden
+              />
+              {organization.organizationName}
+            </span>
+          ))}
+        </>
+      ) : null}
     </section>
   );
 }

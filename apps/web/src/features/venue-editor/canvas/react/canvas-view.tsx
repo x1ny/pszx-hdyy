@@ -6,6 +6,10 @@ import {
   type Selection,
   zonePolygonPoints,
 } from "../core/interaction";
+import {
+  type SeatOccupantVisual,
+  seatOccupantLabelLayout,
+} from "../seat-occupant-visual";
 import type { Viewport } from "./use-viewport";
 
 /**
@@ -34,8 +38,10 @@ type SeatNodeProps = {
    * 不是编辑器文档的内容（底层设计 §1 那条分界线）。所以按 externalId 从外面
    * 传进来，而不是塞进 doc 里让编辑器去存。
    */
-  occupantName?: string;
+  occupant?: SeatOccupantVisual;
   planDisabled?: boolean;
+  /** 用于占用标签的缩放截断；场地编辑器不传时按 1 处理。 */
+  viewportScale?: number;
 };
 
 /**
@@ -51,16 +57,33 @@ export const SeatNode = memo(function SeatNode({
   selected,
   offset,
   showLabel,
-  occupantName,
+  occupant,
   planDisabled,
+  viewportScale = 1,
 }: SeatNodeProps) {
   const cx = origin.x + seat.x + (offset?.x ?? 0);
   const cy = origin.y + seat.y + (offset?.y ?? 0);
   const vip = seat.rank === "vip";
-  const occupied = occupantName !== undefined;
+  const occupied = occupant !== undefined;
+  const occupantLabel = occupant
+    ? seatOccupantLabelLayout(occupant, viewportScale)
+    : undefined;
+  const primaryLabelY = cy + SEAT_R + 10;
 
   return (
-    <g>
+    <g
+      data-seat-occupant-kind={occupant?.kind}
+      data-seat-organization-id={occupant?.organizationId}
+    >
+      {occupant ? (
+        <title>
+          {occupant.kind === "organization"
+            ? occupant.primaryLabel
+            : [occupant.primaryLabel, occupant.secondaryLabel]
+                .filter(Boolean)
+                .join(" · ")}
+        </title>
+      ) : null}
       {selected && (
         // 外圈用前景色描边、内圈用主色，且有独立的勾选角标。这样普通、已排、
         // VIP 与停用座位不管底色或透明度怎样，选中信号都不只依赖颜色。
@@ -93,12 +116,16 @@ export const SeatNode = memo(function SeatNode({
           cx={cx}
           cy={cy}
           r={SEAT_R}
-          // 有人 → 实心主色；VIP 空座 → 警示色；普通空座 → 卡片底色。
-          // 三种状态各自一个填充，不靠深浅区分。
+          // 有团体的占用使用确定性色板；无团体个人保持原主色。VIP/普通空座
+          // 继续沿用原样式，状态不只靠文字区分。
           fill={
-            occupied ? "var(--primary)" : vip ? "var(--warning)" : "var(--card)"
+            occupant?.color.fill ?? (vip ? "var(--warning)" : "var(--card)")
           }
-          stroke={selected ? "var(--foreground)" : "var(--border)"}
+          stroke={
+            selected
+              ? "var(--foreground)"
+              : (occupant?.color.stroke ?? "var(--border)")
+          }
           strokeWidth={selected ? 1.8 : 1.2}
         />
         {seat.kind === "standing" && (
@@ -109,9 +136,7 @@ export const SeatNode = memo(function SeatNode({
             width={8}
             height={8}
             fill="none"
-            stroke={
-              occupied ? "var(--primary-foreground)" : "var(--muted-foreground)"
-            }
+            stroke={occupant?.color.foreground ?? "var(--muted-foreground)"}
             strokeWidth={1.2}
           />
         )}
@@ -126,18 +151,58 @@ export const SeatNode = memo(function SeatNode({
             strokeWidth={1.5}
           />
         )}
-        {showLabel && (
+        {occupant?.kind === "organization" ? (
           <text
             x={cx}
-            y={cy + SEAT_R + 9}
+            y={cy + 2.5}
             textAnchor="middle"
-            fontSize={9}
+            fontSize={6.5}
+            fontWeight={700}
+            fill={occupant.color.foreground}
+            style={{ userSelect: "none", pointerEvents: "none" }}
+          >
+            团
+          </text>
+        ) : null}
+        {showLabel && (!occupied || occupantLabel?.showSeatLabel) ? (
+          <text
+            x={cx}
+            y={occupied ? cy - SEAT_R - 4 : cy + SEAT_R + 9}
+            textAnchor="middle"
+            fontSize={occupied ? 6.5 : 9}
             fill="var(--muted-foreground)"
             style={{ userSelect: "none", pointerEvents: "none" }}
           >
             {seat.label}
           </text>
-        )}
+        ) : null}
+        {occupantLabel?.primaryLabel ? (
+          <text
+            data-seat-occupant-label="primary"
+            x={cx}
+            y={primaryLabelY}
+            textAnchor="middle"
+            fontSize={occupantLabel.primaryFontSize}
+            fontWeight={650}
+            fill="var(--foreground)"
+            style={{ userSelect: "none", pointerEvents: "none" }}
+          >
+            {occupantLabel.primaryLabel}
+          </text>
+        ) : null}
+        {occupantLabel?.secondaryLabel ? (
+          <text
+            data-seat-occupant-label="secondary"
+            x={cx}
+            y={primaryLabelY + 8}
+            textAnchor="middle"
+            fontSize={occupantLabel.secondaryFontSize}
+            fill="var(--muted-foreground)"
+            style={{ userSelect: "none", pointerEvents: "none" }}
+          >
+            {occupantLabel.secondaryLabel}
+          </text>
+        ) : null}
       </g>
 
       {selected && (

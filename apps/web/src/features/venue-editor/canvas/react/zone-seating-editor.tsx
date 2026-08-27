@@ -38,6 +38,7 @@ import {
   type SeatTool,
   type Selection,
 } from "../core/interaction";
+import type { SeatOccupantVisual } from "../seat-occupant-visual";
 import { SeatNode, ZoneGeometry } from "./canvas-view";
 import { TemplateDialog } from "./template-dialog";
 import { useViewport } from "./use-viewport";
@@ -113,7 +114,7 @@ export function ZoneSeatingEditor({
    */
   seatStatus?: ReadonlyMap<
     string,
-    { occupantName?: string; disabled?: boolean }
+    { occupant?: SeatOccupantVisual; disabled?: boolean }
   >;
   /**
    * 排位阶段（环节把人放到座位上）**不能再编辑几何**，只能选中座位交给右侧
@@ -568,8 +569,9 @@ export function ZoneSeatingEditor({
                             : null
                         }
                         showLabel={showLabels}
-                        occupantName={status?.occupantName}
+                        occupant={status?.occupant}
                         planDisabled={status?.disabled}
+                        viewportScale={viewport.scale}
                       />
                     );
                   })}
