@@ -45,6 +45,7 @@ import { Input } from "#/shared/components/ui/input.tsx";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -69,6 +70,8 @@ import {
   type MemberStatus,
   memberKeys,
   memberListQueryOptions,
+  organizationKeys,
+  organizationOptionsQueryOptions,
   setMemberStatus,
   updateMember,
 } from "./-queries";
@@ -78,6 +81,7 @@ const MemberSearchSchema = z.object({
   name: z.string().optional().catch(undefined),
   companyPosition: z.string().optional().catch(undefined),
   status: z.enum(MEMBER_STATUS_VALUES).optional().catch(undefined),
+  organizationId: z.number().int().positive().optional().catch(undefined),
   page: z.number().int().min(1).default(1).catch(1),
   pageSize: z.number().int().min(1).max(100).default(10).catch(10),
 });
@@ -111,6 +115,9 @@ function MemberPage() {
   const [statusInput, setStatusInput] = useState<MemberStatus | null>(
     search.status ?? null,
   );
+  const [organizationInput, setOrganizationInput] = useState<number | null>(
+    search.organizationId ?? null,
+  );
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Member>();
   const [detail, setDetail] = useState<Member>();
@@ -124,13 +131,38 @@ function MemberPage() {
     [search.companyPosition],
   );
   useEffect(() => setStatusInput(search.status ?? null), [search.status]);
+  useEffect(
+    () => setOrganizationInput(search.organizationId ?? null),
+    [search.organizationId],
+  );
 
   const listQuery = useQuery(memberListQueryOptions(search));
+  const organizationOptionsQuery = useQuery(organizationOptionsQueryOptions());
   const list = listQuery.data?.list ?? [];
   const total = listQuery.data?.total ?? 0;
+  const organizationFilterItems = [
+    {
+      value: null,
+      label: organizationOptionsQuery.isPending
+        ? "团体加载中…"
+        : organizationOptionsQuery.isError
+          ? "团体加载失败"
+          : "全部团体",
+    },
+    ...(organizationOptionsQuery.data ?? []).map((item) => ({
+      value: item.id,
+      label: item.name,
+    })),
+  ];
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: memberKeys.all });
+
+  const invalidateOrganizationsAndMembers = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: memberKeys.all }),
+      queryClient.invalidateQueries({ queryKey: organizationKeys.all }),
+    ]);
 
   const applyFilter = (patch: Partial<typeof search>) => {
     const next = { ...search, ...patch, page: 1 };
@@ -149,7 +181,7 @@ function MemberPage() {
       toast.success(editing ? "修改成功" : "新增成功");
       setFormOpen(false);
       setEditing(undefined);
-      invalidate();
+      invalidateOrganizationsAndMembers();
     },
     onError: (error) => toast.error(error.message),
   });
@@ -175,7 +207,7 @@ function MemberPage() {
       if (list.length === 1 && search.page > 1) {
         navigate({ search: (prev) => ({ ...prev, page: prev.page - 1 }) });
       }
-      invalidate();
+      invalidateOrganizationsAndMembers();
     },
     onError: (error) => toast.error(error.message),
   });
@@ -225,6 +257,7 @@ function MemberPage() {
             name: nameInput.trim() || undefined,
             companyPosition: positionInput.trim() || undefined,
             status: statusInput ?? undefined,
+            organizationId: organizationInput ?? undefined,
           })
         }
       >
@@ -261,11 +294,45 @@ function MemberPage() {
             ))}
           </SelectContent>
         </Select>
+        <Select
+          items={organizationFilterItems}
+          value={organizationInput}
+          disabled={
+            organizationOptionsQuery.isPending ||
+            organizationOptionsQuery.isError
+          }
+          onValueChange={(value) =>
+            setOrganizationInput(value == null ? null : Number(value))
+          }
+        >
+          <SelectTrigger className="w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {organizationFilterItems.map((item) => (
+                <SelectItem key={item.value ?? "all"} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        {organizationOptionsQuery.isError && (
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => organizationOptionsQuery.refetch()}
+          >
+            团体选项加载失败，重试
+          </Button>
+        )}
         <FilterActions
           onReset={() => {
             setNameInput("");
             setPositionInput("");
             setStatusInput(null);
+            setOrganizationInput(null);
             navigate({ search: { page: 1, pageSize: search.pageSize } });
           }}
         />
@@ -278,7 +345,7 @@ function MemberPage() {
               <TableHead className="w-16 text-center">序号</TableHead>
               <TableHead className="min-w-28">姓名</TableHead>
               <TableHead className="min-w-48">企业（社会）职务</TableHead>
-              <TableHead className="min-w-28">国别 / 地区</TableHead>
+              <TableHead className="min-w-36">所属团体</TableHead>
               <TableHead className="min-w-28">籍贯</TableHead>
               <TableHead className="min-w-32">手机号码</TableHead>
               <TableHead className="w-28 text-center">参与活动数</TableHead>
@@ -326,7 +393,9 @@ function MemberPage() {
                   <TableCell className="max-w-60 truncate">
                     {member.companyPosition || "-"}
                   </TableCell>
-                  <TableCell>{member.countryRegion || "-"}</TableCell>
+                  <TableCell>
+                    {member.organizationName || "未加入团体"}
+                  </TableCell>
                   <TableCell>
                     {formatNativePlace(
                       member.nativeProvince,
@@ -445,11 +514,15 @@ function MemberPage() {
       <MemberFormDialog
         open={formOpen}
         member={editing}
+        organizationOptions={organizationOptionsQuery.data ?? []}
+        organizationOptionsLoading={organizationOptionsQuery.isPending}
+        organizationOptionsError={organizationOptionsQuery.error?.message}
         submitting={saveMutation.isPending}
         onOpenChange={(open) => {
           setFormOpen(open);
           if (!open) setEditing(undefined);
         }}
+        onRetryOrganizationOptions={() => organizationOptionsQuery.refetch()}
         onSubmit={(values) => saveMutation.mutate(values)}
       />
 

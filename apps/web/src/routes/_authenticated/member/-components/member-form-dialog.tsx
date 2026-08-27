@@ -40,14 +40,16 @@ import { Input } from "#/shared/components/ui/input.tsx";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "#/shared/components/ui/select.tsx";
 import { Textarea } from "#/shared/components/ui/textarea.tsx";
-import type { Member, MemberFormValues } from "../-queries";
+import type { Member, MemberFormValues, OrganizationOption } from "../-queries";
 import {
   getIdNumberValidationRule,
+  isValidOrganizationId,
   MEMBER_GENDER_VALUES,
   MEMBER_ID_TYPE_LABELS,
   MEMBER_ID_TYPE_VALUES,
@@ -58,6 +60,11 @@ const MemberFormSchema = z
     name: z.string().trim().min(1, "姓名不能为空").max(64, "姓名过长"),
     status: z.enum(MEMBER_STATUS_VALUES),
     gender: z.enum(MEMBER_GENDER_VALUES).or(z.literal("")).optional(),
+    organizationId: z
+      .number()
+      .nullable()
+      .optional()
+      .refine(isValidOrganizationId, "所属团体不正确"),
     // 三个字典码。不在这里重写服务端那套交叉规则（外籍不能有籍贯、市必须属于
     // 省）——它们在 UI 上是靠禁用和自动清空做掉的，用户点不出非法组合；真绕过
     // 前端打接口时，validation.ts 的 validateRegion 会拒。
@@ -119,16 +126,24 @@ type MemberFormState = z.infer<typeof MemberFormSchema>;
 type MemberFormDialogProps = {
   open: boolean;
   member?: Member;
+  organizationOptions: OrganizationOption[];
+  organizationOptionsLoading: boolean;
+  organizationOptionsError?: string;
   submitting: boolean;
   onOpenChange: (open: boolean) => void;
+  onRetryOrganizationOptions: () => void;
   onSubmit: (values: MemberFormValues) => void;
 };
 
 export function MemberFormDialog({
   open,
   member,
+  organizationOptions,
+  organizationOptionsLoading,
+  organizationOptionsError,
   submitting,
   onOpenChange,
+  onRetryOrganizationOptions,
   onSubmit,
 }: MemberFormDialogProps) {
   return (
@@ -143,8 +158,12 @@ export function MemberFormDialog({
         <MemberForm
           key={member?.id ?? "new"}
           member={member}
+          organizationOptions={organizationOptions}
+          organizationOptionsLoading={organizationOptionsLoading}
+          organizationOptionsError={organizationOptionsError}
           submitting={submitting}
           onCancel={() => onOpenChange(false)}
+          onRetryOrganizationOptions={onRetryOrganizationOptions}
           onSubmit={onSubmit}
         />
       </DialogContent>
@@ -154,19 +173,28 @@ export function MemberFormDialog({
 
 function MemberForm({
   member,
+  organizationOptions,
+  organizationOptionsLoading,
+  organizationOptionsError,
   submitting,
   onCancel,
+  onRetryOrganizationOptions,
   onSubmit,
 }: {
   member?: Member;
+  organizationOptions: OrganizationOption[];
+  organizationOptionsLoading: boolean;
+  organizationOptionsError?: string;
   submitting: boolean;
   onCancel: () => void;
+  onRetryOrganizationOptions: () => void;
   onSubmit: (values: MemberFormValues) => void;
 }) {
   const defaultValues: MemberFormState = {
     name: member?.name ?? "",
     status: member?.status ?? "enabled",
     gender: member?.gender ?? "",
+    organizationId: member?.organizationId ?? null,
     // 新增默认"中国"：服务对象绝大多数是中国籍，这个默认值省掉大多数人的一次
     // 选择，而且它是**可见的**（下拉里明摆着写着中国），选错很难不察觉。编辑
     // 存量时不给默认值——那会把"没填"悄悄改写成"中国"。
@@ -216,6 +244,26 @@ function MemberForm({
   );
   const cityPlaceholder =
     nativeProvinceCode && cities.length === 0 ? "该地区无市级" : "请选择城市";
+  const selectableOrganizations = [...organizationOptions];
+  if (
+    member?.organizationId &&
+    member.organizationName &&
+    !selectableOrganizations.some((item) => item.id === member.organizationId)
+  ) {
+    // 编辑弹窗可能先命中 member 详情缓存、团体选项仍在加载。保留当前值，避免
+    // 下拉短暂显示一个没有标签的裸 id；服务端外键保证已绑定团体不可能被删除。
+    selectableOrganizations.unshift({
+      id: member.organizationId,
+      name: member.organizationName,
+    });
+  }
+  const organizationSelectItems = [
+    { value: null, label: "不加入团体" },
+    ...selectableOrganizations.map((item) => ({
+      value: item.id,
+      label: item.name,
+    })),
+  ];
 
   return (
     <form
@@ -308,9 +356,65 @@ function MemberForm({
             )}
           </form.Field>
 
+          <form.Field name="organizationId">
+            {(field) => (
+              <Field data-invalid={Boolean(organizationOptionsError)}>
+                <FieldLabel>所属团体</FieldLabel>
+                <Select
+                  items={organizationSelectItems}
+                  value={field.state.value ?? null}
+                  disabled={
+                    submitting ||
+                    organizationOptionsLoading ||
+                    Boolean(organizationOptionsError)
+                  }
+                  onValueChange={(value) => {
+                    field.handleChange(value == null ? null : Number(value));
+                    field.handleBlur();
+                  }}
+                >
+                  <SelectTrigger
+                    className="w-full"
+                    aria-invalid={Boolean(organizationOptionsError)}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {organizationSelectItems.map((item) => (
+                        <SelectItem
+                          key={item.value ?? "unassigned"}
+                          value={item.value}
+                        >
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                {organizationOptionsLoading && (
+                  <FieldDescription>团体选项加载中…</FieldDescription>
+                )}
+                {organizationOptionsError && (
+                  <FieldError>
+                    <span>{organizationOptionsError}</span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="link"
+                      onClick={onRetryOrganizationOptions}
+                    >
+                      重试
+                    </Button>
+                  </FieldError>
+                )}
+              </Field>
+            )}
+          </form.Field>
+
           <form.Field name="countryRegionCode">
             {(field) => (
-              <Field>
+              <Field className="sm:col-span-2">
                 <FieldLabel>国别 / 地区</FieldLabel>
                 <CountryRegionCombobox
                   value={field.state.value ?? ""}

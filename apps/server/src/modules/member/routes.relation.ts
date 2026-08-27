@@ -41,6 +41,9 @@ import { memberTrip } from "../trip/schema";
 import { activityVenue, activityVenueZone } from "../venue/schema";
 import { findMemberTimeConflicts } from "./conflicts";
 import {
+  addActivityMembersByOrganization,
+  addProjectMembersByOrganization,
+  addSegmentMembersByOrganization,
   createMemberInTx,
   ensureActivityMembers,
   ensureProjectMembers,
@@ -49,11 +52,14 @@ import {
 } from "./ladder";
 import { activityMember, member, projectMember, segmentMember } from "./schema";
 import {
+  AddActivityMembersByOrganizationInput,
   AddActivityMembersInput,
   AddNewActivityMemberInput,
   AddNewProjectMemberInput,
   AddNewSegmentMemberInput,
+  AddProjectMembersByOrganizationInput,
   AddProjectMembersInput,
+  AddSegmentMembersByOrganizationInput,
   AddSegmentMembersInput,
   ListActivityMemberSourcesInput,
   ListActivityMembersInput,
@@ -315,6 +321,31 @@ export const projectMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
       ? c.json(ok(result.data))
       : c.json(validationError(result.message));
   })
+
+  /**
+   * 按团体把最终勾选人员批量加入项目。成员不存在、已停用或提交时已经换团体，
+   * 任一硬校验失败都会让事务整批零写；已有异团体项目快照则只跳过该成员并返回
+   * conflict 明细，其他人继续添加。null 历史快照会在这次明确操作中补记。
+   */
+  .post(
+    "/addByOrganization",
+    jsonBody(AddProjectMembersByOrganizationInput),
+    async (c) => {
+      const input = c.req.valid("json");
+      const result = await runLadder(() =>
+        db.transaction((tx) =>
+          addProjectMembersByOrganization(tx, {
+            ...input,
+            userId: c.get("authedUser").id,
+          }),
+        ),
+      );
+
+      return result.ok
+        ? c.json(ok(result.data))
+        : c.json(validationError(result.message));
+    },
+  )
 
   /**
    * 手动录入。建主档 + 建项目关系在同一个事务里——人建出来了但关系没建成的
@@ -594,6 +625,31 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
       ? c.json(ok({ added: result.data.size }))
       : c.json(validationError(result.message));
   })
+
+  /**
+   * 按团体批量加入活动并自动补齐项目。硬校验失败整批零写；项目或活动任一层已有
+   * 异团体快照时，该成员整条 ladder 不写并返回 conflict + skipped，其他成员仍在
+   * 同一事务提交。响应恒满足 added + existing + skipped = 去重后的请求人数。
+   */
+  .post(
+    "/addByOrganization",
+    jsonBody(AddActivityMembersByOrganizationInput),
+    async (c) => {
+      const input = c.req.valid("json");
+      const result = await runLadder(() =>
+        db.transaction((tx) =>
+          addActivityMembersByOrganization(tx, {
+            ...input,
+            userId: c.get("authedUser").id,
+          }),
+        ),
+      );
+
+      return result.ok
+        ? c.json(ok(result.data))
+        : c.json(validationError(result.message));
+    },
+  )
 
   .post("/addNew", jsonBody(AddNewActivityMemberInput), async (c) => {
     const { activityId, member: fields, ...relation } = c.req.valid("json");
@@ -965,6 +1021,31 @@ export const segmentMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
       ? c.json(ok({ added: result.data.size }))
       : c.json(validationError(result.message));
   })
+
+  /**
+   * 按团体批量加入环节并自动补齐活动、项目。环节必须正常且开启人员管理；人员与
+   * 环节硬校验任一失败整批零写。三层任一异团体快照只跳过该成员整条 ladder，
+   * null 快照则逐层补记并通过 filledLayers 明细返回。
+   */
+  .post(
+    "/addByOrganization",
+    jsonBody(AddSegmentMembersByOrganizationInput),
+    async (c) => {
+      const input = c.req.valid("json");
+      const result = await runLadder(() =>
+        db.transaction((tx) =>
+          addSegmentMembersByOrganization(tx, {
+            ...input,
+            userId: c.get("authedUser").id,
+          }),
+        ),
+      );
+
+      return result.ok
+        ? c.json(ok(result.data))
+        : c.json(validationError(result.message));
+    },
+  )
 
   /**
    * 手动录入。四层一个事务：主档 → 项目关系 → 活动关系 → 环节关系。

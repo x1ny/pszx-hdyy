@@ -156,7 +156,7 @@ const MemberFields = z.object({
   name: required("姓名", 64),
   status: MemberStatusEnum.default("enabled"),
   gender: MemberGenderEnum.optional(),
-  // 缺省表示保持未绑定；显式 null 用于解除现有绑定。
+  // 创建时缺省表示不绑定；更新时缺省表示保持现状，显式 null 用于解除绑定。
   organizationId: id.nullable().optional(),
   countryRegionCode: dictCode("国别/地区", (code) =>
     Boolean(findCountryRegion(code)),
@@ -225,6 +225,8 @@ export const ListMembersInput = PageInput.extend({
   name: filter,
   companyPosition: filter,
   status: MemberStatusEnum.optional(),
+  // 人员库只按主档当前归属筛选，不读取项目/活动/环节的历史团体快照。
+  organizationId: id.optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -236,12 +238,18 @@ export const ListMembersInput = PageInput.extend({
  *
  * 不是防御性的魔数：ladder 的每层都是 2 次往返、批量大小无关，真正受影响的是
  * 单个事务的持有时长和一次请求的 body 大小。200 人一批已经远超"选人抽屉勾一屏"
- * 的实际用量，导入走的是另一条批次化的路径（本期还没建），不受这条限制。
+ * 的实际用量；按团体添加也沿用这条上限，避免一次请求长期占用三层关系锁。
  */
 const memberIds = z
   .array(id)
   .min(1, "请先选择人员")
   .max(200, "一次最多添加 200 人");
+
+/**
+ * 按团体添加提交的是选择器的最终勾选结果。同一个 id 即使客户端重复发送也只处理
+ * 一次，确保响应的 added + existing + skipped 与服务端实际处理人数严格相等。
+ */
+const finalMemberIds = memberIds.transform((values) => [...new Set(values)]);
 
 /** 运营手填的关系字段，三层共用。 */
 const relationFields = {
@@ -295,6 +303,12 @@ export const AddProjectMembersInput = z.object({
   remark: relationFields.remark,
 });
 
+export const AddProjectMembersByOrganizationInput = z.object({
+  projectId: id,
+  organizationId: id,
+  memberIds: finalMemberIds,
+});
+
 export const UpdateProjectMemberInput = z.object({
   id,
   remark: relationFields.remark,
@@ -325,6 +339,12 @@ export const AddActivityMembersInput = z.object({
   // 批量套用同一组关系字段——原型 activity-members.html 的"新增活动人员"弹窗
   // 就是一组表单配一次多选，不是每人一行。环节层才需要逐行填，见下面。
   ...relationFields,
+});
+
+export const AddActivityMembersByOrganizationInput = z.object({
+  activityId: id,
+  organizationId: id,
+  memberIds: finalMemberIds,
 });
 
 export const UpdateActivityMemberInput = z.object({
@@ -388,6 +408,12 @@ export const AddSegmentMembersInput = z.object({
     )
     .min(1, "请先选择人员")
     .max(200, "一次最多添加 200 人"),
+});
+
+export const AddSegmentMembersByOrganizationInput = z.object({
+  segmentId: id,
+  organizationId: id,
+  memberIds: finalMemberIds,
 });
 
 export const UpdateSegmentMemberInput = z.object({
@@ -463,4 +489,14 @@ export const ListMemberCandidatesInput = PageInput.extend({
   if (value.scope === "activity" && value.activityId === undefined) {
     ctx.addIssue({ code: "custom", path: ["activityId"], message: "缺少活动" });
   }
+});
+
+/**
+ * 按团体添加选择器只读人员的**当前主档归属**，不读三层历史快照。提交接口仍会
+ * 在事务里重新校验一次，候选查询结果不能作为写入时的授权凭据。
+ */
+export const ListOrganizationMemberCandidatesInput = PageInput.extend({
+  organizationId: id,
+  name: filter,
+  companyPosition: filter,
 });

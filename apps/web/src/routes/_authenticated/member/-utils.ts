@@ -5,6 +5,10 @@ export const MEMBER_GENDER_LABELS = {
 
 export const MEMBER_GENDER_VALUES = ["男", "女"] as const;
 
+export const isValidOrganizationId = (value: unknown) =>
+  value == null ||
+  (typeof value === "number" && Number.isInteger(value) && value > 0);
+
 export const MEMBER_ID_TYPE_LABELS = {
   身份证: "身份证",
   护照: "护照",

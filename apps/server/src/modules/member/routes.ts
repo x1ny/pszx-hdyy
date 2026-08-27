@@ -11,6 +11,7 @@ import { err, ok } from "../../shared/result";
 import { jsonBody } from "../../shared/validate";
 import { activitySegment } from "../agenda/schema";
 import { type AuthedVariables, requireUser } from "../auth";
+import { organization } from "../organization/schema";
 import { activity, project } from "../project/schema";
 import {
   activityMember,
@@ -23,6 +24,7 @@ import {
   CreateMemberInput,
   ListMemberCandidatesInput,
   ListMembersInput,
+  ListOrganizationMemberCandidatesInput,
   MemberIdInput,
   SetMemberStatusInput,
   UpdateMemberInput,
@@ -70,7 +72,7 @@ const regionNames = (input: {
 });
 
 /**
- * 读取用的投影：多一个 activityCount。
+ * 读取用的投影：补当前团体名称和 activityCount。
  *
  * 这个数以前是 member 表上的一个物化列，现在改成相关子查询实时算。物化它要
  * 额外定义一整套回写时机（活动人员新增要不要加？活动下架算不算？移除回退
@@ -91,17 +93,84 @@ const regionNames = (input: {
  */
 export const memberReadFields = {
   ...memberFields,
+  // 用相关子查询而不是让 /list、/get 各自维护 left join，保证两条读取接口的
+  // 字段形状始终一致。主档外键为 null 时子查询自然返回 null。
+  organizationName: sql<string | null>`(
+    select ${organization.name} from ${organization}
+    where ${eq(organization.id, member.organizationId)}
+  )`.as("organization_name"),
   activityCount: sql<number>`(
     select count(*)::int from ${activityMember}
     where ${eq(activityMember.memberId, member.id)}
   )`.as("activity_count"),
 };
 
+/** 按团体添加选择器的显式投影，只反映人员主档当前状态与当前团体。 */
+export const organizationMemberCandidateFields = {
+  id: member.id,
+  name: member.name,
+  gender: member.gender,
+  companyPosition: member.companyPosition,
+  mobile: member.mobile,
+  status: member.status,
+  organizationId: member.organizationId,
+};
+
+/**
+ * 候选查询必须用 member.organizationId；三层 organizationId 是历史快照，拿它们
+ * 当当前候选会把已经换团体的人再次加入旧团体范围。
+ */
+export const organizationMemberCandidatesFilter = (
+  organizationId: number,
+  name?: string,
+  companyPosition?: string,
+) =>
+  and(
+    eq(member.organizationId, organizationId),
+    eq(member.status, "enabled"),
+    name ? ilike(member.name, `%${name}%`) : undefined,
+    companyPosition
+      ? ilike(member.companyPosition, `%${companyPosition}%`)
+      : undefined,
+  );
+
 const notFound = () =>
   err({ code: "NOT_FOUND" as const, message: "人员不存在" });
 
 const validationError = (message: string) =>
   err({ code: "VALIDATION_ERROR" as const, message });
+
+const organizationBindingNotFound = () =>
+  validationError("所选团体不存在或已删除，请重新选择");
+
+async function organizationExists(organizationId: number | null | undefined) {
+  if (organizationId == null) return true;
+
+  const [row] = await db
+    .select({ id: organization.id })
+    .from(organization)
+    .where(eq(organization.id, organizationId))
+    .limit(1);
+  return Boolean(row);
+}
+
+/** 人员库列表只筛主档当前归属，绝不读取三层范围关系里的历史团体快照。 */
+export const memberListFilter = (input: {
+  name?: string;
+  companyPosition?: string;
+  status?: "enabled" | "disabled";
+  organizationId?: number;
+}) =>
+  and(
+    input.name ? ilike(member.name, `%${input.name}%`) : undefined,
+    input.companyPosition
+      ? ilike(member.companyPosition, `%${input.companyPosition}%`)
+      : undefined,
+    input.status ? eq(member.status, input.status) : undefined,
+    input.organizationId
+      ? eq(member.organizationId, input.organizationId)
+      : undefined,
+  );
 
 /**
  * 外键违反（Postgres 23503）。
@@ -152,15 +221,14 @@ export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
   .use(requireUser)
 
   .post("/list", jsonBody(ListMembersInput), async (c) => {
-    const { name, companyPosition, status, page, pageSize } =
+    const { name, companyPosition, status, organizationId, page, pageSize } =
       c.req.valid("json");
-    const where = and(
-      name ? ilike(member.name, `%${name}%`) : undefined,
-      companyPosition
-        ? ilike(member.companyPosition, `%${companyPosition}%`)
-        : undefined,
-      status ? eq(member.status, status) : undefined,
-    );
+    const where = memberListFilter({
+      name,
+      companyPosition,
+      status,
+      organizationId,
+    });
     const { limit, offset } = toLimitOffset({ page, pageSize });
 
     const [list, totalRows] = await Promise.all([
@@ -287,6 +355,54 @@ export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
     return c.json(ok({ list, total: totalRows[0]?.total ?? 0 }));
   })
 
+  /**
+   * 查询某团体当前有效的人员候选。这里只提供选择器数据；真正提交时三层批量
+   * 添加接口会在事务里锁定并重新校验存在性、启用状态和当前团体归属。
+   */
+  .post(
+    "/organizationCandidates",
+    jsonBody(ListOrganizationMemberCandidatesInput),
+    async (c) => {
+      const { organizationId, name, companyPosition, page, pageSize } =
+        c.req.valid("json");
+      const [organizationRow] = await db
+        .select({ id: organization.id, name: organization.name })
+        .from(organization)
+        .where(eq(organization.id, organizationId))
+        .limit(1);
+      if (!organizationRow) {
+        return c.json(
+          err({ code: "NOT_FOUND" as const, message: "团体不存在" }),
+        );
+      }
+
+      const where = organizationMemberCandidatesFilter(
+        organizationId,
+        name,
+        companyPosition,
+      );
+      const { limit, offset } = toLimitOffset({ page, pageSize });
+      const [list, totalRows] = await Promise.all([
+        db
+          .select(organizationMemberCandidateFields)
+          .from(member)
+          .where(where)
+          .orderBy(desc(member.id))
+          .limit(limit)
+          .offset(offset),
+        db.select({ total: count() }).from(member).where(where),
+      ]);
+
+      return c.json(
+        ok({
+          organization: organizationRow,
+          list,
+          total: totalRows[0]?.total ?? 0,
+        }),
+      );
+    },
+  )
+
   .post("/get", jsonBody(MemberIdInput), async (c) => {
     const [row] = await db
       .select(memberReadFields)
@@ -386,41 +502,64 @@ export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
 
   .post("/create", jsonBody(CreateMemberInput), async (c) => {
     const input = c.req.valid("json");
+    if (!(await organizationExists(input.organizationId))) {
+      return c.json(organizationBindingNotFound());
+    }
     if (await hasDuplicateIdDocument(input.idType, input.idNumber)) {
       return c.json(validationError("相同证件类型和证件号码的人员已存在"));
     }
 
     const userId = c.get("authedUser").id;
-    const [row] = await db
-      .insert(member)
-      .values({
-        ...input,
-        ...regionNames(input),
-        createdBy: userId,
-        updatedBy: userId,
-      })
-      .returning(memberFields);
+    try {
+      const [row] = await db
+        .insert(member)
+        .values({
+          ...input,
+          ...regionNames(input),
+          createdBy: userId,
+          updatedBy: userId,
+        })
+        .returning(memberFields);
 
-    return c.json(ok(row));
+      return c.json(ok(row));
+    } catch (error) {
+      // 查询和写入之间团体仍可能被并发删除；外键负责最终兜底，再翻译成人话。
+      if (input.organizationId != null && isForeignKeyViolation(error)) {
+        return c.json(organizationBindingNotFound());
+      }
+      throw error;
+    }
   })
 
   .post("/update", jsonBody(UpdateMemberInput), async (c) => {
     const { id, ...input } = c.req.valid("json");
+    if (!(await organizationExists(input.organizationId))) {
+      return c.json(organizationBindingNotFound());
+    }
     if (await hasDuplicateIdDocument(input.idType, input.idNumber, id)) {
       return c.json(validationError("相同证件类型和证件号码的人员已存在"));
     }
 
-    const [row] = await db
-      .update(member)
-      .set({
-        ...input,
-        ...regionNames(input),
-        updatedBy: c.get("authedUser").id,
-      })
-      .where(eq(member.id, id))
-      .returning(memberFields);
+    try {
+      const [row] = await db
+        .update(member)
+        // 只改主档当前 organizationId；范围关系的 organizationId 是历史快照，
+        // 不在人员主档编辑时回写。
+        .set({
+          ...input,
+          ...regionNames(input),
+          updatedBy: c.get("authedUser").id,
+        })
+        .where(eq(member.id, id))
+        .returning(memberFields);
 
-    return row ? c.json(ok(row)) : c.json(notFound());
+      return row ? c.json(ok(row)) : c.json(notFound());
+    } catch (error) {
+      if (input.organizationId != null && isForeignKeyViolation(error)) {
+        return c.json(organizationBindingNotFound());
+      }
+      throw error;
+    }
   })
 
   .post("/setStatus", jsonBody(SetMemberStatusInput), async (c) => {

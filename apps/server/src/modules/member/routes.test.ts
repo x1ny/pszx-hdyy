@@ -1,11 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import { desc, sql } from "drizzle-orm";
 import { db } from "../../infra/db";
-import { memberReadFields } from "./routes";
 import {
+  memberListFilter,
+  memberReadFields,
+  memberRoutes,
+  organizationMemberCandidateFields,
+  organizationMemberCandidatesFilter,
+} from "./routes";
+import {
+  activityMemberRoutes,
   activityMemberScopeFilter,
   activityMemberSegments,
+  projectMemberRoutes,
   projectMemberScopeFilter,
+  segmentMemberRoutes,
   segmentMemberScopeFilter,
 } from "./routes.relation";
 import { activityMember, member, projectMember, segmentMember } from "./schema";
@@ -56,6 +65,29 @@ describe("memberReadFields.activityCount", () => {
       .toSQL().sql;
 
     expect(naive).toContain(`where "member_id" = "id"`);
+  });
+});
+
+describe("人员主档团体读取与筛选", () => {
+  test("读取投影从 organization 主档派生团体名称", () => {
+    const rendered = db.select(memberReadFields).from(member).toSQL().sql;
+
+    expect(rendered).toContain(`from "organization"`);
+    expect(rendered).toContain(
+      `"organization"."id" = "member"."organization_id"`,
+    );
+    expect(rendered).toContain(`as "organization_name"`);
+  });
+
+  test("列表筛选使用 member.organization_id 当前归属列", () => {
+    const rendered = db
+      .select({ id: member.id })
+      .from(member)
+      .where(memberListFilter({ organizationId: 7 }))
+      .toSQL();
+
+    expect(rendered.sql).toContain(`"member"."organization_id" = $1`);
+    expect(rendered.params).toEqual([7]);
   });
 });
 
@@ -158,5 +190,52 @@ describe("范围人员按团体快照查询", () => {
     expect(rendered.sql).toContain('"segment_member"."segment_id"');
     expect(rendered.sql).toContain('"segment_member"."organization_id"');
     expect(rendered.params).toEqual([3, 7]);
+  });
+});
+
+describe("按团体添加路由", () => {
+  test("候选查询只读当前主档团体且只返回启用人员", () => {
+    const rendered = db
+      .select(organizationMemberCandidateFields)
+      .from(member)
+      .where(organizationMemberCandidatesFilter(7, "王", "会长"))
+      .toSQL();
+
+    expect(rendered.sql).toContain('"member"."organization_id"');
+    expect(rendered.sql).toContain('"member"."status"');
+    expect(rendered.sql).not.toContain('"project_member"');
+    expect(rendered.sql).not.toContain('"activity_member"');
+    expect(rendered.sql).not.toContain('"segment_member"');
+    expect(rendered.params).toEqual([7, "enabled", "%王%", "%会长%"]);
+  });
+
+  test("候选投影显式带当前状态和 organizationId", () => {
+    expect(Object.keys(organizationMemberCandidateFields)).toEqual([
+      "id",
+      "name",
+      "gender",
+      "companyPosition",
+      "mobile",
+      "status",
+      "organizationId",
+    ]);
+  });
+
+  test("主档与三层关系都注册了独立动作", () => {
+    const hasPost = (
+      routes: ReadonlyArray<{ method: string; path: string }>,
+      path: string,
+    ) => routes.some((route) => route.method === "POST" && route.path === path);
+
+    expect(hasPost(memberRoutes.routes, "/organizationCandidates")).toBe(true);
+    expect(hasPost(projectMemberRoutes.routes, "/addByOrganization")).toBe(
+      true,
+    );
+    expect(hasPost(activityMemberRoutes.routes, "/addByOrganization")).toBe(
+      true,
+    );
+    expect(hasPost(segmentMemberRoutes.routes, "/addByOrganization")).toBe(
+      true,
+    );
   });
 });

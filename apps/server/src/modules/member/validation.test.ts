@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { CreateMemberInput } from "./validation";
+import {
+  AddActivityMembersByOrganizationInput,
+  AddProjectMembersByOrganizationInput,
+  AddSegmentMembersByOrganizationInput,
+  CreateMemberInput,
+  ListMembersInput,
+  ListOrganizationMemberCandidatesInput,
+} from "./validation";
 
 const base = { name: "王芳" };
 
@@ -110,5 +117,83 @@ describe("CreateMemberInput 的团体绑定", () => {
     expect(
       CreateMemberInput.safeParse({ ...base, organizationId: 1.5 }).success,
     ).toBe(false);
+  });
+});
+
+describe("ListMembersInput 的团体筛选", () => {
+  test("接受正整数团体 ID，缺省时不过滤", () => {
+    expect(
+      ListMembersInput.parse({ page: 1, pageSize: 10, organizationId: 3 })
+        .organizationId,
+    ).toBe(3);
+    expect(
+      ListMembersInput.parse({ page: 1, pageSize: 10 }).organizationId,
+    ).toBeUndefined();
+  });
+
+  test("拒绝无效团体 ID", () => {
+    expect(
+      ListMembersInput.safeParse({
+        page: 1,
+        pageSize: 10,
+        organizationId: 0,
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("按团体添加人员输入", () => {
+  test("三层请求都把最终 memberIds 去重并保持首次勾选顺序", () => {
+    expect(
+      AddProjectMembersByOrganizationInput.parse({
+        projectId: 1,
+        organizationId: 7,
+        memberIds: [3, 1, 3, 2, 1],
+      }).memberIds,
+    ).toEqual([3, 1, 2]);
+    expect(
+      AddActivityMembersByOrganizationInput.parse({
+        activityId: 2,
+        organizationId: 7,
+        memberIds: [3, 3],
+      }).memberIds,
+    ).toEqual([3]);
+    expect(
+      AddSegmentMembersByOrganizationInput.parse({
+        segmentId: 3,
+        organizationId: 7,
+        memberIds: [2, 2],
+      }).memberIds,
+    ).toEqual([2]);
+  });
+
+  test("团体和范围 id 必须是正整数，最终名单不能为空", () => {
+    expect(
+      AddProjectMembersByOrganizationInput.safeParse({
+        projectId: 1,
+        organizationId: 0,
+        memberIds: [1],
+      }).success,
+    ).toBe(false);
+    expect(
+      AddActivityMembersByOrganizationInput.safeParse({
+        activityId: 2,
+        organizationId: 7,
+        memberIds: [],
+      }).success,
+    ).toBe(false);
+  });
+
+  test("团体候选查询裁剪筛选文本", () => {
+    const parsed = ListOrganizationMemberCandidatesInput.parse({
+      organizationId: 7,
+      name: "  王芳  ",
+      companyPosition: "  会长  ",
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(parsed.name).toBe("王芳");
+    expect(parsed.companyPosition).toBe("会长");
   });
 });
