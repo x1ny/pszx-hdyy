@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { PlusIcon, RouteIcon, SearchIcon } from "lucide-react";
+import { PlusIcon, RouteIcon, SearchIcon, UsersRoundIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -60,10 +60,12 @@ import {
 } from "#/shared/components/ui/table.tsx";
 import { activityDetailQueryOptions } from "../-queries";
 import { formatDateTime } from "../-utils";
+import { TripBatchDialog } from "./-components/trip-batch-dialog";
 import {
   TripFormDialog,
   type TripFormSubmitValues,
 } from "./-components/trip-form-dialog";
+import { createBatchTrips, tripBatchOptionsQueryOptions } from "./-queries";
 
 const TripSearchSchema = z.object({
   name: z.string().optional().catch(undefined),
@@ -114,6 +116,8 @@ function TripPage() {
     Trip["transportMode"] | null
   >(search.transportMode ?? null);
   const [formOpen, setFormOpen] = useState(false);
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [batchSegmentId, setBatchSegmentId] = useState<number | null>(null);
   const [editing, setEditing] = useState<Trip>();
   const [pendingDelete, setPendingDelete] = useState<Trip>();
 
@@ -126,9 +130,18 @@ function TripPage() {
   const filters = { activityId, ...search };
   const listQuery = useQuery(tripListQueryOptions(filters));
   const optionsQuery = useQuery(tripOptionsQueryOptions(activityId));
+  const batchOptionsQuery = useQuery({
+    ...tripBatchOptionsQueryOptions({
+      activityId,
+      segmentId: batchSegmentId,
+    }),
+    enabled: batchOpen,
+  });
   const activityQuery = useQuery(activityDetailQueryOptions(activityId));
   const list = listQuery.data?.list ?? [];
   const total = listQuery.data?.total ?? 0;
+  const batchOptionsLoading =
+    batchOptionsQuery.isPending || batchOptionsQuery.isFetching;
 
   const refreshList = () =>
     queryClient.invalidateQueries({ queryKey: tripKeys.list(filters) });
@@ -153,6 +166,17 @@ function TripPage() {
       invalidateTrips();
     },
     onError: (error) => toast.error(error.message),
+  });
+
+  const batchMutation = useMutation({
+    mutationFn: createBatchTrips,
+    onSuccess: (result) => {
+      const count = result.list.length;
+      toast.success(`已为 ${count} 名人员创建 ${count} 条独立行程`);
+      setBatchOpen(false);
+      setBatchSegmentId(null);
+      invalidateTrips();
+    },
   });
 
   const deleteMutation = useMutation({
@@ -182,19 +206,32 @@ function TripPage() {
             维护本活动参与人员的出发、到达及交通信息。
           </p>
         </div>
-        <Button
-          onClick={() => {
-            if ((optionsQuery.data?.members.length ?? 0) === 0) {
-              toast.error("请先在“活动人员”中添加人员");
-              return;
-            }
-            setEditing(undefined);
-            setFormOpen(true);
-          }}
-        >
-          <PlusIcon data-icon="inline-start" />
-          新增行程
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              batchMutation.reset();
+              setBatchSegmentId(null);
+              setBatchOpen(true);
+            }}
+          >
+            <UsersRoundIcon data-icon="inline-start" />
+            团体批量配置
+          </Button>
+          <Button
+            onClick={() => {
+              if ((optionsQuery.data?.members.length ?? 0) === 0) {
+                toast.error("请先在“活动人员”中添加人员");
+                return;
+              }
+              setEditing(undefined);
+              setFormOpen(true);
+            }}
+          >
+            <PlusIcon data-icon="inline-start" />
+            新增行程
+          </Button>
+        </div>
       </div>
 
       <FilterBar
@@ -415,6 +452,35 @@ function TripPage() {
         }}
         onSubmit={(values) => saveMutation.mutate(values)}
       />
+
+      {batchOpen ? (
+        <TripBatchDialog
+          open
+          activityId={activityId}
+          activityName={activityQuery.data?.name ?? "当前活动"}
+          segmentId={batchSegmentId}
+          segments={optionsQuery.data?.segments ?? []}
+          options={batchOptionsLoading ? undefined : batchOptionsQuery.data}
+          optionsPending={batchOptionsLoading}
+          optionsError={batchOptionsQuery.error}
+          submitError={batchMutation.error}
+          submitting={batchMutation.isPending}
+          onOpenChange={(open) => {
+            if (!open && batchMutation.isPending) return;
+            setBatchOpen(open);
+            if (!open) {
+              setBatchSegmentId(null);
+              batchMutation.reset();
+            }
+          }}
+          onSegmentChange={setBatchSegmentId}
+          onRetryOptions={() => {
+            batchOptionsQuery.refetch();
+          }}
+          onClearSubmitError={() => batchMutation.reset()}
+          onSubmit={(values) => batchMutation.mutate(values)}
+        />
+      ) : null}
 
       <AlertDialog
         open={!!pendingDelete}
