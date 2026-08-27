@@ -174,6 +174,54 @@ describe("OrganizationSeatBatchDialog", () => {
     expect(onApplied).toHaveBeenCalledOnce();
   });
 
+  it("开始连续或框选时保留团体和目标草稿，并暂时关闭弹窗", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
+      },
+    });
+    queryClient.setQueryData(organizationSeatingStatsQueryOptions(1).queryKey, {
+      list: [organization],
+    });
+    const onOpenChange = vi.fn();
+    const onDismiss = vi.fn();
+    const onStartSeatSelection = vi.fn();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <OrganizationSeatBatchDialog
+          open
+          planId={1}
+          selectedSeats={[]}
+          readOnly={false}
+          onOpenChange={onOpenChange}
+          onDismiss={onDismiss}
+          onStartSeatSelection={onStartSeatSelection}
+          onApplied={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+
+    chooseOrganization();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "开始连续选座" }),
+      ).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "开始连续选座" }));
+
+    expect(onStartSeatSelection).toHaveBeenCalledWith({
+      organizationId: 7,
+      organizationName: "协会甲",
+      targetMode: "remaining",
+      customTarget: "",
+      targetCount: 5,
+      mode: "continuous",
+    });
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(onDismiss).not.toHaveBeenCalled();
+  });
+
   it("预览请求中选择变化时不把旧预览当成当前结果", async () => {
     let resolvePreview: ((result: typeof previewResult) => void) | undefined;
     mocks.preview.mockReturnValueOnce(

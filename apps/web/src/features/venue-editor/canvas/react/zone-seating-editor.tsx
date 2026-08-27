@@ -81,6 +81,7 @@ export function ZoneSeatingEditor({
   frameClassName,
   isFullscreen,
   onExitFullscreen,
+  onEscape,
   seatStatus,
   assignOnly,
 }: {
@@ -105,6 +106,11 @@ export function ZoneSeatingEditor({
   /** 全屏时 Escape 只退出全屏，不清空画布当前选择。 */
   isFullscreen?: boolean;
   onExitFullscreen?: () => void;
+  /**
+   * 调用方可接管入座阶段的 Escape，例如退出团体批量选座模式。
+   * 返回 true 时编辑器不再清空 selection。
+   */
+  onEscape?: () => boolean;
   /**
    * 每个座位在**环节排位方案**里的状态：谁坐、本环节启不启用。
    *
@@ -169,6 +175,7 @@ export function ZoneSeatingEditor({
     assignOnly,
     isFullscreen,
     onExitFullscreen,
+    onEscape,
   });
   live.current = {
     viewport,
@@ -179,6 +186,7 @@ export function ZoneSeatingEditor({
     assignOnly,
     isFullscreen,
     onExitFullscreen,
+    onEscape,
   };
 
   type DragState = {
@@ -369,7 +377,13 @@ export function ZoneSeatingEditor({
       // 撤销/重做/删除都是几何操作，入座阶段整组不认——不止是按钮不渲染，
       // 快捷键也得真的不生效，否则"看不见的功能"比"按钮变灰"更容易让人误触。
       if (live.current.assignOnly) {
-        if (event.key === "Escape") onSelectionChange(EMPTY_SELECTION);
+        if (event.key === "Escape") {
+          if (live.current.onEscape?.()) {
+            event.preventDefault();
+            return;
+          }
+          onSelectionChange(EMPTY_SELECTION);
+        }
         return;
       }
       const mod = event.ctrlKey || event.metaKey;

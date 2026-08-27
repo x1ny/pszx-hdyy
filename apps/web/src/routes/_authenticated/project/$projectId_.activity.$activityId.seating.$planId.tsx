@@ -20,6 +20,11 @@ import {
   EMPTY_SELECTION,
   type Selection,
 } from "#/features/venue-editor/canvas/core/interaction";
+import {
+  type OrganizationSeatSelectionCandidate,
+  type OrganizationSeatSelectionResult,
+  resolveOrganizationSeatSelection,
+} from "#/features/venue-editor/canvas/organization-seat-selection";
 import { ZoneSeatingEditor } from "#/features/venue-editor/canvas/react/zone-seating-editor";
 import {
   buildSeatOccupantVisual,
@@ -33,7 +38,10 @@ import { Button } from "#/shared/components/ui/button.tsx";
 import { Skeleton } from "#/shared/components/ui/skeleton.tsx";
 import { cn } from "#/shared/lib/utils.ts";
 import { formatDateTime } from "../venue/-utils";
-import { OrganizationSeatBatchDialog } from "./-components/organization-seat-batch-dialog";
+import {
+  OrganizationSeatBatchDialog,
+  type OrganizationSeatBatchSelectionDraft,
+} from "./-components/organization-seat-batch-dialog";
 import { SeatAssignPanel } from "./-components/seat-assign-panel";
 import {
   isTargetFullscreen,
@@ -87,6 +95,12 @@ function SeatingCanvasPage() {
 
   const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
   const [organizationBatchOpen, setOrganizationBatchOpen] = useState(false);
+  const [organizationBatchDraft, setOrganizationBatchDraft] =
+    useState<OrganizationSeatBatchSelectionDraft | null>(null);
+  const [organizationSelectionSession, setOrganizationSelectionSession] =
+    useState<OrganizationSeatBatchSelectionDraft | null>(null);
+  const [organizationSelectionResult, setOrganizationSelectionResult] =
+    useState<OrganizationSeatSelectionResult | null>(null);
   const [isExporting, setIsExporting] = useState(false);
 
   /**
@@ -146,6 +160,30 @@ function SeatingCanvasPage() {
       ),
     [seatStatus],
   );
+  const organizationSelectionCandidates = useMemo<
+    OrganizationSeatSelectionCandidate[]
+  >(() => {
+    if (!doc) return [];
+    return doc.seats.flatMap((canvasSeat) => {
+      const planSeat = seatByExternalId.get(canvasSeat.externalId);
+      if (!planSeat) return [];
+      const status = seatStatus.get(canvasSeat.externalId);
+      return [
+        {
+          externalId: canvasSeat.externalId,
+          label: planSeat.label,
+          ordinal: canvasSeat.ordinal,
+          zoneExternalId: canvasSeat.zoneExternalId,
+          availability:
+            !planSeat.enabled || status?.disabled
+              ? "disabled"
+              : status?.occupant
+                ? "occupied"
+                : "available",
+        },
+      ];
+    });
+  }, [doc, seatByExternalId, seatStatus]);
 
   const selectedExternalId = selection.seatIds[0] ?? null;
   const selectedSeat = selectedExternalId
@@ -263,11 +301,57 @@ function SeatingCanvasPage() {
     },
   });
 
+  const startOrganizationSeatSelection = (
+    draft: OrganizationSeatBatchSelectionDraft,
+  ) => {
+    setSwapFrom(null);
+    setSelection(EMPTY_SELECTION);
+    setOrganizationBatchDraft(draft);
+    setOrganizationSelectionSession(draft);
+    setOrganizationSelectionResult(null);
+    setOrganizationBatchOpen(false);
+  };
+
+  const cancelOrganizationSeatSelection = () => {
+    setOrganizationSelectionSession(null);
+    setOrganizationSelectionResult(null);
+    setSelection(EMPTY_SELECTION);
+    // 返回设置弹窗不等于仍处于画布选座模式；Escape 与取消按钮都在这里收口。
+    setOrganizationBatchOpen(true);
+  };
+
+  const completeOrganizationSeatSelection = () => {
+    if (!organizationSelectionSession) return;
+    if (
+      !organizationSelectionResult ||
+      organizationSelectionResult.insufficient > 0
+    ) {
+      toast.error("可用位置不足，请调整起点或框选范围后再完成");
+      return;
+    }
+    setOrganizationSelectionSession(null);
+    setOrganizationSelectionResult(null);
+    setOrganizationBatchOpen(true);
+  };
+
   /**
    * 对调模式下，点中另一个座位就是"选目标"而不是"改选中"。
    * 点空白处（没有座位）当取消——不然进了对调模式就只能靠按钮退出。
    */
   const handleSelectionChange = (next: Selection) => {
+    if (organizationSelectionSession) {
+      const result = resolveOrganizationSeatSelection({
+        mode: organizationSelectionSession.mode,
+        targetCount: organizationSelectionSession.targetCount,
+        zoneExternalId: zone?.externalId ?? "",
+        requestedExternalIds: next.seatIds,
+        candidates: organizationSelectionCandidates,
+      });
+      setOrganizationSelectionResult(result);
+      setSelection({ zoneIds: [], seatIds: result.selectedExternalIds });
+      return;
+    }
+
     if (!swapFrom) {
       setSelection(next);
       return;
@@ -412,6 +496,15 @@ function SeatingCanvasPage() {
         </div>
       )}
 
+      {organizationSelectionSession ? (
+        <OrganizationSeatSelectionNotice
+          draft={organizationSelectionSession}
+          result={organizationSelectionResult}
+          onCancel={cancelOrganizationSeatSelection}
+          onComplete={completeOrganizationSeatSelection}
+        />
+      ) : null}
+
       {swapFrom && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-4 py-2 text-sm">
           <ArrowLeftRightIcon className="size-4 shrink-0 text-primary" />
@@ -450,6 +543,11 @@ function SeatingCanvasPage() {
         assignOnly
         isFullscreen={isFullscreen}
         onExitFullscreen={exitFullscreen}
+        onEscape={() => {
+          if (!organizationSelectionSession) return false;
+          cancelOrganizationSeatSelection();
+          return true;
+        }}
         toolbarActions={
           <>
             <Button
@@ -488,7 +586,10 @@ function SeatingCanvasPage() {
               <>
                 <Button
                   variant="outline"
-                  disabled={organizationBatchUnavailableReason !== null}
+                  disabled={
+                    organizationBatchUnavailableReason !== null ||
+                    organizationSelectionSession !== null
+                  }
                   onClick={() => setOrganizationBatchOpen(true)}
                 >
                   <UsersRoundIcon />
@@ -504,9 +605,19 @@ function SeatingCanvasPage() {
                   planId={planId}
                   selectedSeats={selectedSeats}
                   readOnly={readOnly}
+                  selectionDraft={organizationBatchDraft}
                   onOpenChange={setOrganizationBatchOpen}
+                  onDismiss={() => {
+                    setOrganizationBatchDraft(null);
+                    setOrganizationSelectionSession(null);
+                    setOrganizationSelectionResult(null);
+                  }}
+                  onStartSeatSelection={startOrganizationSeatSelection}
                   onApplied={() => {
                     setSelection(EMPTY_SELECTION);
+                    setOrganizationBatchDraft(null);
+                    setOrganizationSelectionSession(null);
+                    setOrganizationSelectionResult(null);
                     invalidate();
                   }}
                 />
@@ -570,6 +681,86 @@ function SeatingCanvasPage() {
         }
       />
     </div>
+  );
+}
+
+const ORGANIZATION_SELECTION_SKIP_LABELS = {
+  disabled: "已停用",
+  occupied: "已占用",
+} as const;
+
+function OrganizationSeatSelectionNotice({
+  draft,
+  result,
+  onCancel,
+  onComplete,
+}: {
+  draft: OrganizationSeatBatchSelectionDraft;
+  result: OrganizationSeatSelectionResult | null;
+  onCancel: () => void;
+  onComplete: () => void;
+}) {
+  const selectedCount = result?.selectedExternalIds.length ?? 0;
+  const insufficient = result?.insufficient ?? draft.targetCount;
+  const ready = result !== null && insufficient === 0;
+
+  return (
+    <section
+      className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-primary/40 bg-primary/5 px-4 py-3 text-sm"
+      aria-live="polite"
+    >
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <UsersRoundIcon className="size-4 shrink-0 text-primary" />
+          <span className="font-medium">
+            正在为「{draft.organizationName}」
+            {draft.mode === "continuous" ? "连续选座" : "框选区域"}
+          </span>
+          <Badge variant={ready ? "secondary" : "outline"}>
+            已选 {selectedCount} / {draft.targetCount}
+          </Badge>
+        </div>
+        <p className="mt-1 text-muted-foreground text-xs">
+          {draft.mode === "continuous"
+            ? "点击画布中的起始座位，系统会按位置顺序向后取可用座位。"
+            : "从画布空白处拖拽框住位置，系统会按位置顺序取框内可用座位。"}
+        </p>
+        {result?.skipped.length ? (
+          <p className="mt-1 text-muted-foreground text-xs">
+            已跳过 {result.skipped.length} 个不可用位置（
+            {result.skipped
+              .slice(0, 3)
+              .map(
+                (seat) =>
+                  seat.label +
+                  "：" +
+                  ORGANIZATION_SELECTION_SKIP_LABELS[seat.reason],
+              )
+              .join("、")}
+            {result.skipped.length > 3 ? "…" : ""}）。
+          </p>
+        ) : null}
+        {result?.overflowCount ? (
+          <p className="mt-1 text-muted-foreground text-xs">
+            框内多出的 {result.overflowCount}{" "}
+            个可用位置未选入，已按位置顺序只保留前 {draft.targetCount} 个。
+          </p>
+        ) : null}
+        {insufficient > 0 ? (
+          <p className="mt-1 text-destructive text-xs">
+            还差 {insufficient} 个可用位置，暂不能完成选座。
+          </p>
+        ) : null}
+      </div>
+      <div className="ml-auto flex items-center gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+          取消选座
+        </Button>
+        <Button type="button" size="sm" disabled={!ready} onClick={onComplete}>
+          完成选座
+        </Button>
+      </div>
+    </section>
   );
 }
 

@@ -5,7 +5,7 @@ import {
   RefreshCwIcon,
   UsersIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ORGANIZATION_SEAT_PALETTE } from "#/features/venue-editor/canvas/seat-occupant-visual";
 import {
@@ -57,7 +57,18 @@ import {
   unassignOrganizationSeats,
 } from "../-venue-queries";
 
-type TargetMode = "remaining" | "custom";
+export type OrganizationSeatBatchTargetMode = "remaining" | "custom";
+
+export type OrganizationSeatBatchSelectionMode = "continuous" | "marquee";
+
+export type OrganizationSeatBatchSelectionDraft = {
+  organizationId: number;
+  organizationName: string;
+  targetMode: OrganizationSeatBatchTargetMode;
+  customTarget: string;
+  targetCount: number;
+  mode: OrganizationSeatBatchSelectionMode;
+};
 
 type SelectedSeat = {
   id: number;
@@ -79,9 +90,17 @@ type BatchRequest = {
   key: string;
 };
 
-const TARGET_MODE_LABELS: Record<TargetMode, string> = {
+const TARGET_MODE_LABELS: Record<OrganizationSeatBatchTargetMode, string> = {
   remaining: "按剩余人数",
   custom: "自定义数量",
+};
+
+const SELECTION_MODE_LABELS: Record<
+  OrganizationSeatBatchSelectionMode,
+  string
+> = {
+  continuous: "连续选座",
+  marquee: "框选区域",
 };
 
 const SKIP_REASON_LABELS = {
@@ -102,20 +121,32 @@ export function OrganizationSeatBatchDialog({
   planId,
   selectedSeats,
   readOnly,
+  selectionDraft,
   onOpenChange,
+  onDismiss,
+  onStartSeatSelection,
   onApplied,
 }: {
   open: boolean;
   planId: number;
   selectedSeats: readonly SelectedSeat[];
   readOnly: boolean;
+  /** 从画布选座会话返回时，用这份草稿还原团体、数量和选择方式。 */
+  selectionDraft?: OrganizationSeatBatchSelectionDraft | null;
   onOpenChange: (open: boolean) => void;
+  /** 正常关闭弹窗时清掉页面持有的草稿；进入画布选座时不会触发。 */
+  onDismiss?: () => void;
+  /** 选择团体和目标数量后，暂时关闭弹窗并进入画布选座模式。 */
+  onStartSeatSelection?: (draft: OrganizationSeatBatchSelectionDraft) => void;
   /** 成功写入或整体解除后，由页面统一刷新 seating 缓存并清掉画布选择。 */
   onApplied: () => void;
 }) {
   const [organizationId, setOrganizationId] = useState<number | null>(null);
-  const [targetMode, setTargetMode] = useState<TargetMode>("remaining");
+  const [targetMode, setTargetMode] =
+    useState<OrganizationSeatBatchTargetMode>("remaining");
   const [customTarget, setCustomTarget] = useState("");
+  const [selectionMode, setSelectionMode] =
+    useState<OrganizationSeatBatchSelectionMode>("continuous");
   const [previewState, setPreviewState] = useState<PreviewState | null>(null);
   const [messageState, setMessageState] = useState<MessageState | null>(null);
   const [releaseConfirmOpen, setReleaseConfirmOpen] = useState(false);
@@ -129,16 +160,29 @@ export function OrganizationSeatBatchDialog({
     ...seatingCandidatesQueryOptions(planId),
     enabled: open && organizationId !== null,
   });
+  useEffect(() => {
+    if (!open || !selectionDraft) return;
+    setOrganizationId(selectionDraft.organizationId);
+    setTargetMode(selectionDraft.targetMode);
+    setCustomTarget(selectionDraft.customTarget);
+    setSelectionMode(selectionDraft.mode);
+    setPreviewState(null);
+    setMessageState(null);
+  }, [open, selectionDraft]);
 
   const resetDialog = () => {
     setOrganizationId(null);
     setTargetMode("remaining");
     setCustomTarget("");
+    setSelectionMode("continuous");
     setPreviewState(null);
     setMessageState(null);
   };
   const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) resetDialog();
+    if (!nextOpen) {
+      resetDialog();
+      onDismiss?.();
+    }
     onOpenChange(nextOpen);
   };
 
@@ -157,6 +201,10 @@ export function OrganizationSeatBatchDialog({
     /^\d+$/.test(customTarget) && Number(customTarget) > 0
       ? Number(customTarget)
       : null;
+  const selectionTargetCount =
+    targetMode === "remaining"
+      ? (selectedStat?.remainingMemberCount ?? null)
+      : customTargetNumber;
   const batchInput = useMemo<OrganizationSeatBatchInput | null>(() => {
     if (organizationId === null) return null;
     if (targetMode === "custom") {
@@ -317,6 +365,39 @@ export function OrganizationSeatBatchDialog({
     previewMutation.mutate({ input: batchInput, key: snapshotKey });
   };
 
+  const startSeatSelection = () => {
+    if (!onStartSeatSelection) return;
+    if (organizationId === null || !selectedStat) {
+      setMessageState({ key: snapshotKey, text: "请选择可排座的团体" });
+      return;
+    }
+    if (
+      selectionTargetCount === null ||
+      !Number.isSafeInteger(selectionTargetCount) ||
+      selectionTargetCount <= 0
+    ) {
+      setMessageState({
+        key: snapshotKey,
+        text:
+          targetMode === "remaining"
+            ? "该团体没有待占位成员，无需进入选座"
+            : "自定义数量必须是正整数",
+      });
+      return;
+    }
+
+    onStartSeatSelection({
+      organizationId,
+      organizationName: selectedStat.name,
+      targetMode,
+      customTarget,
+      targetCount: selectionTargetCount,
+      mode: selectionMode,
+    });
+    // 这是“暂离去选座”，不是取消；保留局部状态，重新打开后由草稿一致还原。
+    onOpenChange(false);
+  };
+
   return (
     <>
       <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -452,19 +533,21 @@ export function OrganizationSeatBatchDialog({
               <Field>
                 <FieldLabel>目标数量</FieldLabel>
                 <div className="grid grid-cols-2 gap-2">
-                  {(Object.keys(TARGET_MODE_LABELS) as TargetMode[]).map(
-                    (mode) => (
-                      <Button
-                        key={mode}
-                        type="button"
-                        variant={targetMode === mode ? "default" : "outline"}
-                        disabled={readOnly || pending}
-                        onClick={() => setTargetMode(mode)}
-                      >
-                        {TARGET_MODE_LABELS[mode]}
-                      </Button>
-                    ),
-                  )}
+                  {(
+                    Object.keys(
+                      TARGET_MODE_LABELS,
+                    ) as OrganizationSeatBatchTargetMode[]
+                  ).map((mode) => (
+                    <Button
+                      key={mode}
+                      type="button"
+                      variant={targetMode === mode ? "default" : "outline"}
+                      disabled={readOnly || pending}
+                      onClick={() => setTargetMode(mode)}
+                    >
+                      {TARGET_MODE_LABELS[mode]}
+                    </Button>
+                  ))}
                 </div>
                 {targetMode === "remaining" ? (
                   <FieldDescription>
@@ -489,6 +572,33 @@ export function OrganizationSeatBatchDialog({
                 )}
               </Field>
 
+              {onStartSeatSelection ? (
+                <Field>
+                  <FieldLabel>画布选座方式</FieldLabel>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(
+                      Object.keys(
+                        SELECTION_MODE_LABELS,
+                      ) as OrganizationSeatBatchSelectionMode[]
+                    ).map((mode) => (
+                      <Button
+                        key={mode}
+                        type="button"
+                        variant={selectionMode === mode ? "default" : "outline"}
+                        disabled={readOnly || pending}
+                        onClick={() => setSelectionMode(mode)}
+                      >
+                        {SELECTION_MODE_LABELS[mode]}
+                      </Button>
+                    ))}
+                  </div>
+                  <FieldDescription>
+                    连续选座从起点按位置顺序取可用座位；框选区域会按位置顺序取框内前
+                    {selectionTargetCount ?? " N"} 个可用座位。
+                  </FieldDescription>
+                </Field>
+              ) : null}
+
               <section className="rounded-lg border border-dashed bg-muted/30 p-3 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium">
@@ -501,7 +611,7 @@ export function OrganizationSeatBatchDialog({
                   ) : null}
                 </div>
                 <p className="mt-1 text-muted-foreground text-xs">
-                  当前按画布多选的既有顺序处理；连续或框选等选座手势将在后续版本提供。
+                  可直接预览当前选择；也可从下方进入画布按所选方式重新选座。
                 </p>
               </section>
 
@@ -553,6 +663,16 @@ export function OrganizationSeatBatchDialog({
               )}
               预览可用位置
             </Button>
+            {onStartSeatSelection ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending || readOnly || selectionTargetCount === null}
+                onClick={startSeatSelection}
+              >
+                开始{SELECTION_MODE_LABELS[selectionMode]}
+              </Button>
+            ) : null}
             <Button
               type="button"
               disabled={!canApply || pending || readOnly}
