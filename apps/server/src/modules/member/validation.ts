@@ -286,6 +286,7 @@ export const ListProjectMembersInput = PageInput.extend({
   sourceType: ProjectMemberSourceFilter.optional(),
   // -1 表示没有关联活动；活动主键都是正数，不会与真实 id 冲突。
   activityId: z.union([id, z.literal(-1)]).optional(),
+  organizationId: id.optional(),
 });
 
 export const AddProjectMembersInput = z.object({
@@ -310,6 +311,7 @@ export const ListActivityMembersInput = PageInput.extend({
   source: filter,
   groupName: filter,
   ownerName: filter,
+  organizationId: id.optional(),
 });
 
 export const ListActivityMemberSourcesInput = z.object({
@@ -359,6 +361,7 @@ export const RemoveSegmentMemberInput = z.object({
 export const ListSegmentMembersInput = PageInput.extend({
   segmentId: id,
   name: filter,
+  organizationId: id.optional(),
 });
 
 /**
@@ -451,6 +454,7 @@ export const ListMemberCandidatesInput = PageInput.extend({
   scope: z.enum(["all", "project", "activity"], { error: "范围不正确" }),
   projectId: id.optional(),
   activityId: id.optional(),
+  organizationId: id.optional(),
   name: filter,
 }).superRefine((value, ctx) => {
   if (value.scope === "project" && value.projectId === undefined) {

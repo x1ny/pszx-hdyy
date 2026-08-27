@@ -185,8 +185,15 @@ export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
    * 挡回去，不如一开始就不给选。
    */
   .post("/candidates", jsonBody(ListMemberCandidatesInput), async (c) => {
-    const { scope, projectId, activityId, name, page, pageSize } =
-      c.req.valid("json");
+    const {
+      scope,
+      projectId,
+      activityId,
+      organizationId,
+      name,
+      page,
+      pageSize,
+    } = c.req.valid("json");
 
     const fields = {
       id: member.id,
@@ -205,12 +212,18 @@ export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
       if (scope === "project") {
         const where = and(
           eq(projectMember.projectId, projectId ?? 0),
+          organizationId
+            ? eq(projectMember.organizationId, organizationId)
+            : undefined,
           enabled,
           nameFilter,
         );
         return Promise.all([
           db
-            .select(fields)
+            .select({
+              ...fields,
+              organizationId: projectMember.organizationId,
+            })
             .from(projectMember)
             .innerJoin(member, eq(member.id, projectMember.memberId))
             .where(where)
@@ -228,12 +241,18 @@ export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
       if (scope === "activity") {
         const where = and(
           eq(activityMember.activityId, activityId ?? 0),
+          organizationId
+            ? eq(activityMember.organizationId, organizationId)
+            : undefined,
           enabled,
           nameFilter,
         );
         return Promise.all([
           db
-            .select(fields)
+            .select({
+              ...fields,
+              organizationId: activityMember.organizationId,
+            })
             .from(activityMember)
             .innerJoin(member, eq(member.id, activityMember.memberId))
             .where(where)
@@ -248,10 +267,14 @@ export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
         ]);
       }
 
-      const where = and(enabled, nameFilter);
+      const where = and(
+        enabled,
+        nameFilter,
+        organizationId ? eq(member.organizationId, organizationId) : undefined,
+      );
       return Promise.all([
         db
-          .select(fields)
+          .select({ ...fields, organizationId: member.organizationId })
           .from(member)
           .where(where)
           .orderBy(desc(member.id))
@@ -297,6 +320,7 @@ export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
       db
         .select({
           projectId: project.id,
+          organizationId: projectMember.organizationId,
           projectName: project.name,
           location: project.location,
           startTime: project.startTime,
@@ -312,6 +336,7 @@ export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
       db
         .select({
           activityMemberId: activityMember.id,
+          organizationId: activityMember.organizationId,
           projectId: activityMember.projectId,
           activityId: activity.id,
           activityName: activity.name,

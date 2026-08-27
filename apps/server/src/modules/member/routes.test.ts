@@ -2,11 +2,18 @@ import { describe, expect, test } from "bun:test";
 import { desc, sql } from "drizzle-orm";
 import { db } from "../../infra/db";
 import { memberReadFields } from "./routes";
-import { activityMemberSegments } from "./routes.relation";
-import { activityMember, member } from "./schema";
+import {
+  activityMemberScopeFilter,
+  activityMemberSegments,
+  projectMemberScopeFilter,
+  segmentMemberScopeFilter,
+} from "./routes.relation";
+import { activityMember, member, projectMember, segmentMember } from "./schema";
 import {
   ListActivityMemberSourcesInput,
   ListActivityMembersInput,
+  ListProjectMembersInput,
+  ListSegmentMembersInput,
 } from "./validation";
 
 /**
@@ -86,5 +93,70 @@ describe("活动人员列表", () => {
     );
     expect(rendered.sql).toContain(`order by "start_time", "segment_id"`);
     expect(rendered.params).toContain("active");
+  });
+});
+
+describe("范围人员按团体快照查询", () => {
+  test("三层列表输入都接受 organizationId", () => {
+    expect(
+      ListProjectMembersInput.parse({
+        projectId: 1,
+        organizationId: 7,
+        page: 1,
+        pageSize: 10,
+      }).organizationId,
+    ).toBe(7);
+    expect(
+      ListActivityMembersInput.parse({
+        activityId: 2,
+        organizationId: 7,
+        page: 1,
+        pageSize: 10,
+      }).organizationId,
+    ).toBe(7);
+    expect(
+      ListSegmentMembersInput.parse({
+        segmentId: 3,
+        organizationId: 7,
+        page: 1,
+        pageSize: 10,
+      }).organizationId,
+    ).toBe(7);
+  });
+
+  test("项目条件使用 project_member 快照列", () => {
+    const rendered = db
+      .select({ organizationId: projectMember.organizationId })
+      .from(projectMember)
+      .where(projectMemberScopeFilter(1, 7))
+      .toSQL();
+
+    expect(rendered.sql).toContain('"project_member"."project_id"');
+    expect(rendered.sql).toContain('"project_member"."organization_id"');
+    expect(rendered.params).toEqual([1, 7]);
+  });
+
+  test("活动条件使用 activity_member 快照列", () => {
+    const rendered = db
+      .select({ organizationId: activityMember.organizationId })
+      .from(activityMember)
+      .where(activityMemberScopeFilter(2, 7))
+      .toSQL();
+
+    expect(rendered.sql).toContain('"activity_member"."activity_id"');
+    expect(rendered.sql).toContain('"activity_member"."organization_id"');
+    expect(rendered.params).toEqual([2, 7]);
+  });
+
+  test("环节条件使用 segment_member 快照列", () => {
+    const rendered = db
+      .select({ organizationId: segmentMember.organizationId })
+      .from(segmentMember)
+      .where(segmentMemberScopeFilter(3, 7))
+      .toSQL();
+
+    expect(rendered.sql).toContain('"segment_member"."segment_id"');
+    expect(rendered.sql).toContain('"segment_member"."organization_id"');
+    expect(rendered.params).toEqual([3, 7]);
   });
 });

@@ -127,6 +127,43 @@ const identityFields = {
   memberStatus: member.status,
 };
 
+/**
+ * 三层列表按「范围 + 团体快照」取数的公共条件。单独导出是为了让路由 SQL 测试
+ * 能钉住查询确实走关系快照列，而不是误用 member.organizationId 或 groupName。
+ */
+export const projectMemberScopeFilter = (
+  projectId: number,
+  organizationId?: number,
+) =>
+  and(
+    eq(projectMember.projectId, projectId),
+    organizationId === undefined
+      ? undefined
+      : eq(projectMember.organizationId, organizationId),
+  );
+
+export const activityMemberScopeFilter = (
+  activityId: number,
+  organizationId?: number,
+) =>
+  and(
+    eq(activityMember.activityId, activityId),
+    organizationId === undefined
+      ? undefined
+      : eq(activityMember.organizationId, organizationId),
+  );
+
+export const segmentMemberScopeFilter = (
+  segmentId: number,
+  organizationId?: number,
+) =>
+  and(
+    eq(segmentMember.segmentId, segmentId),
+    organizationId === undefined
+      ? undefined
+      : eq(segmentMember.organizationId, organizationId),
+  );
+
 // ---------------------------------------------------------------------------
 // 项目人员
 // ---------------------------------------------------------------------------
@@ -141,6 +178,7 @@ export const projectMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
       companyPosition,
       sourceType,
       activityId,
+      organizationId,
       page,
       pageSize,
     } = c.req.valid("json");
@@ -190,7 +228,7 @@ export const projectMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
           : undefined;
 
     const where = and(
-      eq(projectMember.projectId, projectId),
+      projectMemberScopeFilter(projectId, organizationId),
       keywordFilter,
       companyPosition
         ? ilike(member.companyPosition, `%${companyPosition}%`)
@@ -205,6 +243,7 @@ export const projectMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
       db
         .select({
           id: projectMember.id,
+          organizationId: projectMember.organizationId,
           ...identityFields,
           sourceType: projectMember.sourceType,
           remark: projectMember.remark,
@@ -293,7 +332,6 @@ export const projectMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
           memberIds: [memberId],
           sourceType: "manual",
           userId,
-          skipMemberCheck: true,
         });
         return { memberId };
       }),
@@ -385,12 +423,13 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
       source,
       groupName,
       ownerName,
+      organizationId,
       page,
       pageSize,
     } = c.req.valid("json");
 
     const where = and(
-      eq(activityMember.activityId, activityId),
+      activityMemberScopeFilter(activityId, organizationId),
       name ? ilike(member.name, `%${name}%`) : undefined,
       companyPosition
         ? ilike(member.companyPosition, `%${companyPosition}%`)
@@ -406,6 +445,7 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
       db
         .select({
           id: activityMember.id,
+          organizationId: activityMember.organizationId,
           ...identityFields,
           source: activityMember.source,
           groupName: activityMember.groupName,
@@ -443,6 +483,7 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
     const [detail] = await db
       .select({
         id: activityMember.id,
+        organizationId: activityMember.organizationId,
         memberId: member.id,
         name: member.name,
         gender: member.gender,
@@ -473,6 +514,7 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
     const segments = await db
       .select({
         id: segmentMember.id,
+        organizationId: segmentMember.organizationId,
         segmentId: activitySegment.id,
         name: activitySegment.name,
         segmentRole: segmentMember.segmentRole,
@@ -565,7 +607,6 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
           entries: [{ memberId, ...relation }],
           originType: "manual",
           userId,
-          skipMemberCheck: true,
         });
         return { memberId };
       }),
@@ -793,10 +834,11 @@ export const segmentMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
   .use(requireUser)
 
   .post("/list", jsonBody(ListSegmentMembersInput), async (c) => {
-    const { segmentId, name, page, pageSize } = c.req.valid("json");
+    const { segmentId, name, organizationId, page, pageSize } =
+      c.req.valid("json");
 
     const where = and(
-      eq(segmentMember.segmentId, segmentId),
+      segmentMemberScopeFilter(segmentId, organizationId),
       name ? ilike(member.name, `%${name}%`) : undefined,
     );
 
@@ -807,6 +849,7 @@ export const segmentMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
         .select({
           id: segmentMember.id,
           activityMemberId: segmentMember.activityMemberId,
+          organizationId: segmentMember.organizationId,
           ...identityFields,
           segmentRole: segmentMember.segmentRole,
           originType: segmentMember.originType,

@@ -83,6 +83,15 @@ const NATIVE_PLACES = [
 // 种子里放一条正好让这条联动规则在开发环境里一直有个活样本。
 const FOREIGN_INDEX = 19;
 
+const organizationIdAt = (index: number): number | null =>
+  index < 7
+    ? DEMO.organizationIds.fashionAssociation
+    : index < 11
+      ? DEMO.organizationIds.textileChamber
+      : index === 11
+        ? DEMO.organizationIds.designerAssociation
+        : null;
+
 export const seed: SeedFn = async (db, { userId }) => {
   const audit = { createdBy: userId, updatedBy: userId };
 
@@ -93,14 +102,7 @@ export const seed: SeedFn = async (db, { userId }) => {
       gender: index % 3 === 0 ? ("女" as const) : ("男" as const),
       companyPosition: COMPANY_POSITIONS[index % COMPANY_POSITIONS.length],
       // 7 / 4 / 1 人三个规模，剩余人员不绑定团体，覆盖可空关系的四种展示状态。
-      organizationId:
-        index < 7
-          ? DEMO.organizationIds.fashionAssociation
-          : index < 11
-            ? DEMO.organizationIds.textileChamber
-            : index === 11
-              ? DEMO.organizationIds.designerAssociation
-              : null,
+      organizationId: organizationIdAt(index),
       ...(index === FOREIGN_INDEX
         ? {
             countryRegionCode: "US",
@@ -135,6 +137,7 @@ export const seed: SeedFn = async (db, { userId }) => {
       id: index + 1,
       projectId: DEMO.projectId,
       memberId: index + 1,
+      organizationId: organizationIdAt(index),
       sourceType: index < 12 ? ("manual" as const) : ("import" as const),
       ...audit,
     })),
@@ -147,6 +150,7 @@ export const seed: SeedFn = async (db, { userId }) => {
       projectId: DEMO.projectId,
       projectMemberId: index + 1,
       memberId: index + 1,
+      organizationId: organizationIdAt(index),
       source: SOURCES[index % SOURCES.length],
       groupName: index < 4 ? "嘉宾组" : "工作组",
       ownerName: index < 4 ? "王芳" : "李强",
@@ -161,6 +165,7 @@ export const seed: SeedFn = async (db, { userId }) => {
       activityId: DEMO.activityId,
       activityMemberId: 1,
       memberId: 1,
+      organizationId: organizationIdAt(0),
       segmentRole: "演讲嘉宾",
       ...audit,
     },
@@ -169,6 +174,7 @@ export const seed: SeedFn = async (db, { userId }) => {
       activityId: DEMO.activityId,
       activityMemberId: 1,
       memberId: 1,
+      organizationId: organizationIdAt(0),
       segmentRole: "演讲嘉宾",
       ...audit,
     },
@@ -179,6 +185,7 @@ export const seed: SeedFn = async (db, { userId }) => {
       activityId: DEMO.activityId,
       activityMemberId: 1,
       memberId: 1,
+      organizationId: organizationIdAt(0),
       segmentRole: "嘉宾",
       ...audit,
     },
@@ -187,6 +194,7 @@ export const seed: SeedFn = async (db, { userId }) => {
       activityId: DEMO.activityId,
       activityMemberId: 2,
       memberId: 2,
+      organizationId: organizationIdAt(1),
       segmentRole: "嘉宾",
       ...audit,
     },
@@ -195,6 +203,7 @@ export const seed: SeedFn = async (db, { userId }) => {
       activityId: DEMO.activityId,
       activityMemberId: 3,
       memberId: 3,
+      organizationId: organizationIdAt(2),
       segmentRole: "参会人员",
       ...audit,
     },

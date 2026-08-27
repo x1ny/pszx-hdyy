@@ -1,12 +1,12 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { db } from "../../infra/db";
+import type { db } from "../../infra/db";
 import { activitySegment } from "../agenda/schema";
 import { activity } from "../project/schema";
 import {
   activityMember,
-  member,
   type MemberIdType,
   type MemberRelationOrigin,
+  member,
   projectMember,
   type SegmentMemberRole,
   segmentMember,
@@ -57,8 +57,24 @@ export type SegmentMemberEntry = MemberEntry & {
   segmentRole?: SegmentMemberRole | null;
 };
 
-/** 关系 id 按 memberId 索引。三个 ensure 函数的统一出参形状。 */
+/** 关系 id 按 memberId 索引。项目层和环节层只需返回这一份。 */
 export type RelationIdByMember = Map<number, number>;
+
+/** 主档在本次新增链路开始时的团体。null 是有效快照，不表示缺少映射。 */
+export type OrganizationSnapshotByMember = ReadonlyMap<number, number | null>;
+
+/** 活动关系的有效快照；环节层必须从这里继承，不能重新读取人员主档。 */
+export type ActivityRelationByMember = Map<
+  number,
+  { id: number; organizationId: number | null }
+>;
+
+export type ActivityMemberSnapshot = {
+  id: number;
+  activityId: number;
+  memberId: number;
+  organizationId: number | null;
+};
 
 const dedupe = (entries: readonly MemberEntry[]) => {
   // 选择抽屉多选 + 已选列表可能送来重复的 memberId，先收敛掉。留第一条，
@@ -77,9 +93,17 @@ const dedupe = (entries: readonly MemberEntry[]) => {
  * 活动、环节、邀请函、排位、资源服务等新关系。"——禁用挡的是**新增**，不是
  * 已有关系，所以这个检查只在 ensure 路径上，不在读取路径上。
  */
-async function assertMembersUsable(tx: Tx, memberIds: readonly number[]) {
+async function assertMembersUsable(
+  tx: Tx,
+  memberIds: readonly number[],
+): Promise<OrganizationSnapshotByMember> {
   const rows = await tx
-    .select({ id: member.id, name: member.name, status: member.status })
+    .select({
+      id: member.id,
+      name: member.name,
+      status: member.status,
+      organizationId: member.organizationId,
+    })
     .from(member)
     .where(inArray(member.id, [...memberIds]));
 
@@ -92,7 +116,18 @@ async function assertMembersUsable(tx: Tx, memberIds: readonly number[]) {
     const names = disabled.map((row) => row.name).join("、");
     fail(`${names} 已禁用，不能新增参与关系`);
   }
+
+  return new Map(rows.map((row) => [row.id, row.organizationId]));
 }
+
+const organizationSnapshotOf = (
+  snapshots: OrganizationSnapshotByMember,
+  memberId: number,
+): number | null => {
+  // `Map#get()` 无法区分“没有这个人”和“这个人的快照就是 null”，必须先 has。
+  if (!snapshots.has(memberId)) fail("人员团体快照读取失败，请刷新后重试");
+  return snapshots.get(memberId) ?? null;
+};
 
 // ---------------------------------------------------------------------------
 // 手动录入：先建主档，再建关系
@@ -167,8 +202,9 @@ export async function createMemberInTx(
 // ---------------------------------------------------------------------------
 
 /**
- * 把人拉进项目范围。已有关系时**不覆盖**它的 sourceType——一个运营手工加进
- * 项目的人，不该因为后来从某个环节补齐过一次就被改写成 backfill。
+ * 把人拉进项目范围。已有关系时**不覆盖**它的 sourceType 和 organizationId——
+ * 一个运营手工加进项目的人，不该因为后来从某个环节补齐过一次就被改写来源；
+ * 人员主档后来换了团体，也不能倒灌改写这条历史快照。
  */
 export async function ensureProjectMembers(
   tx: Tx,
@@ -177,14 +213,15 @@ export async function ensureProjectMembers(
     memberIds: readonly number[];
     sourceType: MemberRelationOrigin;
     userId: string;
-    /** 已在上层校验过主档时跳过，避免同一批人查两遍。 */
-    skipMemberCheck?: boolean;
+    /** 下层入口已经读取过时沿链传播，避免每补一层都重读主档产生漂移。 */
+    organizationSnapshots?: OrganizationSnapshotByMember;
   },
 ): Promise<RelationIdByMember> {
   const memberIds = [...new Set(input.memberIds)];
   if (memberIds.length === 0) return new Map();
 
-  if (!input.skipMemberCheck) await assertMembersUsable(tx, memberIds);
+  const organizationSnapshots =
+    input.organizationSnapshots ?? (await assertMembersUsable(tx, memberIds));
 
   await tx
     .insert(projectMember)
@@ -192,6 +229,7 @@ export async function ensureProjectMembers(
       memberIds.map((memberId) => ({
         projectId: input.projectId,
         memberId,
+        organizationId: organizationSnapshotOf(organizationSnapshots, memberId),
         sourceType: input.sourceType,
         createdBy: input.userId,
         updatedBy: input.userId,
@@ -229,7 +267,8 @@ export async function ensureActivityMembers(
     entries: readonly MemberEntry[];
     originType: MemberRelationOrigin;
     userId: string;
-    skipMemberCheck?: boolean;
+    /** ensureSegmentMembers 传入同一次主档读取，保证自动补齐的上层拿同一快照。 */
+    organizationSnapshots?: OrganizationSnapshotByMember;
     /**
      * 补齐项目关系时记的录入渠道。默认 backfill_from_activity，只有
      * ensureSegmentMembers 会覆盖成 backfill_from_segment——链条从环节起头时，
@@ -240,12 +279,13 @@ export async function ensureActivityMembers(
      */
     projectSourceType?: MemberRelationOrigin;
   },
-): Promise<RelationIdByMember> {
+): Promise<ActivityRelationByMember> {
   const entries = dedupe(input.entries);
   if (entries.length === 0) return new Map();
 
   const memberIds = entries.map((entry) => entry.memberId);
-  if (!input.skipMemberCheck) await assertMembersUsable(tx, memberIds);
+  const organizationSnapshots =
+    input.organizationSnapshots ?? (await assertMembersUsable(tx, memberIds));
 
   const [row] = await tx
     .select({ projectId: activity.projectId })
@@ -262,9 +302,14 @@ export async function ensureActivityMembers(
     memberIds,
     sourceType: input.projectSourceType ?? "backfill_from_activity",
     userId: input.userId,
-    skipMemberCheck: true,
+    organizationSnapshots,
   });
 
+  /**
+   * 冲突规则：唯一键已存在时完整保留旧活动关系（包括 organizationId），绝不
+   * 用本次从主档读到的新值覆盖。活动关系是独立快照，因此项目关系已经存在且
+   * 快照不同也不构成错误；只有本次自动补建的项目关系才会拿到同一个新快照。
+   */
   await tx
     .insert(activityMember)
     .values(
@@ -275,6 +320,10 @@ export async function ensureActivityMembers(
           projectMemberIds.get(entry.memberId) ??
           fail("项目人员关系补齐失败，请重试"),
         memberId: entry.memberId,
+        organizationId: organizationSnapshotOf(
+          organizationSnapshots,
+          entry.memberId,
+        ),
         source: entry.source ?? null,
         groupName: entry.groupName ?? null,
         ownerName: entry.ownerName ?? null,
@@ -289,7 +338,11 @@ export async function ensureActivityMembers(
     });
 
   const rows = await tx
-    .select({ id: activityMember.id, memberId: activityMember.memberId })
+    .select({
+      id: activityMember.id,
+      memberId: activityMember.memberId,
+      organizationId: activityMember.organizationId,
+    })
     .from(activityMember)
     .where(
       and(
@@ -298,12 +351,64 @@ export async function ensureActivityMembers(
       ),
     );
 
-  return new Map(rows.map((r) => [r.memberId, r.id]));
+  return new Map(
+    rows.map((row) => [
+      row.memberId,
+      { id: row.id, organizationId: row.organizationId },
+    ]),
+  );
 }
 
 // ---------------------------------------------------------------------------
 // 环节层
 // ---------------------------------------------------------------------------
+
+/**
+ * 从一条已经校验过归属的活动关系补建环节关系。
+ *
+ * 排位模块保留了一个旧客户端兼容入口，它允许在环节人员开关关闭时补关系，不能
+ * 直接复用 ensureSegmentMembers 的业务校验；但实际 insert 仍必须回到 ladder，
+ * 并且只能继承调用方刚查出的活动快照。唯一键冲突时完整保留已有环节关系。
+ */
+export async function ensureSegmentMemberFromActivity(
+  tx: Tx,
+  input: {
+    segmentId: number;
+    activityMember: ActivityMemberSnapshot;
+    originType: MemberRelationOrigin;
+    userId: string;
+  },
+): Promise<number> {
+  const relation = input.activityMember;
+
+  await tx
+    .insert(segmentMember)
+    .values({
+      segmentId: input.segmentId,
+      activityId: relation.activityId,
+      activityMemberId: relation.id,
+      memberId: relation.memberId,
+      organizationId: relation.organizationId,
+      originType: input.originType,
+      createdBy: input.userId,
+      updatedBy: input.userId,
+    })
+    .onConflictDoNothing({
+      target: [segmentMember.segmentId, segmentMember.activityMemberId],
+    });
+
+  const [row] = await tx
+    .select({ id: segmentMember.id })
+    .from(segmentMember)
+    .where(
+      and(
+        eq(segmentMember.segmentId, input.segmentId),
+        eq(segmentMember.activityMemberId, relation.id),
+      ),
+    );
+
+  return row?.id ?? fail("补建环节人员失败，请重试");
+}
 
 /**
  * 环节人员。这是补齐链路最长的一条：环节 → 活动 → 项目 → 主档，四层一个事务。
@@ -327,7 +432,7 @@ export async function ensureSegmentMembers(
   if (entries.length === 0) return new Map();
 
   const memberIds = entries.map((entry) => entry.memberId);
-  await assertMembersUsable(tx, memberIds);
+  const organizationSnapshots = await assertMembersUsable(tx, memberIds);
 
   const [row] = await tx
     .select({
@@ -352,28 +457,35 @@ export async function ensureSegmentMembers(
     originType: "backfill_from_segment",
     projectSourceType: "backfill_from_segment",
     userId: input.userId,
-    skipMemberCheck: true,
+    organizationSnapshots,
   });
 
   await tx
     .insert(segmentMember)
     .values(
-      entries.map((entry) => ({
-        segmentId: input.segmentId,
-        activityId,
-        activityMemberId:
+      entries.map((entry) => {
+        const activityRelation =
           activityMemberIds.get(entry.memberId) ??
-          fail("活动人员关系补齐失败，请重试"),
-        memberId: entry.memberId,
-        segmentRole: entry.segmentRole ?? null,
-        source: entry.source ?? null,
-        groupName: entry.groupName ?? null,
-        ownerName: entry.ownerName ?? null,
-        remark: entry.remark ?? null,
-        originType: input.originType,
-        createdBy: input.userId,
-        updatedBy: input.userId,
-      })),
+          fail("活动人员关系补齐失败，请重试");
+
+        return {
+          segmentId: input.segmentId,
+          activityId,
+          activityMemberId: activityRelation.id,
+          memberId: entry.memberId,
+          // 环节默认继承**实际存在的活动关系**。若活动关系是旧数据（包括 null）
+          // 或快照与当前主档不同，保留历史活动快照，不能借补环节之机偷偷刷新。
+          organizationId: activityRelation.organizationId,
+          segmentRole: entry.segmentRole ?? null,
+          source: entry.source ?? null,
+          groupName: entry.groupName ?? null,
+          ownerName: entry.ownerName ?? null,
+          remark: entry.remark ?? null,
+          originType: input.originType,
+          createdBy: input.userId,
+          updatedBy: input.userId,
+        };
+      }),
     )
     .onConflictDoNothing({
       target: [segmentMember.segmentId, segmentMember.activityMemberId],

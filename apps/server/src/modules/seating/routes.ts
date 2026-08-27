@@ -5,6 +5,7 @@ import { err, ok } from "../../shared/result";
 import { jsonBody } from "../../shared/validate";
 import { activitySegment } from "../agenda/schema";
 import { type AuthedVariables, requireUser } from "../auth";
+import { ensureSegmentMemberFromActivity } from "../member/ladder";
 import { activityMember, member, segmentMember } from "../member/schema";
 import {
   activityVenue,
@@ -98,6 +99,7 @@ export const listCandidatesQuery = (
       companyPosition: member.companyPosition,
       mobile: member.mobile,
       segmentMemberId: segmentMember.id,
+      organizationId: segmentMember.organizationId,
       takenSeatLabel: sql<string | null>`(
         select ${segmentSeat.label} from ${seatAssignment}
         join ${segmentSeat} on ${eq(segmentSeat.id, seatAssignment.segmentSeatId)}
@@ -343,6 +345,7 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
           id: seatAssignment.id,
           segmentSeatId: seatAssignment.segmentSeatId,
           segmentMemberId: seatAssignment.segmentMemberId,
+          organizationId: segmentMember.organizationId,
           memberName: member.name,
           companyPosition: member.companyPosition,
         })
@@ -651,6 +654,7 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
             id: activityMember.id,
             activityId: activityMember.activityId,
             memberId: activityMember.memberId,
+            organizationId: activityMember.organizationId,
           })
           .from(activityMember)
           .where(eq(activityMember.id, input.activityMemberId));
@@ -659,35 +663,14 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
           return { ok: false as const, error: "该人员不属于本活动" };
         }
 
-        const [existing] = await tx
-          .select({ id: segmentMember.id })
-          .from(segmentMember)
-          .where(
-            and(
-              eq(segmentMember.segmentId, plan.segmentId),
-              eq(segmentMember.activityMemberId, am.id),
-            ),
-          );
-
-        let segmentMemberId = existing?.id;
-        if (!segmentMemberId) {
-          const [created] = await tx
-            .insert(segmentMember)
-            .values({
-              segmentId: plan.segmentId,
-              activityId: plan.activityId,
-              activityMemberId: am.id,
-              memberId: am.memberId,
-              // 三个可空列留 null 走继承（member/schema.ts 的 COALESCE 约定），
-              // segmentRole 也留空——排位不知道这个人在环节里担任什么。
-              originType: "manual",
-            })
-            .returning({ id: segmentMember.id });
-          segmentMemberId = created?.id;
-        }
-        if (!segmentMemberId) {
-          return { ok: false as const, error: "补建环节人员失败" };
-        }
+        // 三个关系字段和 segmentRole 均留空走既有继承约定；团体快照的继承、
+        // 冲突保留和并发去重统一由 ladder 处理。
+        const segmentMemberId = await ensureSegmentMemberFromActivity(tx, {
+          segmentId: plan.segmentId,
+          activityMember: am,
+          originType: "manual",
+          userId,
+        });
 
         return assignSeat(tx, {
           planId: input.planId,
@@ -989,6 +972,7 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
           memberId: member.id,
           memberName: member.name,
           mobile: member.mobile,
+          organizationId: segmentMember.organizationId,
         })
         .from(seatAssignment)
         .innerJoin(
@@ -1046,6 +1030,7 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
           memberId: row.memberId,
           memberName: row.memberName,
           mobile: row.mobile,
+          organizationId: row.organizationId,
         })),
       });
 

@@ -228,6 +228,18 @@ export const projectMember = pgTable(
       .notNull()
       .references(() => member.id),
 
+    /**
+     * 人进入**这个项目范围时**的团体快照。
+     *
+     * 只保存 organizationId，不复用 groupName，也不在主档换团体后回写。可空是
+     * 为了让加列前的历史关系保持“当时未知”，不能拿人员当前团体反推过去。
+     * NO ACTION 保住历史引用：仍被任何范围快照引用的团体不能物理删除。
+     */
+    organizationId: bigint("organization_id", { mode: "number" }).references(
+      () => organization.id,
+      { onDelete: "no action" },
+    ),
+
     sourceType: text("source_type")
       .$type<MemberRelationOrigin>()
       .notNull()
@@ -257,6 +269,13 @@ export const projectMember = pgTable(
     // "这个人参与了哪些项目" —— H5 我的参与页按当前人员反查，是确定用得上的
     // 访问路径，不属于"等实测再加"的那类索引。
     index("idx_project_member_member").on(table.memberId),
+
+    // 团体放首列，同时覆盖团体删除前的引用检查，以及项目范围内按团体取人。
+    // projectId 单独查已有 uk_project_member 的左前缀可用，不重复建索引。
+    index("idx_project_member_organization_project").on(
+      table.organizationId,
+      table.projectId,
+    ),
 
     // 给 activity_member 的复合外键当靶子，见那张表。id 已是主键，多这条
     // 三列唯一键在 Postgres 里近乎零成本。
@@ -317,6 +336,15 @@ export const activityMember = pgTable(
 
     memberId: bigint("member_id", { mode: "number" }).notNull(),
 
+    /**
+     * 人进入**这场活动时**的团体快照。它独立于项目层快照：两层关系若在不同
+     * 时间创建，允许反映当时不同的所属团体；已有关系永远不被 ladder 静默改写。
+     */
+    organizationId: bigint("organization_id", { mode: "number" }).references(
+      () => organization.id,
+      { onDelete: "no action" },
+    ),
+
     // 以下三列是运营手填的业务字段，只作用于当前活动（BR-DEV-027）。
     // ownerName 本期是文本，同 activity_segment.ownerName——原型就是个 input。
     source: text("source"),
@@ -351,6 +379,11 @@ export const activityMember = pgTable(
     index("idx_activity_member_member").on(table.memberId),
     // 项目人员汇总跨活动查，见 projectId 那段注释。
     index("idx_activity_member_project").on(table.projectId),
+    // 同时覆盖团体引用检查和活动范围按团体取人；不读取临时业务分组 groupName。
+    index("idx_activity_member_organization_activity").on(
+      table.organizationId,
+      table.activityId,
+    ),
 
     // 活动必须真实存在，且这一行冗余的 project_id 必须等于该活动的 project_id。
     foreignKey({
@@ -420,6 +453,15 @@ export const segmentMember = pgTable(
 
     memberId: bigint("member_id", { mode: "number" }).notNull(),
 
+    /**
+     * 环节范围的团体快照。新建时默认继承所挂 activity_member 的快照，而不是
+     * 再查人员主档；这样主档后来换团体也不会让同一条活动链在环节层漂移。
+     */
+    organizationId: bigint("organization_id", { mode: "number" }).references(
+      () => organization.id,
+      { onDelete: "no action" },
+    ),
+
     /** 这一层唯一真正独有的字段。 */
     segmentRole: text("segment_role").$type<SegmentMemberRole>(),
 
@@ -472,6 +514,11 @@ export const segmentMember = pgTable(
     // "引用本活动其他环节人员"（原型 agenda-timeline.html 的进入方式之一）
     // 按活动查全部环节人员。
     index("idx_segment_member_activity").on(table.activityId),
+    // 同时覆盖团体引用检查和环节范围按团体取候选人。
+    index("idx_segment_member_organization_segment").on(
+      table.organizationId,
+      table.segmentId,
+    ),
 
     // 环节必须存在，且这一行冗余的 activity_id 必须等于该环节的 activity_id。
     foreignKey({

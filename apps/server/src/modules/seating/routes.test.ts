@@ -22,6 +22,10 @@ describe("listCandidatesQuery", () => {
   test("不会退回活动人员的左连接", () => {
     expect(rendered).not.toContain('left join "segment_member"');
   });
+
+  test("候选人显式返回环节层团体快照", () => {
+    expect(rendered).toContain('"segment_member"."organization_id"');
+  });
 });
 
 describe("排位范围的两个片段", () => {
