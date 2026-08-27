@@ -297,10 +297,11 @@ const fakeTx = (
         values(input: Row | Row[]) {
           const values = Array.isArray(input) ? input : [input];
           return {
-            async onConflictDoNothing() {
+            onConflictDoNothing() {
               if (table !== segmentMember) {
                 throw new Error("测试替身只允许新增环节人员");
               }
+              const inserted: Row[] = [];
               for (const value of values) {
                 if (value.segmentId === options.failOnSegmentId) {
                   throw new Error("模拟环节人员写入失败");
@@ -311,7 +312,7 @@ const fakeTx = (
                     row.activityMemberId === value.activityMemberId,
                 );
                 if (duplicate) continue;
-                state.segmentMembers.push({
+                const row = {
                   segmentRole: null,
                   source: null,
                   groupName: null,
@@ -323,8 +324,17 @@ const fakeTx = (
                       100,
                       ...state.segmentMembers.map((row) => Number(row.id ?? 0)),
                     ) + 1,
-                });
+                };
+                state.segmentMembers.push(row);
+                inserted.push(row);
               }
+              return Object.assign(Promise.resolve(undefined), {
+                returning(fields: Row) {
+                  return Promise.resolve(
+                    inserted.map((row) => projectFields(fields, row)),
+                  );
+                },
+              });
             },
           };
         },

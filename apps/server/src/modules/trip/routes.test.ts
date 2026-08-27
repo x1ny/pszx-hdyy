@@ -5,7 +5,6 @@ import {
   tripBatchMembersQuery,
   tripBatchOrganizationsQuery,
   tripOptionsSegmentsQuery,
-  tripSegmentMembershipQuery,
 } from "./routes";
 import { CreateBatchTripsInput } from "./validation";
 
@@ -52,18 +51,6 @@ describe("团体批量行程范围选项", () => {
     expect(members.sql).toContain('"segment_member"."organization_id"');
     expect(members.sql).toContain('"segment_member"."segment_id" =');
     expect(members.params).toEqual(expect.arrayContaining([3, 9]));
-  });
-});
-
-describe("行程环节范围校验", () => {
-  test("单条创建和修改以 segment_member 证明活动人员确实参加了该环节", () => {
-    const rendered = tripSegmentMembershipQuery(3, 7, 9).toSQL();
-
-    expect(rendered.sql).toContain('from "segment_member"');
-    expect(rendered.sql).toContain('"segment_member"."activity_member_id" =');
-    expect(rendered.sql).toContain('"segment_member"."segment_id" =');
-    expect(rendered.sql).toContain('"activity_segment"."activity_id" =');
-    expect(rendered.params).toEqual(expect.arrayContaining([3, 7, 9]));
   });
 });
 

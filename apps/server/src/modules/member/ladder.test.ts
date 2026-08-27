@@ -5,6 +5,7 @@ import {
   ensureActivityMembers,
   ensureProjectMembers,
   ensureSegmentMemberFromActivity,
+  ensureSegmentMemberFromActivityWithOutcome,
   ensureSegmentMembers,
   type Tx,
 } from "./ladder";
@@ -79,6 +80,7 @@ const fakeTx = (state: FakeState): Tx => {
 
   const insertRows = (table: unknown, values: Row[]) => {
     const target = rowsFor(table);
+    const inserted: Row[] = [];
     for (const value of values) {
       const conflict = target.some((row) => {
         if (table === projectMember) {
@@ -102,15 +104,18 @@ const fakeTx = (state: FakeState): Tx => {
       });
 
       if (!conflict) {
-        target.push({
+        const row = {
           ...value,
           id:
             typeof value.id === "number"
               ? value.id
               : Math.max(0, ...target.map((row) => Number(row.id ?? 0))) + 1,
-        });
+        };
+        target.push(row);
+        inserted.push(row);
       }
     }
+    return inserted;
   };
 
   const tx = {
@@ -135,8 +140,15 @@ const fakeTx = (state: FakeState): Tx => {
         values(input: Row | Row[]) {
           const values = Array.isArray(input) ? input : [input];
           return {
-            async onConflictDoNothing() {
-              insertRows(table, values);
+            onConflictDoNothing() {
+              const inserted = insertRows(table, values);
+              return Object.assign(Promise.resolve(), {
+                returning(fields: Row) {
+                  return Promise.resolve(
+                    inserted.map((row) => project(fields, row)),
+                  );
+                },
+              });
             },
           };
         },
@@ -270,6 +282,31 @@ describe("member ladder organization snapshots", () => {
     expect(id).toBe(1);
     expect(state.segmentMembers).toHaveLength(1);
     expect(state.segmentMembers[0]?.organizationId).toBe(7);
+  });
+
+  test("从活动关系直建环节时区分本次补建和已有关系", async () => {
+    const state = baseState(9);
+    const tx = fakeTx(state);
+    const input = {
+      segmentId: 30,
+      activityMember: {
+        id: 1,
+        activityId: 20,
+        memberId: 1,
+        organizationId: 7,
+      },
+      originType: "manual" as const,
+      userId: "tester",
+    };
+
+    await expect(ensureSegmentMemberFromActivityWithOutcome(tx, input)).resolves.toEqual({
+      id: 1,
+      created: true,
+    });
+    await expect(ensureSegmentMemberFromActivityWithOutcome(tx, input)).resolves.toEqual({
+      id: 1,
+      created: false,
+    });
   });
 
   test("旧 groupName 不会被当作团体快照", async () => {

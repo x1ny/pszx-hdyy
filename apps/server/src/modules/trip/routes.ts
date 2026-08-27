@@ -7,6 +7,7 @@ import { err, ok } from "../../shared/result";
 import { jsonBody } from "../../shared/validate";
 import { activitySegment } from "../agenda/schema";
 import { type AuthedVariables, requireUser } from "../auth";
+import { ensureSegmentMemberFromActivityWithOutcome } from "../member/ladder";
 import { activityMember, member, segmentMember } from "../member/schema";
 import { organization } from "../organization/schema";
 import { activity, project } from "../project/schema";
@@ -280,64 +281,120 @@ async function batchTripScopeRows(
     );
 }
 
-/** 单条行程关联环节时，活动人员必须确实位于该环节范围。 */
-export const tripSegmentMembershipQuery = (
+type TripSegmentSync = { memberName: string; segmentName: string };
+
+type TripSaveContext =
+  | { ok: false; message: string }
+  | {
+      ok: true;
+      projectId: number;
+      memberId: number;
+      syncedSegment: TripSegmentSync | null;
+    };
+
+/**
+ * 从活动人员关系反查项目和人员，避免让客户端传两个能互相矛盾的 id。
+ *
+ * 单条行程关联一个尚未参与的可维护环节时，在同一事务中补建
+ * segment_member。这样行程、环节人员关系要么一起成功，要么一起回滚。
+ */
+async function resolveTripSaveContext(
+  tx: Tx,
   activityId: number,
   activityMemberId: number,
-  segmentId: number,
-) =>
-  db
-    .select({ id: segmentMember.id })
-    .from(segmentMember)
-    .innerJoin(activitySegment, eq(activitySegment.id, segmentMember.segmentId))
+  segmentId: number | null,
+  userId: string,
+): Promise<TripSaveContext> {
+  const [relation] = await tx
+    .select({
+      id: activityMember.id,
+      projectId: activityMember.projectId,
+      activityId: activityMember.activityId,
+      memberId: activityMember.memberId,
+      organizationId: activityMember.organizationId,
+      memberName: member.name,
+    })
+    .from(activityMember)
+    .innerJoin(member, eq(member.id, activityMember.memberId))
     .where(
       and(
-        eq(segmentMember.segmentId, segmentId),
-        eq(segmentMember.activityMemberId, activityMemberId),
-        eq(activitySegment.activityId, activityId),
+        eq(activityMember.id, activityMemberId),
+        eq(activityMember.activityId, activityId),
       ),
     )
     .limit(1);
 
-/**
- * 从活动人员关系反查项目和人员，避免让客户端传两个能互相矛盾的 id。
- * 可选环节也在这里校验归属；数据库复合外键是最后一道并发兜底。
- */
-async function resolveContext(
-  activityId: number,
-  activityMemberId: number,
-  segmentId: number | null,
-) {
-  const [relation, segmentMembership] = await Promise.all([
-    db
-      .select({
-        projectId: activityMember.projectId,
-        memberId: activityMember.memberId,
-      })
-      .from(activityMember)
-      .where(
-        and(
-          eq(activityMember.id, activityMemberId),
-          eq(activityMember.activityId, activityId),
-        ),
-      )
-      .limit(1),
-    segmentId === null
-      ? Promise.resolve(undefined)
-      : tripSegmentMembershipQuery(
-          activityId,
-          activityMemberId,
-          segmentId,
-        ).then(([row]) => row),
-  ]);
-
-  if (!relation[0])
+  if (!relation) {
     return { ok: false as const, message: "所选人员不属于当前活动" };
-  if (segmentId !== null && !segmentMembership) {
-    return { ok: false as const, message: "所选人员不在该环节范围内" };
   }
 
-  return { ok: true as const, ...relation[0] };
+  if (segmentId === null) {
+    return {
+      ok: true,
+      projectId: relation.projectId,
+      memberId: relation.memberId,
+      syncedSegment: null,
+    };
+  }
+
+  const [segment] = await tx
+    .select({
+      id: activitySegment.id,
+      activityId: activitySegment.activityId,
+      name: activitySegment.name,
+      status: activitySegment.status,
+      memberEnabled: activitySegment.memberEnabled,
+    })
+    .from(activitySegment)
+    .where(eq(activitySegment.id, segmentId))
+    .limit(1);
+
+  if (!segment || segment.activityId !== activityId) {
+    return { ok: false as const, message: "所选环节不属于当前活动" };
+  }
+
+  const [existingMembership] = await tx
+    .select({ id: segmentMember.id })
+    .from(segmentMember)
+    .where(
+      and(
+        eq(segmentMember.segmentId, segmentId),
+        eq(segmentMember.activityMemberId, activityMemberId),
+      ),
+    )
+    .limit(1);
+
+  if (existingMembership) {
+    return {
+      ok: true,
+      projectId: relation.projectId,
+      memberId: relation.memberId,
+      syncedSegment: null,
+    };
+  }
+
+  if (segment.status !== "active" || !segment.memberEnabled) {
+    return {
+      ok: false as const,
+      message: "所选环节当前不能维护人员",
+    };
+  }
+
+  const ensured = await ensureSegmentMemberFromActivityWithOutcome(tx, {
+    segmentId,
+    activityMember: relation,
+    originType: "segment_reference",
+    userId,
+  });
+
+  return {
+    ok: true,
+    projectId: relation.projectId,
+    memberId: relation.memberId,
+    syncedSegment: ensured.created
+      ? { memberName: relation.memberName, segmentName: segment.name }
+      : null,
+  };
 }
 
 export const tripRoutes = new Hono<{ Variables: AuthedVariables }>()
@@ -422,29 +479,40 @@ export const tripRoutes = new Hono<{ Variables: AuthedVariables }>()
   /** 新增一条人员行程。 */
   .post("/create", jsonBody(CreateTripInput), async (c) => {
     const input = c.req.valid("json");
-    const context = await resolveContext(
-      input.activityId,
-      input.activityMemberId,
-      input.segmentId,
-    );
-    if (!context.ok) return c.json(validationError(context.message));
-
     const userId = c.get("authedUser").id;
-    const [created] = await db
-      .insert(memberTrip)
-      .values({
-        ...input,
-        projectId: context.projectId,
-        memberId: context.memberId,
-        createdBy: userId,
-        updatedBy: userId,
-      })
-      .returning({ id: memberTrip.id });
+    const saved = await db.transaction(async (tx) => {
+      const context = await resolveTripSaveContext(
+        tx,
+        input.activityId,
+        input.activityMemberId,
+        input.segmentId,
+        userId,
+      );
+      if (!context.ok) return context;
 
-    const [row] = created
-      ? await selectTrips().where(eq(memberTrip.id, created.id))
-      : [];
-    return c.json(ok(row));
+      const [created] = await tx
+        .insert(memberTrip)
+        .values({
+          ...input,
+          projectId: context.projectId,
+          memberId: context.memberId,
+          createdBy: userId,
+          updatedBy: userId,
+        })
+        .returning({ id: memberTrip.id });
+
+      if (!created) throw new Error("行程创建失败，请重试");
+      return {
+        ok: true as const,
+        id: created.id,
+        syncedSegment: context.syncedSegment,
+      };
+    });
+    if (!saved.ok) return c.json(validationError(saved.message));
+
+    const [row] = await selectTrips().where(eq(memberTrip.id, saved.id));
+    if (!row) throw new Error("行程创建后读取失败，请重试");
+    return c.json(ok({ trip: row, syncedSegment: saved.syncedSegment }));
   })
 
   /**
@@ -499,27 +567,59 @@ export const tripRoutes = new Hono<{ Variables: AuthedVariables }>()
   /** 修改一条人员行程。 */
   .post("/update", jsonBody(UpdateTripInput), async (c) => {
     const { id, ...input } = c.req.valid("json");
-    const context = await resolveContext(
-      input.activityId,
-      input.activityMemberId,
-      input.segmentId,
-    );
-    if (!context.ok) return c.json(validationError(context.message));
+    const userId = c.get("authedUser").id;
+    const saved = await db.transaction(async (tx) => {
+      // 先锁定目标行程，避免一个不存在的行程请求意外补建环节人员。
+      const [existing] = await tx
+        .select({ id: memberTrip.id })
+        .from(memberTrip)
+        .where(eq(memberTrip.id, id))
+        .for("update");
+      if (!existing) return { ok: false as const, kind: "not-found" as const };
 
-    const [updated] = await db
-      .update(memberTrip)
-      .set({
-        ...input,
-        projectId: context.projectId,
-        memberId: context.memberId,
-        updatedBy: c.get("authedUser").id,
-      })
-      .where(eq(memberTrip.id, id))
-      .returning({ id: memberTrip.id });
+      const context = await resolveTripSaveContext(
+        tx,
+        input.activityId,
+        input.activityMemberId,
+        input.segmentId,
+        userId,
+      );
+      if (!context.ok) {
+        return {
+          ok: false as const,
+          kind: "validation" as const,
+          message: context.message,
+        };
+      }
 
-    if (!updated) return c.json(notFound());
-    const [row] = await selectTrips().where(eq(memberTrip.id, updated.id));
-    return c.json(ok(row));
+      const [updated] = await tx
+        .update(memberTrip)
+        .set({
+          ...input,
+          projectId: context.projectId,
+          memberId: context.memberId,
+          updatedBy: userId,
+        })
+        .where(eq(memberTrip.id, id))
+        .returning({ id: memberTrip.id });
+
+      if (!updated) throw new Error("行程修改失败，请重试");
+      return {
+        ok: true as const,
+        id: updated.id,
+        syncedSegment: context.syncedSegment,
+      };
+    });
+
+    if (!saved.ok) {
+      return saved.kind === "not-found"
+        ? c.json(notFound())
+        : c.json(validationError(saved.message));
+    }
+
+    const [row] = await selectTrips().where(eq(memberTrip.id, saved.id));
+    if (!row) throw new Error("行程修改后读取失败，请重试");
+    return c.json(ok({ trip: row, syncedSegment: saved.syncedSegment }));
   })
 
   /** 删除一条人员行程。 */

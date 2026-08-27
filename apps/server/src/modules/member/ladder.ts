@@ -364,13 +364,13 @@ export async function ensureActivityMembers(
 // ---------------------------------------------------------------------------
 
 /**
- * 从一条已经校验过归属的活动关系补建环节关系。
+ * 从一条已经校验过归属的活动关系补建环节关系，并标明本次是否真的新建。
  *
  * 排位模块保留了一个旧客户端兼容入口，它允许在环节人员开关关闭时补关系，不能
  * 直接复用 ensureSegmentMembers 的业务校验；但实际 insert 仍必须回到 ladder，
  * 并且只能继承调用方刚查出的活动快照。唯一键冲突时完整保留已有环节关系。
  */
-export async function ensureSegmentMemberFromActivity(
+export async function ensureSegmentMemberFromActivityWithOutcome(
   tx: Tx,
   input: {
     segmentId: number;
@@ -378,10 +378,10 @@ export async function ensureSegmentMemberFromActivity(
     originType: MemberRelationOrigin;
     userId: string;
   },
-): Promise<number> {
+): Promise<{ id: number; created: boolean }> {
   const relation = input.activityMember;
 
-  await tx
+  const [created] = await tx
     .insert(segmentMember)
     .values({
       segmentId: input.segmentId,
@@ -395,7 +395,10 @@ export async function ensureSegmentMemberFromActivity(
     })
     .onConflictDoNothing({
       target: [segmentMember.segmentId, segmentMember.activityMemberId],
-    });
+    })
+    .returning({ id: segmentMember.id });
+
+  if (created) return { id: created.id, created: true };
 
   const [row] = await tx
     .select({ id: segmentMember.id })
@@ -407,7 +410,20 @@ export async function ensureSegmentMemberFromActivity(
       ),
     );
 
-  return row?.id ?? fail("补建环节人员失败，请重试");
+  return { id: row?.id ?? fail("补建环节人员失败，请重试"), created: false };
+}
+
+/** 保持旧调用方只需要环节人员关系 id 的接口。 */
+export async function ensureSegmentMemberFromActivity(
+  tx: Tx,
+  input: {
+    segmentId: number;
+    activityMember: ActivityMemberSnapshot;
+    originType: MemberRelationOrigin;
+    userId: string;
+  },
+): Promise<number> {
+  return (await ensureSegmentMemberFromActivityWithOutcome(tx, input)).id;
 }
 
 /**

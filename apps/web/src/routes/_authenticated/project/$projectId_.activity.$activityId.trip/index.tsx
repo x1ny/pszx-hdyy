@@ -5,6 +5,10 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import {
+  activityMemberKeys,
+  segmentMemberKeys,
+} from "#/features/member/relation-queries.ts";
+import {
   createTrip,
   deleteTrip,
   type Trip,
@@ -159,11 +163,22 @@ function TripPage() {
       editing
         ? updateTrip({ ...values, activityId, id: editing.id })
         : createTrip({ ...values, activityId }),
-    onSuccess: () => {
-      toast.success(editing ? "修改成功" : "新增成功");
+    onSuccess: (result) => {
+      const syncedSegment = result.syncedSegment;
+      toast.success(
+        syncedSegment
+          ? `${syncedSegment.memberName}已同步加入${syncedSegment.segmentName}环节，请确认。`
+          : editing
+            ? "修改成功"
+            : "新增成功",
+      );
       setFormOpen(false);
       setEditing(undefined);
       invalidateTrips();
+      if (syncedSegment) {
+        queryClient.invalidateQueries({ queryKey: activityMemberKeys.all });
+        queryClient.invalidateQueries({ queryKey: segmentMemberKeys.all });
+      }
     },
     onError: (error) => toast.error(error.message),
   });
