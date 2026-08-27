@@ -37,6 +37,7 @@ export function SegmentDetailDialog({
   seatingStatus,
   onOpenChange,
   onEdit,
+  onEnterSeating,
   onManageMembers,
   onManageDemands,
 }: {
@@ -46,12 +47,17 @@ export function SegmentDetailDialog({
   seatingStatus?: PlanStatus | null;
   onOpenChange: (open: boolean) => void;
   onEdit: (segment: Segment) => void;
+  onEnterSeating: (segment: Segment) => void;
   onManageMembers: (segment: Segment) => void;
   onManageDemands: (segment: Segment) => void;
 }) {
   const line = segment
     ? lines.find((candidate) => candidate.id === segment.agendaLineId)
     : undefined;
+  const hasSeatingConfig =
+    segment !== undefined &&
+    segment.status === "active" &&
+    (segment.seatingEnabled || seatingStatus != null);
 
   return (
     <Dialog open={!!segment} onOpenChange={onOpenChange}>
@@ -122,9 +128,14 @@ export function SegmentDetailDialog({
             </DialogBody>
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
-                关闭
-              </Button>
+              {hasSeatingConfig && (
+                <Button
+                  variant="outline"
+                  onClick={() => segment && onEnterSeating(segment)}
+                >
+                  进入排位
+                </Button>
+              )}
               {/* 只在环节开了人员管理时给入口——开关关着的时候后端也会拒绝
                   写入，与其让运营点进去撞一鼻子灰，不如按开关隐藏。 */}
               {segment.memberEnabled && (

@@ -426,7 +426,7 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
    * 拆开的唯一理由是它们挂在两个二级菜单下，菜单一收就该合成一页 + 状态筛选。
    */
   .post("/listPlans", jsonBody(ListPlansInput), async (c) => {
-    const { activityId, status } = c.req.valid("json");
+    const { activityId, segmentId, status } = c.req.valid("json");
 
     const rows = await db
       .select({
@@ -465,6 +465,8 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
       .where(
         and(
           eq(activitySegment.activityId, activityId),
+          // 从环节详情进入时只展示该环节；不带参数仍返回活动总览。
+          segmentId ? eq(activitySegment.id, segmentId) : undefined,
           // 「开关开着 或 已有非作废方案」——规则本身连同它的来历都写在
           // stats.ts；活动配置总览是同一条规则的第二个读者。
           inSeatingScope,

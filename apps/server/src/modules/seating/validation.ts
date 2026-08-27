@@ -23,6 +23,8 @@ const externalId = z
 
 export const ListPlansInput = z.object({
   activityId: id,
+  /** 从环节详情进入时只看该环节的排位范围。 */
+  segmentId: id.optional(),
   status: PlanStatusEnum.optional(),
 });
 

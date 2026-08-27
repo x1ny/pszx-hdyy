@@ -138,8 +138,13 @@ export type SavePlanLayoutInput = InferRequestType<
 
 export const seatingKeys = {
   all: ["seating"] as const,
-  plans: (activityId: number) =>
-    [...seatingKeys.all, "plans", activityId] as const,
+  plans: (activityId: number, segmentId?: number) =>
+    [
+      ...seatingKeys.all,
+      "plans",
+      activityId,
+      ...(segmentId === undefined ? [] : [segmentId]),
+    ] as const,
   plan: (planId: number) => [...seatingKeys.all, "plan", planId] as const,
   zoneUsage: (activityId: number) =>
     [...seatingKeys.all, "zoneUsage", activityId] as const,
@@ -149,11 +154,18 @@ export const seatingKeys = {
     [...seatingKeys.all, "organizationStats", planId] as const,
 };
 
-export const seatingPlansQueryOptions = (activityId: number) =>
+export const seatingPlansQueryOptions = (
+  activityId: number,
+  segmentId?: number,
+) =>
   queryOptions({
-    queryKey: seatingKeys.plans(activityId),
+    queryKey: seatingKeys.plans(activityId, segmentId),
     queryFn: () =>
-      unwrap(api.api.seating.listPlans.$post({ json: { activityId } })),
+      unwrap(
+        api.api.seating.listPlans.$post({
+          json: { activityId, segmentId },
+        }),
+      ),
   });
 
 export const seatingPlanQueryOptions = (planId: number) =>

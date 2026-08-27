@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArmchairIcon, ExternalLinkIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -57,23 +57,31 @@ import {
 } from "../-venue-utils";
 
 /**
- * `zoneId` 是从场地空间的区域行点「排位」带过来的上下文。
+ * `zoneId` 是从场地空间的区域行点「排位」带过来的上下文，`segmentId` 是从
+ * 环节详情进入时带来的上下文。
  *
  * 那个按钮原先只是跳到本页、什么都不带——用户点的是"给**这块区域**排位"，
  * 得到的却是排位页首页，还得自己再找环节、再选一遍那块区域（评审 §3.6）。
  * 带上之后：顶部显示来源提示，选区域的弹窗默认高亮它。
  *
- * **不做行过滤**：一块区域可以被多个环节引用，而"还没配的环节"恰恰是用户
- * 从这里进来最可能要操作的对象，过滤掉就本末倒置了。
+ * 场地区域上下文**不做行过滤**：一块区域可以被多个环节引用，而"还没配的
+ * 环节"恰恰是用户从这里进来最可能要操作的对象，过滤掉就本末倒置了。环节
+ * 上下文则只展示该环节，因为它是详情页明确指定的唯一目标。
  */
 const SeatingSearchSchema = z.object({
   zoneId: z.number().int().positive().optional().catch(undefined),
+  segmentId: z.number().int().positive().optional().catch(undefined),
 });
 
 export const Route = createFileRoute(
   "/_authenticated/project/$projectId_/activity/$activityId/seating/",
 )({
   validateSearch: SeatingSearchSchema,
+  loaderDeps: ({ search }) => search,
+  loader: ({ context, params, deps }) =>
+    context.queryClient.ensureQueryData(
+      seatingPlansQueryOptions(Number(params.activityId), deps.segmentId),
+    ),
   component: SeatingPage,
 });
 
@@ -90,12 +98,14 @@ export const Route = createFileRoute(
  */
 function SeatingPage() {
   const { projectId, activityId: activityIdParam } = Route.useParams();
-  const { zoneId: fromZoneId } = Route.useSearch();
+  const { zoneId: fromZoneId, segmentId: fromSegmentId } = Route.useSearch();
   const activityId = Number(activityIdParam);
-  const navigate = useNavigate();
+  const navigate = Route.useNavigate();
   const queryClient = useQueryClient();
 
-  const plansQuery = useQuery(seatingPlansQueryOptions(activityId));
+  const plansQuery = useQuery(
+    seatingPlansQueryOptions(activityId, fromSegmentId),
+  );
   // 建方案要从活动场地的画布里切出区域的座位，所以这一页也得拿到它。
   const spaceQuery = useQuery(activityVenueListQueryOptions(activityId));
 
@@ -286,6 +296,24 @@ function SeatingPage() {
           >
             清除
           </Link>
+        </div>
+      )}
+
+      {fromSegmentId && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">
+          <span>正在查看某一环节的排位配置。</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-primary hover:text-primary"
+            onClick={() =>
+              navigate({
+                search: (prev) => ({ ...prev, segmentId: undefined }),
+              })
+            }
+          >
+            查看全部排位
+          </Button>
         </div>
       )}
 

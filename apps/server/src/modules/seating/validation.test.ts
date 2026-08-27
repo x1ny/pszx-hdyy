@@ -2,9 +2,23 @@ import { describe, expect, test } from "bun:test";
 import {
   AssignInput,
   AssignOrganizationInput,
+  ListPlansInput,
   OrganizationSeatBatchInput,
   UnassignOrganizationInput,
 } from "./validation";
+
+describe("list plans validation", () => {
+  test("支持从环节详情传入可选的 segmentId 上下文", () => {
+    expect(ListPlansInput.parse({ activityId: 3 })).toEqual({ activityId: 3 });
+    expect(ListPlansInput.parse({ activityId: 3, segmentId: 7 })).toEqual({
+      activityId: 3,
+      segmentId: 7,
+    });
+    expect(
+      ListPlansInput.safeParse({ activityId: 3, segmentId: 0 }).success,
+    ).toBe(false);
+  });
+});
 
 describe("seat assignment validation", () => {
   test("旧个人分配请求保持 segmentMemberId 入参", () => {

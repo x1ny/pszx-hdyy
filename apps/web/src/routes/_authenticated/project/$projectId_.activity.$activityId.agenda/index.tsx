@@ -480,6 +480,17 @@ function AgendaTab() {
           if (!open) setDetail(undefined);
         }}
         onEdit={openEdit}
+        onEnterSeating={(segment) => {
+          setDetail(undefined);
+          navigate({
+            to: "/project/$projectId/activity/$activityId/seating",
+            params: {
+              projectId: projectIdParam,
+              activityId: activityIdParam,
+            },
+            search: { segmentId: segment.id },
+          });
+        }}
         onManageMembers={(segment) => {
           setDetail(undefined);
           setMemberSegment(segment);
