@@ -106,6 +106,24 @@ export type SeatingCandidate = ApiData<
   InferResponseType<typeof api.api.seating.listCandidates.$post>
 >["list"][number];
 
+/** 当前方案环节内，一个团体的个人排座 / 团体占位汇总。 */
+export type OrganizationSeatingStat = ApiData<
+  InferResponseType<typeof api.api.seating.listOrganizationStats.$post>
+>["list"][number];
+
+/** 团体批量占位的显式位置顺序和目标数。 */
+export type OrganizationSeatBatchInput = InferRequestType<
+  typeof api.api.seating.previewOrganizationBatch.$post
+>["json"];
+
+export type OrganizationSeatBatchPreview = ApiData<
+  InferResponseType<typeof api.api.seating.previewOrganizationBatch.$post>
+>;
+
+export type OrganizationSeatBatchResult = ApiData<
+  InferResponseType<typeof api.api.seating.assignOrganizationBatch.$post>
+>;
+
 export type ZoneUsageRow = ApiData<
   InferResponseType<typeof api.api.seating.zoneUsage.$post>
 >["list"][number];
@@ -127,6 +145,8 @@ export const seatingKeys = {
     [...seatingKeys.all, "zoneUsage", activityId] as const,
   candidates: (planId: number, keyword?: string) =>
     [...seatingKeys.all, "candidates", planId, keyword ?? ""] as const,
+  organizationStats: (planId: number) =>
+    [...seatingKeys.all, "organizationStats", planId] as const,
 };
 
 export const seatingPlansQueryOptions = (activityId: number) =>
@@ -179,6 +199,14 @@ export const seatingCandidatesQueryOptions = (
       ),
   });
 
+/** 团体排位弹窗的汇总数据；人数以服务端的当前范围快照为准。 */
+export const organizationSeatingStatsQueryOptions = (planId: number) =>
+  queryOptions({
+    queryKey: seatingKeys.organizationStats(planId),
+    queryFn: () =>
+      unwrap(api.api.seating.listOrganizationStats.$post({ json: { planId } })),
+  });
+
 export const createSeatingPlan = (input: CreatePlanInput) =>
   unwrap(api.api.seating.createPlan.$post({ json: input }));
 
@@ -198,6 +226,27 @@ export const assignSeat = (
 
 export const unassignSeat = (planId: number, segmentSeatId: number) =>
   unwrap(api.api.seating.unassign.$post({ json: { planId, segmentSeatId } }));
+
+/** 只计算团体批量占位的可用、跳过与不足位置，不会写入方案。 */
+export const previewOrganizationSeatBatch = (
+  input: OrganizationSeatBatchInput,
+) => unwrap(api.api.seating.previewOrganizationBatch.$post({ json: input }));
+
+/** 事务化写入预览过的团体占位；位置并发变化时调用方需重新预览。 */
+export const assignOrganizationSeatBatch = (
+  input: OrganizationSeatBatchInput,
+) => unwrap(api.api.seating.assignOrganizationBatch.$post({ json: input }));
+
+/** 解除当前方案内一个团体的全部团体占位，绝不触碰个人分配。 */
+export const unassignOrganizationSeats = (
+  planId: number,
+  organizationId: number,
+) =>
+  unwrap(
+    api.api.seating.unassignOrganization.$post({
+      json: { planId, organizationId },
+    }),
+  );
 
 /**
  * 本环节启用/停用一个位置。即时生效——排位阶段不再走"改几何 + 点保存"那条路，

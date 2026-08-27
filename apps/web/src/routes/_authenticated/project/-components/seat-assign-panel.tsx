@@ -50,6 +50,7 @@ export function SeatAssignPanel({
     ...seatingCandidatesQueryOptions(planId, keyword || undefined),
     enabled: seat !== null && !readOnly,
   });
+  const isOrganizationAssignment = assignment?.occupantType === "organization";
 
   if (!seat) {
     return (
@@ -86,7 +87,11 @@ export function SeatAssignPanel({
           )}
         </div>
         <p className="text-muted-foreground text-xs">
-          {assignment ? "已排人，可换人或解除" : "还没有人"}
+          {assignment
+            ? isOrganizationAssignment
+              ? "团体占位，可解除"
+              : "已排人，可换人或解除"
+            : "还没有人"}
         </p>
       </div>
 
@@ -94,10 +99,14 @@ export function SeatAssignPanel({
         <div className="flex items-center justify-between gap-2 rounded-lg border bg-muted/40 p-3">
           <div className="min-w-0">
             <div className="truncate font-medium text-sm">
-              {assignment.memberName}
+              {isOrganizationAssignment
+                ? assignment.organizationName || "团体占位"
+                : assignment.memberName}
             </div>
             <p className="truncate text-muted-foreground text-xs">
-              {assignment.companyPosition || "未填写单位职务"}
+              {isOrganizationAssignment
+                ? "团体占位，不代表具体个人"
+                : assignment.companyPosition || "未填写单位职务"}
             </p>
           </div>
           {!readOnly && (
@@ -122,6 +131,10 @@ export function SeatAssignPanel({
       ) : !seat.enabled ? (
         <p className="text-muted-foreground text-xs">
           这个位置本环节停用了，要排人先用下方的「本环节启用此位置」把它打开。
+        </p>
+      ) : isOrganizationAssignment ? (
+        <p className="text-muted-foreground text-xs">
+          这个位置由团体占用。解除该位置的团体占位后，才能安排具体个人。
         </p>
       ) : (
         <>

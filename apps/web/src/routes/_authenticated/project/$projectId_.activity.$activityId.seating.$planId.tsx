@@ -9,6 +9,7 @@ import {
   Maximize2Icon,
   Minimize2Icon,
   TriangleAlertIcon,
+  UsersRoundIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -30,6 +31,7 @@ import { Button } from "#/shared/components/ui/button.tsx";
 import { Skeleton } from "#/shared/components/ui/skeleton.tsx";
 import { cn } from "#/shared/lib/utils.ts";
 import { formatDateTime } from "../venue/-utils";
+import { OrganizationSeatBatchDialog } from "./-components/organization-seat-batch-dialog";
 import { SeatAssignPanel } from "./-components/seat-assign-panel";
 import {
   isTargetFullscreen,
@@ -37,6 +39,7 @@ import {
 } from "./-fullscreen-utils";
 import {
   assignSeat,
+  organizationSeatingStatsQueryOptions,
   seatingKeys,
   seatingPlanQueryOptions,
   setSeatEnabled,
@@ -74,9 +77,14 @@ function SeatingCanvasPage() {
   const [fallbackFullscreen, setFallbackFullscreen] = useState(false);
 
   const planQuery = useQuery(seatingPlanQueryOptions(planId));
+  // 入口就要知道当前环节有没有可排团体，不能等用户打开弹窗才给空结果。
+  const organizationStatsQuery = useQuery(
+    organizationSeatingStatsQueryOptions(planId),
+  );
   const bundle = planQuery.data;
 
   const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
+  const [organizationBatchOpen, setOrganizationBatchOpen] = useState(false);
 
   /**
    * 对调模式：记住"从哪个座位发起的"，下一次点中座位就是目标。
@@ -143,8 +151,26 @@ function SeatingCanvasPage() {
   const selectedAssignment = selectedSeat
     ? (assignmentBySeatId.get(selectedSeat.id) ?? null)
     : null;
+  // 保持编辑器传回的顺序：团体批量接口把它定义为操作者的显式位置顺序。
+  const selectedSeats = useMemo(
+    () =>
+      selection.seatIds.flatMap((externalId) => {
+        const seat = seatByExternalId.get(externalId);
+        return seat ? [{ id: seat.id, label: seat.label }] : [];
+      }),
+    [seatByExternalId, selection.seatIds],
+  );
 
   const readOnly = bundle?.plan.status === "voided";
+  const organizationBatchUnavailableReason = readOnly
+    ? "方案已作废，不能再修改"
+    : organizationStatsQuery.isLoading
+      ? "正在读取当前环节团体范围…"
+      : organizationStatsQuery.isError
+        ? "团体范围加载失败，请刷新页面后重试"
+        : organizationStatsQuery.data?.list.length
+          ? null
+          : "当前环节没有可排团体";
   const isFullscreen = nativeFullscreen || fallbackFullscreen;
 
   const syncFullscreenState = useCallback(() => {
@@ -414,6 +440,34 @@ function SeatingCanvasPage() {
         legend={<SeatStatusLegend organizations={organizationLegend} />}
         rightPanel={
           <div className="flex w-72 shrink-0 flex-col gap-3">
+            {!readOnly && (
+              <>
+                <Button
+                  variant="outline"
+                  disabled={organizationBatchUnavailableReason !== null}
+                  onClick={() => setOrganizationBatchOpen(true)}
+                >
+                  <UsersRoundIcon />
+                  团体批量占位
+                </Button>
+                {organizationBatchUnavailableReason ? (
+                  <p className="px-1 text-muted-foreground text-xs">
+                    {organizationBatchUnavailableReason}
+                  </p>
+                ) : null}
+                <OrganizationSeatBatchDialog
+                  open={organizationBatchOpen}
+                  planId={planId}
+                  selectedSeats={selectedSeats}
+                  readOnly={readOnly}
+                  onOpenChange={setOrganizationBatchOpen}
+                  onApplied={() => {
+                    setSelection(EMPTY_SELECTION);
+                    invalidate();
+                  }}
+                />
+              </>
+            )}
             <SeatAssignPanel
               planId={planId}
               seat={selectedSeat}
