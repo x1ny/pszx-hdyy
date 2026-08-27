@@ -74,6 +74,12 @@ export function ZoneSeatingEditor({
   backLabel,
   title,
   rightPanel,
+  legend,
+  toolbarActions,
+  frameRef,
+  frameClassName,
+  isFullscreen,
+  onExitFullscreen,
   seatStatus,
   assignOnly,
 }: {
@@ -87,6 +93,17 @@ export function ZoneSeatingEditor({
   /** 标题里"{区域名} · {title}"的后半段，默认"排位"。 */
   title?: string;
   rightPanel?: React.ReactNode;
+  /** 画布下方的业务图例；排位页用它解释座位与选中状态。 */
+  legend?: React.ReactNode;
+  /** 工具栏右侧的页面专属操作，例如全屏。 */
+  toolbarActions?: React.ReactNode;
+  /** 包住标题、工具栏、画布、图例和右侧面板的容器，供页面请求全屏。 */
+  frameRef?: React.RefObject<HTMLDivElement | null>;
+  /** 全屏/页面铺满时由调用方提供的布局类。 */
+  frameClassName?: string;
+  /** 全屏时 Escape 只退出全屏，不清空画布当前选择。 */
+  isFullscreen?: boolean;
+  onExitFullscreen?: () => void;
   /**
    * 每个座位在**环节排位方案**里的状态：谁坐、本环节启不启用。
    *
@@ -149,8 +166,19 @@ export function ZoneSeatingEditor({
     tool,
     spaceDown,
     assignOnly,
+    isFullscreen,
+    onExitFullscreen,
   });
-  live.current = { viewport, localDoc, selection, tool, spaceDown, assignOnly };
+  live.current = {
+    viewport,
+    localDoc,
+    selection,
+    tool,
+    spaceDown,
+    assignOnly,
+    isFullscreen,
+    onExitFullscreen,
+  };
 
   type DragState = {
     subject: SeatDragSubject;
@@ -318,6 +346,17 @@ export function ZoneSeatingEditor({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // 原生全屏按 Escape 会同时派发 keydown 和 fullscreenchange。这里主动走页面
+      // 的退出函数，避免本编辑器把 Escape 当作“取消选择”，进出全屏仍保留选择。
+      if (
+        event.key === "Escape" &&
+        live.current.isFullscreen &&
+        live.current.onExitFullscreen
+      ) {
+        event.preventDefault();
+        live.current.onExitFullscreen();
+        return;
+      }
       const target = event.target as HTMLElement | null;
       if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
 
@@ -377,7 +416,10 @@ export function ZoneSeatingEditor({
   const showLabels = viewport.scale >= 0.5;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div
+      ref={frameRef}
+      className={cn("flex min-h-0 flex-1 flex-col gap-3", frameClassName)}
+    >
       <div className="flex items-center gap-3">
         <button
           type="button"
@@ -471,22 +513,25 @@ export function ZoneSeatingEditor({
               适配
             </Button>
 
-            {!assignOnly && (
-              <Button
-                type="button"
-                size="sm"
-                className="ml-auto"
-                onClick={() => setTemplateOpen(true)}
-              >
-                <LayoutTemplateIcon />
-                导入模板
-              </Button>
+            {(toolbarActions || !assignOnly) && (
+              <div className="ml-auto flex items-center gap-1">
+                {toolbarActions}
+                {!assignOnly && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setTemplateOpen(true)}
+                  >
+                    <LayoutTemplateIcon />
+                    导入模板
+                  </Button>
+                )}
+              </div>
             )}
           </div>
 
           <div className="min-h-0 flex-1 overflow-hidden rounded-lg border bg-card shadow-sm">
             <div ref={containerRef} className="h-full">
-              {/* biome-ignore lint/a11y/noStaticElementInteractions: 手势由 useGesture 绑在 ref 上 */}
               <svg
                 ref={svgRef}
                 {...bindGestures()}
@@ -546,6 +591,8 @@ export function ZoneSeatingEditor({
               </svg>
             </div>
           </div>
+
+          {legend}
         </div>
 
         {rightPanel}

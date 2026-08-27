@@ -60,55 +60,105 @@ export const SeatNode = memo(function SeatNode({
   const occupied = occupantName !== undefined;
 
   return (
-    <g opacity={planDisabled ? 0.35 : 1}>
-      <circle
-        cx={cx}
-        cy={cy}
-        r={SEAT_R}
-        // 有人 → 实心主色；VIP 空座 → 警示色；普通空座 → 卡片底色。
-        // 三种状态各自一个填充，不靠深浅区分。
-        fill={
-          occupied ? "var(--primary)" : vip ? "var(--warning)" : "var(--card)"
-        }
-        stroke={selected ? "var(--primary)" : "var(--border)"}
-        strokeWidth={selected ? 2.5 : 1.2}
-      />
-      {seat.kind === "standing" && (
-        // 站位画成空心方块，跟座位一眼能分开——不能只靠颜色，色觉障碍用户看不出。
-        <rect
-          x={cx - 4}
-          y={cy - 4}
-          width={8}
-          height={8}
-          fill="none"
-          stroke={
-            occupied ? "var(--primary-foreground)" : "var(--muted-foreground)"
-          }
-          strokeWidth={1.2}
-        />
-      )}
-      {planDisabled && (
-        // 停用画一道斜杠。同理，不能只靠透明度——那在小尺寸下看不出来。
-        <line
-          x1={cx - SEAT_R}
-          y1={cy + SEAT_R}
-          x2={cx + SEAT_R}
-          y2={cy - SEAT_R}
-          stroke="var(--muted-foreground)"
-          strokeWidth={1.5}
-        />
-      )}
-      {showLabel && (
-        <text
-          x={cx}
-          y={cy + SEAT_R + 9}
-          textAnchor="middle"
-          fontSize={9}
-          fill="var(--muted-foreground)"
-          style={{ userSelect: "none", pointerEvents: "none" }}
+    <g>
+      {selected && (
+        // 外圈用前景色描边、内圈用主色，且有独立的勾选角标。这样普通、已排、
+        // VIP 与停用座位不管底色或透明度怎样，选中信号都不只依赖颜色。
+        <g
+          className="motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-75 motion-safe:duration-150"
+          data-seat-selection-ring="true"
+          style={{ pointerEvents: "none" }}
         >
-          {seat.label}
-        </text>
+          <circle
+            cx={cx}
+            cy={cy}
+            r={SEAT_R + 4.5}
+            fill="var(--background)"
+            stroke="var(--foreground)"
+            strokeWidth={1.8}
+          />
+          <circle
+            cx={cx}
+            cy={cy}
+            r={SEAT_R + 2.5}
+            fill="none"
+            stroke="var(--primary)"
+            strokeWidth={1.6}
+          />
+        </g>
+      )}
+
+      <g opacity={planDisabled ? 0.35 : 1}>
+        <circle
+          cx={cx}
+          cy={cy}
+          r={SEAT_R}
+          // 有人 → 实心主色；VIP 空座 → 警示色；普通空座 → 卡片底色。
+          // 三种状态各自一个填充，不靠深浅区分。
+          fill={
+            occupied ? "var(--primary)" : vip ? "var(--warning)" : "var(--card)"
+          }
+          stroke={selected ? "var(--foreground)" : "var(--border)"}
+          strokeWidth={selected ? 1.8 : 1.2}
+        />
+        {seat.kind === "standing" && (
+          // 站位画成空心方块，跟座位一眼能分开——不能只靠颜色，色觉障碍用户看不出。
+          <rect
+            x={cx - 4}
+            y={cy - 4}
+            width={8}
+            height={8}
+            fill="none"
+            stroke={
+              occupied ? "var(--primary-foreground)" : "var(--muted-foreground)"
+            }
+            strokeWidth={1.2}
+          />
+        )}
+        {planDisabled && (
+          // 停用画一道斜杠。同理，不能只靠透明度——那在小尺寸下看不出来。
+          <line
+            x1={cx - SEAT_R}
+            y1={cy + SEAT_R}
+            x2={cx + SEAT_R}
+            y2={cy - SEAT_R}
+            stroke="var(--muted-foreground)"
+            strokeWidth={1.5}
+          />
+        )}
+        {showLabel && (
+          <text
+            x={cx}
+            y={cy + SEAT_R + 9}
+            textAnchor="middle"
+            fontSize={9}
+            fill="var(--muted-foreground)"
+            style={{ userSelect: "none", pointerEvents: "none" }}
+          >
+            {seat.label}
+          </text>
+        )}
+      </g>
+
+      {selected && (
+        <g data-seat-selection="true" style={{ pointerEvents: "none" }}>
+          <circle
+            cx={cx + SEAT_R * 0.7}
+            cy={cy - SEAT_R * 0.7}
+            r={4.25}
+            fill="var(--background)"
+            stroke="var(--foreground)"
+            strokeWidth={1.3}
+          />
+          <path
+            d={`M ${cx + 3.9} ${cy - 6.7} l 2.3 2.2 l 4 -4.2`}
+            fill="none"
+            stroke="var(--foreground)"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.5}
+          />
+        </g>
       )}
     </g>
   );

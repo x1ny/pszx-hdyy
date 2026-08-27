@@ -2,10 +2,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeftRightIcon,
+  CircleDotIcon,
+  CircleIcon,
   CircleSlashIcon,
+  DiamondIcon,
+  Maximize2Icon,
+  Minimize2Icon,
   TriangleAlertIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { canvasEditor } from "#/features/venue-editor/canvas";
 import { initialState } from "#/features/venue-editor/canvas/core/history";
@@ -20,6 +25,10 @@ import { Skeleton } from "#/shared/components/ui/skeleton.tsx";
 import { cn } from "#/shared/lib/utils.ts";
 import { formatDateTime } from "../venue/-utils";
 import { SeatAssignPanel } from "./-components/seat-assign-panel";
+import {
+  isTargetFullscreen,
+  supportsFullscreenRequest,
+} from "./-fullscreen-utils";
 import {
   assignSeat,
   seatingKeys,
@@ -54,6 +63,9 @@ function SeatingCanvasPage() {
   const planId = Number(planIdParam);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const fullscreenRef = useRef<HTMLDivElement>(null);
+  const [nativeFullscreen, setNativeFullscreen] = useState(false);
+  const [fallbackFullscreen, setFallbackFullscreen] = useState(false);
 
   const planQuery = useQuery(seatingPlanQueryOptions(planId));
   const bundle = planQuery.data;
@@ -113,6 +125,51 @@ function SeatingCanvasPage() {
     : null;
 
   const readOnly = bundle?.plan.status === "voided";
+  const isFullscreen = nativeFullscreen || fallbackFullscreen;
+
+  const syncFullscreenState = useCallback(() => {
+    const native = isTargetFullscreen(
+      document.fullscreenElement,
+      fullscreenRef.current,
+    );
+    setNativeFullscreen(native);
+    if (!native) setFallbackFullscreen(false);
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener("fullscreenchange", syncFullscreenState);
+    return () =>
+      document.removeEventListener("fullscreenchange", syncFullscreenState);
+  }, [syncFullscreenState]);
+
+  const enterFullscreen = useCallback(async () => {
+    const element = fullscreenRef.current;
+    if (!supportsFullscreenRequest(element)) {
+      setFallbackFullscreen(true);
+      return;
+    }
+
+    try {
+      await element.requestFullscreen();
+      syncFullscreenState();
+    } catch {
+      // 权限策略或 WebView 拒绝原生 API 时，仍提供同样的页面铺满体验。
+      setFallbackFullscreen(true);
+    }
+  }, [syncFullscreenState]);
+
+  const exitFullscreen = useCallback(async () => {
+    const element = fullscreenRef.current;
+    setFallbackFullscreen(false);
+    if (!isTargetFullscreen(document.fullscreenElement, element)) return;
+
+    try {
+      await document.exitFullscreen();
+    } catch {
+      // 全屏已经被浏览器抢先退出时，不需要向用户报错；fullscreenchange 会同步状态。
+      syncFullscreenState();
+    }
+  }, [syncFullscreenState]);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: seatingKeys.all });
@@ -298,6 +355,12 @@ function SeatingCanvasPage() {
       )}
 
       <ZoneSeatingEditor
+        frameRef={fullscreenRef}
+        frameClassName={
+          isFullscreen
+            ? "fixed inset-0 z-50 h-dvh w-dvw overflow-hidden bg-background p-4"
+            : undefined
+        }
         zone={zone}
         state={state}
         selection={selection}
@@ -309,6 +372,26 @@ function SeatingCanvasPage() {
         backLabel="返回排位列表"
         seatStatus={seatStatus}
         assignOnly
+        isFullscreen={isFullscreen}
+        onExitFullscreen={exitFullscreen}
+        toolbarActions={
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label={isFullscreen ? "退出全屏排位画布" : "进入全屏排位画布"}
+            aria-pressed={isFullscreen}
+            onClick={isFullscreen ? exitFullscreen : enterFullscreen}
+          >
+            {isFullscreen ? (
+              <Minimize2Icon data-icon="inline-start" />
+            ) : (
+              <Maximize2Icon data-icon="inline-start" />
+            )}
+            {isFullscreen ? "退出全屏" : "全屏"}
+          </Button>
+        }
+        legend={<SeatStatusLegend />}
         rightPanel={
           <div className="flex w-72 shrink-0 flex-col gap-3">
             <SeatAssignPanel
@@ -369,5 +452,41 @@ function SeatingCanvasPage() {
         }
       />
     </div>
+  );
+}
+
+function SeatStatusLegend() {
+  return (
+    <section
+      className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground text-xs"
+      aria-label="座位状态图例"
+    >
+      <span className="font-medium text-foreground">图例</span>
+      <span className="flex items-center gap-1">
+        <CircleIcon className="size-3" aria-hidden />
+        空闲
+      </span>
+      <span className="flex items-center gap-1">
+        <CircleDotIcon className="size-3 text-primary" aria-hidden />
+        已排位
+      </span>
+      <span className="flex items-center gap-1">
+        <DiamondIcon className="size-3 text-warning-foreground" aria-hidden />
+        VIP
+      </span>
+      <span className="flex items-center gap-1">
+        <CircleSlashIcon className="size-3" aria-hidden />
+        停用
+      </span>
+      <span className="flex items-center gap-1">
+        <span
+          className="flex size-3 items-center justify-center rounded-full border-2 border-foreground text-[8px] leading-none"
+          aria-hidden
+        >
+          ✓
+        </span>
+        已选中
+      </span>
+    </section>
   );
 }
