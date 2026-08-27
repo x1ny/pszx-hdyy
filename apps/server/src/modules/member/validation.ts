@@ -369,9 +369,10 @@ export const RemoveActivityMemberInput = z.object({
 // --- 环节人员 ---
 
 /**
- * 环节人员移除。跟活动层同款的 cascade 二次确认——排位建起来之后，
- * 环节人员不再是链条末端了：`seat_assignment` 指向 `segment_member.id`，
- * 直接删会撞外键报 500。
+ * 环节人员移除。跟活动层同款的 cascade 二次确认——排位建起来之后，个人类型
+ * 的 `seat_assignment` 指向 `segment_member.id`，直接删会撞外键报 500；团体
+ * 占位不绑定某个成员，但移除最后一名同团体环节人员会使其范围快照归零，也须
+ * 在二次确认时一并解除。
  */
 export const RemoveSegmentMemberInput = z.object({
   id,

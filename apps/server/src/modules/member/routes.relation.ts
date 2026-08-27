@@ -27,8 +27,10 @@ import {
 import { activity } from "../project/schema";
 import { activityResource, resourceMemberBinding } from "../resource/schema";
 import {
+  listOrganizationSeatsLeavingScope,
   listSeatsByActivityMember,
   listSeatsBySegmentMember,
+  releaseOrganizationSeatsLeavingScope,
   releaseSeatsByActivityMember,
   releaseSeatsBySegmentMembers,
 } from "../seating/cascade";
@@ -590,6 +592,7 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
         and(
           eq(seatAssignment.planId, segmentSeatingPlan.id),
           eq(seatAssignment.segmentMemberId, segmentMember.id),
+          eq(seatAssignment.occupantType, "person"),
           isNull(seatAssignment.revokedAt),
         ),
       )
@@ -734,8 +737,12 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
 
     // 座位和邀请函各查一次。两者都跨模块，且都是"外键故意没设 cascade、
     // 要求先展示清单再显式解除"的同一类下游关联。
-    const [seats, invitations] = await Promise.all([
+    const [seats, organizationSeats, invitations] = await Promise.all([
       listSeatsByActivityMember(db, id),
+      listOrganizationSeatsLeavingScope(
+        db,
+        segments.map((segment) => segment.id),
+      ),
       listInvitationsByActivityMember(db, id),
     ]);
 
@@ -753,7 +760,12 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
             // 得有人去补。
             kind: "seat" as const,
             label: "排位座位",
-            names: seats.map((s) => `${s.segmentName} ${s.seatLabel}`),
+            names: [
+              ...seats.map((s) => `${s.segmentName} ${s.seatLabel}`),
+              ...organizationSeats.map(
+                (seat) => `${seat.segmentName} ${seat.seatLabel}（团体占位）`,
+              ),
+            ],
           },
           {
             // 邀请函是"公函留痕"，schema 里那条外键故意不设 cascade 就是为了
@@ -784,14 +796,14 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
     const userId = c.get("authedUser").id;
 
     const [
-      [relatedSegments],
+      relatedSegmentMembers,
       [relatedBindings],
       [relatedTrips],
       relatedSeats,
       relatedInvitations,
     ] = await Promise.all([
       db
-        .select({ total: count() })
+        .select({ id: segmentMember.id })
         .from(segmentMember)
         .where(eq(segmentMember.activityMemberId, id)),
       db
@@ -805,10 +817,15 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
       listSeatsByActivityMember(db, id),
       listInvitationsByActivityMember(db, id),
     ]);
-    const segmentCount = relatedSegments?.total ?? 0;
+    const organizationSeats = await listOrganizationSeatsLeavingScope(
+      db,
+      relatedSegmentMembers.map((item) => item.id),
+    );
+    const segmentCount = relatedSegmentMembers.length;
     const bindingCount = relatedBindings?.total ?? 0;
     const tripCount = relatedTrips?.total ?? 0;
     const seatCount = relatedSeats.length;
+    const organizationSeatCount = organizationSeats.length;
     const invitationCount = relatedInvitations.length;
 
     if (
@@ -816,6 +833,7 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
         bindingCount > 0 ||
         tripCount > 0 ||
         seatCount > 0 ||
+        organizationSeatCount > 0 ||
         invitationCount > 0) &&
       !cascade
     ) {
@@ -825,6 +843,9 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
         // 座位排在环节后面：它比"参与哪些环节"更具体，移除之后会直接留下
         // 空位需要补人，是这几项里最需要被看见的。
         seatCount > 0 ? `${seatCount} 个已排座位` : null,
+        organizationSeatCount > 0
+          ? `${organizationSeatCount} 个团体占位（该团体将离开环节范围）`
+          : null,
         invitationCount > 0 ? `${invitationCount} 份邀请函记录` : null,
         bindingCount > 0 ? `${bindingCount} 项资源服务安排` : null,
         tripCount > 0 ? `${tripCount} 条行程` : null,
@@ -846,6 +867,13 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
        */
       if (seatCount > 0) {
         await releaseSeatsByActivityMember(tx, id, userId);
+      }
+      if (organizationSeatCount > 0) {
+        await releaseOrganizationSeatsLeavingScope(
+          tx,
+          relatedSegmentMembers.map((item) => item.id),
+          userId,
+        );
       }
       if (invitationCount > 0) {
         await releaseInvitationsByActivityMember(tx, id);
@@ -1094,20 +1122,34 @@ export const segmentMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
   /**
    * 环节人员移除。
    *
-   * 排位建起来之后，环节人员**不再是链条末端**——`seat_assignment` 指向
-   * `segment_member.id`，而那条外键没有 cascade。所以这里跟活动层一样要
-   * 先报清单、二次确认，再连座位一起解。
+   * 排位建起来之后，环节人员**不再是链条末端**——个人类型的
+   * `seat_assignment` 指向 `segment_member.id`，而那条外键没有 cascade。所以
+   * 这里跟活动层一样要先报清单、二次确认，再连座位一起解；团体占位不绑定某
+   * 个成员，但若移除的是团体在本环节的最后一人，范围快照归零时也会一起解除。
    */
   .post("/remove", jsonBody(RemoveSegmentMemberInput), async (c) => {
     const { id, cascade } = c.req.valid("json");
     const userId = c.get("authedUser").id;
 
-    const seats = await listSeatsBySegmentMember(db, id);
+    const [seats, organizationSeats] = await Promise.all([
+      listSeatsBySegmentMember(db, id),
+      listOrganizationSeatsLeavingScope(db, [id]),
+    ]);
 
-    if (seats.length > 0 && !cascade) {
+    if ((seats.length > 0 || organizationSeats.length > 0) && !cascade) {
+      const impacts = [
+        seats.length > 0
+          ? `个人排位 ${seats.map((seat) => seat.seatLabel).join("、")}`
+          : null,
+        organizationSeats.length > 0
+          ? `团体占位 ${organizationSeats
+              .map((seat) => seat.seatLabel)
+              .join("、")}`
+          : null,
+      ].filter(Boolean);
       return c.json(
         validationError(
-          `该人员在本环节已排 ${seats.map((s) => s.seatLabel).join("、")}，请确认是否一并解除排位`,
+          `移除后将解除${impacts.join("及")}，请确认是否一并解除排位`,
         ),
       );
     }
@@ -1115,6 +1157,9 @@ export const segmentMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
     const row = await db.transaction(async (tx) => {
       if (seats.length > 0) {
         await releaseSeatsBySegmentMembers(tx, [id], userId);
+      }
+      if (organizationSeats.length > 0) {
+        await releaseOrganizationSeatsLeavingScope(tx, [id], userId);
       }
       const [deleted] = await tx
         .delete(segmentMember)

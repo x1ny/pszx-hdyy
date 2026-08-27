@@ -38,6 +38,7 @@ export type PlanSeatDraft = {
 export type BlockedSeat = {
   seatId: number;
   label: string;
+  /** 个人姓名或带“团体：”前缀的团体名称。字段名为兼容既有画布提示保留。 */
   memberName: string;
   reason: "removed" | "disabled";
 };
@@ -133,7 +134,7 @@ export function planSeatMerge(
  * 指向的位置**此刻仍然有效**。
  */
 export function findInvalidAssignments(
-  assignments: { seatId: number; memberName: string }[],
+  assignments: { seatId: number; occupantName: string }[],
   seatById: Map<number, { label: string; enabled: boolean; removed: boolean }>,
 ): BlockedSeat[] {
   const invalid: BlockedSeat[] = [];
@@ -144,7 +145,7 @@ export function findInvalidAssignments(
       invalid.push({
         seatId: assignment.seatId,
         label: seat?.label ?? `#${assignment.seatId}`,
-        memberName: assignment.memberName,
+        memberName: assignment.occupantName,
         reason: "removed",
       });
       continue;
@@ -153,13 +154,30 @@ export function findInvalidAssignments(
       invalid.push({
         seatId: assignment.seatId,
         label: seat.label,
-        memberName: assignment.memberName,
+        memberName: assignment.occupantName,
         reason: "disabled",
       });
     }
   }
 
   return invalid;
+}
+
+/**
+ * 对调时只移动位置，完整保留占用对象字段。调用方已先保证 rows 只属于两个目标
+ * 座位；只有一边有占用时，结果自然退化为把它移动到另一边。
+ *
+ * 个人和团体都走同一条规则：团体不展开为成员，个人目标也不会被改成团体目标。
+ */
+export function swapAssignmentSeats<T extends { seatId: number }>(
+  rows: readonly T[],
+  seatAId: number,
+  seatBId: number,
+): (T & { seatId: number })[] {
+  return rows.map((row) => ({
+    ...row,
+    seatId: row.seatId === seatAId ? seatBId : seatAId,
+  }));
 }
 
 /**

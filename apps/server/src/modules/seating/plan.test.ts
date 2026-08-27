@@ -5,6 +5,7 @@ import {
   type PlanSeatDraft,
   type PlanSeatRow,
   planSeatMerge,
+  swapAssignmentSeats,
 } from "./plan";
 
 const row = (over: Partial<PlanSeatRow> & { id: number }): PlanSeatRow => ({
@@ -150,13 +151,13 @@ describe("findInvalidAssignments", () => {
 
   test("位置有效时放行", () => {
     expect(
-      findInvalidAssignments([{ seatId: 1, memberName: "张三" }], seats),
+      findInvalidAssignments([{ seatId: 1, occupantName: "张三" }], seats),
     ).toEqual([]);
   });
 
   test("坐在禁用位置上要拦", () => {
     const invalid = findInvalidAssignments(
-      [{ seatId: 2, memberName: "李四" }],
+      [{ seatId: 2, occupantName: "李四" }],
       seats,
     );
     expect(invalid).toEqual([
@@ -166,14 +167,14 @@ describe("findInvalidAssignments", () => {
 
   test("坐在已软删位置上要拦", () => {
     expect(
-      findInvalidAssignments([{ seatId: 3, memberName: "王五" }], seats)[0]
+      findInvalidAssignments([{ seatId: 3, occupantName: "王五" }], seats)[0]
         ?.reason,
     ).toBe("removed");
   });
 
   test("指向根本不存在的位置也要拦，不能静默放过", () => {
     const invalid = findInvalidAssignments(
-      [{ seatId: 99, memberName: "钱七" }],
+      [{ seatId: 99, occupantName: "钱七" }],
       seats,
     );
     expect(invalid).toHaveLength(1);
@@ -190,5 +191,67 @@ describe("isWritable", () => {
     for (const status of ["pending", "confirmed", "rejected"]) {
       expect(isWritable(status)).toBe(true);
     }
+  });
+});
+
+describe("swapAssignmentSeats", () => {
+  test("个人与团体对调时保留各自目标，不伪造个人", () => {
+    const swapped = swapAssignmentSeats(
+      [
+        {
+          seatId: 1,
+          occupantType: "person" as const,
+          segmentMemberId: 11,
+          organizationId: null,
+        },
+        {
+          seatId: 2,
+          occupantType: "organization" as const,
+          segmentMemberId: null,
+          organizationId: 22,
+        },
+      ],
+      1,
+      2,
+    );
+
+    expect(swapped).toEqual([
+      {
+        seatId: 2,
+        occupantType: "person",
+        segmentMemberId: 11,
+        organizationId: null,
+      },
+      {
+        seatId: 1,
+        occupantType: "organization",
+        segmentMemberId: null,
+        organizationId: 22,
+      },
+    ]);
+  });
+
+  test("单边有占用时只移动它，团体目标仍原样保留", () => {
+    expect(
+      swapAssignmentSeats(
+        [
+          {
+            seatId: 1,
+            occupantType: "organization" as const,
+            segmentMemberId: null,
+            organizationId: 22,
+          },
+        ],
+        1,
+        2,
+      ),
+    ).toEqual([
+      {
+        seatId: 2,
+        occupantType: "organization",
+        segmentMemberId: null,
+        organizationId: 22,
+      },
+    ]);
   });
 });

@@ -109,7 +109,11 @@ function SeatingCanvasPage() {
     for (const seat of bundle?.seats ?? []) {
       const assignment = assignmentBySeatId.get(seat.id);
       map.set(seat.externalId, {
-        occupantName: assignment?.memberName,
+        occupantName: assignment
+          ? assignment.occupantType === "organization"
+            ? (assignment.organizationName ?? "团体占位")
+            : (assignment.memberName ?? undefined)
+          : undefined,
         disabled: !seat.enabled,
       });
     }

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { db } from "../../infra/db";
 import { activitySegment } from "../agenda/schema";
 import { segmentMember } from "../member/schema";
@@ -13,9 +13,11 @@ import { seatAssignment, segmentSeat, segmentSeatingLog } from "./schema";
  * `resourceMemberBinding` 用了同一套写法（见 routes.relation.ts 的导入），
  * 这里照抄那个先例，不新开一种模式。
  *
- * 之所以必须有这层：`seat_assignment.segmentMemberId → segment_member.id` 这条
- * 外键**没有 cascade**，member 直接 `DELETE FROM segment_member` 会撞约束报 500。
- * 这不是假想——评审时在回滚事务里复现过（docs/场地排位交互评审.md §3.1）。
+ * 之所以必须有这层：个人分配的 `seat_assignment.segmentMemberId →
+ * segment_member.id` 外键**没有 cascade**，member 直接 `DELETE FROM
+ * segment_member` 会撞约束报 500。团体占位没有挂到某个成员；只有移除的是其
+ * 团体在该环节的最后一人时，才应因范围消失而解除该团体占位。这不是假想——
+ * 评审时在回滚事务里复现过（docs/场地排位交互评审.md §3.1）。
  *
  * 单独一个文件而不是塞进 routes.ts：routes.ts 是 HTTP 层，这几个函数是**给别的
  * 模块在同一个事务里调**的纯数据操作，混在一起会让"谁能调用它"变得不清楚。
@@ -25,6 +27,51 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /** 未撤销的分配。跟 routes.ts 里同名常量含义一致。 */
 const live = isNull(seatAssignment.revokedAt);
+
+type OrganizationSeatImpact = {
+  id: number;
+  planId: number;
+  segmentSeatId: number;
+  segmentId: number;
+  organizationId: number;
+  segmentName: string;
+  seatLabel: string;
+};
+
+type SegmentOrganizationSnapshot = {
+  id: number;
+  segmentId: number;
+  organizationId: number | null;
+};
+
+const organizationScopeKey = (segmentId: number, organizationId: number) =>
+  `${segmentId}:${organizationId}`;
+
+/** 计算移除一批环节人员后，哪些「环节 × 团体」范围快照会归零。 */
+export function findEmptiedOrganizationScopes(
+  leavingMembers: readonly SegmentOrganizationSnapshot[],
+  scopedMembers: readonly SegmentOrganizationSnapshot[],
+): Set<string> {
+  const leavingSet = new Set(leavingMembers.map((row) => row.id));
+  const emptiedScopes = new Set<string>();
+
+  for (const row of leavingMembers) {
+    if (row.organizationId === null) continue;
+    const stillInScope = scopedMembers.some(
+      (candidate) =>
+        candidate.segmentId === row.segmentId &&
+        candidate.organizationId === row.organizationId &&
+        !leavingSet.has(candidate.id),
+    );
+    if (!stillInScope) {
+      emptiedScopes.add(
+        organizationScopeKey(row.segmentId, row.organizationId),
+      );
+    }
+  }
+
+  return emptiedScopes;
+}
 
 /**
  * 这个活动人员在各环节占了哪些座位。给 member 的 `/impact` 用——
@@ -47,7 +94,13 @@ export async function listSeatsByActivityMember(
     )
     .innerJoin(segmentSeat, eq(segmentSeat.id, seatAssignment.segmentSeatId))
     .innerJoin(activitySegment, eq(activitySegment.id, segmentMember.segmentId))
-    .where(and(eq(segmentMember.activityMemberId, activityMemberId), live))
+    .where(
+      and(
+        eq(segmentMember.activityMemberId, activityMemberId),
+        eq(seatAssignment.occupantType, "person"),
+        live,
+      ),
+    )
     .orderBy(asc(activitySegment.startTime));
 }
 
@@ -68,12 +121,106 @@ export async function listSeatsBySegmentMember(
     )
     .innerJoin(segmentSeat, eq(segmentSeat.id, seatAssignment.segmentSeatId))
     .innerJoin(activitySegment, eq(activitySegment.id, segmentMember.segmentId))
-    .where(and(eq(seatAssignment.segmentMemberId, segmentMemberId), live))
+    .where(
+      and(
+        eq(seatAssignment.segmentMemberId, segmentMemberId),
+        eq(seatAssignment.occupantType, "person"),
+        live,
+      ),
+    )
     .orderBy(asc(activitySegment.startTime));
 }
 
 /**
- * 把这些环节人员身上的座位分配**物理删除**，并给每个受影响的方案留一条日志。
+ * 要离开的环节人员若是其团体在该环节的最后一人，那个团体就不再处于环节范围。
+ * 找出因此必须解除的**生效中**团体占位；被撤销的历史分配无需再参与范围校验。
+ */
+export async function listOrganizationSeatsLeavingScope(
+  conn: Pick<typeof db, "select">,
+  segmentMemberIds: number[],
+): Promise<OrganizationSeatImpact[]> {
+  if (segmentMemberIds.length === 0) return [];
+
+  const leavingIds = [...new Set(segmentMemberIds)];
+  const leavingMembers = await conn
+    .select({
+      id: segmentMember.id,
+      segmentId: segmentMember.segmentId,
+      organizationId: segmentMember.organizationId,
+    })
+    .from(segmentMember)
+    .where(
+      and(
+        inArray(segmentMember.id, leavingIds),
+        isNotNull(segmentMember.organizationId),
+      ),
+    );
+  if (leavingMembers.length === 0) return [];
+
+  const segmentIds = [...new Set(leavingMembers.map((row) => row.segmentId))];
+  const organizationIds = [
+    ...new Set(
+      leavingMembers.flatMap((row) =>
+        row.organizationId === null ? [] : [row.organizationId],
+      ),
+    ),
+  ];
+  const scopedMembers = await conn
+    .select({
+      id: segmentMember.id,
+      segmentId: segmentMember.segmentId,
+      organizationId: segmentMember.organizationId,
+    })
+    .from(segmentMember)
+    .where(
+      and(
+        inArray(segmentMember.segmentId, segmentIds),
+        inArray(segmentMember.organizationId, organizationIds),
+      ),
+    );
+
+  const emptiedScopes = findEmptiedOrganizationScopes(
+    leavingMembers,
+    scopedMembers,
+  );
+  if (emptiedScopes.size === 0) return [];
+
+  const candidates = await conn
+    .select({
+      id: seatAssignment.id,
+      planId: seatAssignment.planId,
+      segmentSeatId: seatAssignment.segmentSeatId,
+      segmentId: seatAssignment.segmentId,
+      organizationId: seatAssignment.organizationId,
+      segmentName: activitySegment.name,
+      seatLabel: segmentSeat.label,
+    })
+    .from(seatAssignment)
+    .innerJoin(segmentSeat, eq(segmentSeat.id, seatAssignment.segmentSeatId))
+    .innerJoin(
+      activitySegment,
+      eq(activitySegment.id, seatAssignment.segmentId),
+    )
+    .where(
+      and(
+        eq(seatAssignment.occupantType, "organization"),
+        live,
+        inArray(seatAssignment.segmentId, segmentIds),
+        inArray(seatAssignment.organizationId, organizationIds),
+      ),
+    );
+
+  return candidates.filter(
+    (row): row is OrganizationSeatImpact =>
+      row.organizationId !== null &&
+      emptiedScopes.has(
+        organizationScopeKey(row.segmentId, row.organizationId),
+      ),
+  );
+}
+
+/**
+ * 把这些环节人员身上的**个人**座位分配物理删除，并给每个受影响的方案留日志。
  *
  * 为什么是物理删除而不是软撤销（`revokedAt`）：外键约束的是"有没有行指向
  * `segment_member`"，跟 `revokedAt` 无关——软撤销之后那一行还在，
@@ -101,7 +248,12 @@ export async function releaseSeatsBySegmentMembers(
       segmentMemberId: seatAssignment.segmentMemberId,
     })
     .from(seatAssignment)
-    .where(inArray(seatAssignment.segmentMemberId, segmentMemberIds));
+    .where(
+      and(
+        eq(seatAssignment.occupantType, "person"),
+        inArray(seatAssignment.segmentMemberId, segmentMemberIds),
+      ),
+    );
 
   if (rows.length === 0) return 0;
 
@@ -129,7 +281,55 @@ export async function releaseSeatsBySegmentMembers(
         reason: "memberRemoved",
         seats: list.map((row) => ({
           seatId: row.segmentSeatId,
+          occupantType: "person",
           segmentMemberId: row.segmentMemberId,
+        })),
+      },
+    })),
+  );
+
+  return rows.length;
+}
+
+/**
+ * 团体离开环节范围时软撤其生效占位，并按方案写明原因。它们不引用
+ * segment_member，因此不能也不应走个人删除时的物理清理路径。
+ */
+export async function releaseOrganizationSeatsLeavingScope(
+  tx: Tx,
+  segmentMemberIds: number[],
+  operatorId: string,
+): Promise<number> {
+  const rows = await listOrganizationSeatsLeavingScope(tx, segmentMemberIds);
+  if (rows.length === 0) return 0;
+
+  await tx
+    .update(seatAssignment)
+    .set({ revokedBy: operatorId, revokedAt: new Date() })
+    .where(
+      inArray(
+        seatAssignment.id,
+        rows.map((row) => row.id),
+      ),
+    );
+
+  const byPlan = new Map<number, OrganizationSeatImpact[]>();
+  for (const row of rows) {
+    const list = byPlan.get(row.planId) ?? [];
+    list.push(row);
+    byPlan.set(row.planId, list);
+  }
+  await tx.insert(segmentSeatingLog).values(
+    [...byPlan].map(([planId, list]) => ({
+      planId,
+      action: "unassign" as const,
+      operatorId,
+      payload: {
+        reason: "organizationOutOfSegmentScope",
+        seats: list.map((row) => ({
+          seatId: row.segmentSeatId,
+          occupantType: "organization",
+          organizationId: row.organizationId,
         })),
       },
     })),

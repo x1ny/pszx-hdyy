@@ -7,6 +7,7 @@ import { activitySegment } from "../agenda/schema";
 import { type AuthedVariables, requireUser } from "../auth";
 import { ensureSegmentMemberFromActivity } from "../member/ladder";
 import { activityMember, member, segmentMember } from "../member/schema";
+import { organization } from "../organization/schema";
 import {
   activityVenue,
   activityVenueLayout,
@@ -17,6 +18,7 @@ import {
   isWritable,
   type PlanSeatRow,
   planSeatMerge,
+  swapAssignmentSeats,
 } from "./plan";
 import {
   seatAssignment,
@@ -30,6 +32,7 @@ import {
   ActivityIdInput,
   AssignActivityMemberInput,
   AssignInput,
+  AssignOrganizationInput,
   ConfirmPlanInput,
   CreatePlanInput,
   ListCandidatesInput,
@@ -105,6 +108,7 @@ export const listCandidatesQuery = (
         join ${segmentSeat} on ${eq(segmentSeat.id, seatAssignment.segmentSeatId)}
         where ${eq(seatAssignment.segmentMemberId, segmentMember.id)}
           and ${eq(seatAssignment.planId, planId)}
+          and ${seatAssignment.occupantType} = 'person'
           and ${seatAssignment.revokedAt} is null
         limit 1
       )`.as("taken_seat_label"),
@@ -131,6 +135,32 @@ export const listCandidatesQuery = (
     )
     .orderBy(asc(member.name))
     .limit(200);
+
+/** 当前方案环节范围内可作团体占位的团体，不统计人数也不做批量排座。 */
+export const listOrganizationCandidatesQuery = (segmentId: number) =>
+  db
+    .selectDistinct({ id: organization.id, name: organization.name })
+    .from(segmentMember)
+    .innerJoin(organization, eq(organization.id, segmentMember.organizationId))
+    .where(eq(segmentMember.segmentId, segmentId))
+    .orderBy(asc(organization.name), asc(organization.id));
+
+/** 团体占位的范围守卫：只认当前环节成员关系上的 organizationId 历史快照。 */
+export const organizationInSegmentScopeQuery = (
+  conn: Pick<typeof db, "select">,
+  segmentId: number,
+  organizationId: number,
+) =>
+  conn
+    .select({ id: segmentMember.id })
+    .from(segmentMember)
+    .where(
+      and(
+        eq(segmentMember.segmentId, segmentId),
+        eq(segmentMember.organizationId, organizationId),
+      ),
+    )
+    .limit(1);
 
 async function writeLog(
   tx: Tx,
@@ -164,16 +194,27 @@ async function touchPlan(tx: Tx, planId: number, userId: string) {
   return { wasConfirmed: before?.status === "confirmed" };
 }
 
-/** 座位 id → 占座人姓名。归并要用它判断"这个位置上有没有人"。 */
+/**
+ * 座位 id → 占座对象显示名。归并只关心位置是否有人，个人和团体都必须挡住
+ * 删除/停用；团体名称前缀避免被误解成某个具体成员。
+ */
 async function occupiedSeats(tx: Tx, planId: number) {
   const rows = await tx
-    .select({ seatId: seatAssignment.segmentSeatId, name: member.name })
+    .select({
+      seatId: seatAssignment.segmentSeatId,
+      name: sql<string>`case
+        when ${seatAssignment.occupantType} = 'organization'
+          then concat('团体：', ${organization.name})
+        else ${member.name}
+      end`.as("occupant_name"),
+    })
     .from(seatAssignment)
-    .innerJoin(
+    .leftJoin(
       segmentMember,
       eq(segmentMember.id, seatAssignment.segmentMemberId),
     )
-    .innerJoin(member, eq(member.id, segmentMember.memberId))
+    .leftJoin(member, eq(member.id, segmentMember.memberId))
+    .leftJoin(organization, eq(organization.id, seatAssignment.organizationId))
     .where(and(eq(seatAssignment.planId, planId), liveAssignment));
 
   return new Map(rows.map((row) => [row.seatId, row.name]));
@@ -344,17 +385,32 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
         .select({
           id: seatAssignment.id,
           segmentSeatId: seatAssignment.segmentSeatId,
+          occupantType: seatAssignment.occupantType,
           segmentMemberId: seatAssignment.segmentMemberId,
-          organizationId: segmentMember.organizationId,
+          // 个人继续暴露进入环节时的团体快照；团体占位则读分配行目标。
+          organizationId: sql<number | null>`coalesce(
+            ${seatAssignment.organizationId},
+            ${segmentMember.organizationId}
+          )`
+            .mapWith(segmentMember.organizationId)
+            .as("organization_id"),
+          organizationName: organization.name,
           memberName: member.name,
           companyPosition: member.companyPosition,
         })
         .from(seatAssignment)
-        .innerJoin(
+        .leftJoin(
           segmentMember,
           eq(segmentMember.id, seatAssignment.segmentMemberId),
         )
-        .innerJoin(member, eq(member.id, segmentMember.memberId))
+        .leftJoin(member, eq(member.id, segmentMember.memberId))
+        .leftJoin(
+          organization,
+          eq(
+            organization.id,
+            sql`coalesce(${seatAssignment.organizationId}, ${segmentMember.organizationId})`,
+          ),
+        )
         .where(and(eq(seatAssignment.planId, planId), liveAssignment)),
     ]);
 
@@ -384,6 +440,25 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
     const rows = await listCandidatesQuery(planId, plan, keyword);
 
     return c.json(ok({ list: rows }));
+  })
+
+  /**
+   * 可以作为团体占位的团体：只读当前方案环节的 organizationId 范围快照。
+   *
+   * 这是选择器，不返回人数、也不创建任何人员关系；批量团体统计/排座留给后续
+   * 功能，不能借这条接口隐式实现。
+   */
+  .post("/listOrganizationCandidates", jsonBody(PlanIdInput), async (c) => {
+    const { planId } = c.req.valid("json");
+
+    const [plan] = await db
+      .select({ segmentId: segmentSeatingPlan.segmentId })
+      .from(segmentSeatingPlan)
+      .where(eq(segmentSeatingPlan.id, planId));
+    if (!plan) return c.json(notFound());
+
+    const list = await listOrganizationCandidatesQuery(plan.segmentId);
+    return c.json(ok({ list }));
   })
 
   /**
@@ -623,6 +698,24 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
   })
 
   /**
+   * 将当前方案环节范围内的一个团体占到某个位置。
+   *
+   * 团体是位置的占用对象，不会补建或伪造任何 segment_member；同一团体可占多
+   * 个位置，只有个人路径受“同方案一人一座”限制。
+   */
+  .post("/assignOrganization", jsonBody(AssignOrganizationInput), async (c) => {
+    const input = c.req.valid("json");
+    const userId = c.get("authedUser").id;
+
+    const result = await db.transaction((tx) =>
+      assignOrganizationSeat(tx, { ...input, userId }),
+    );
+
+    if (!result.ok) return c.json(invalid(result.error));
+    return c.json(ok(result.data));
+  })
+
+  /**
    * 兼容旧客户端：排一个**还不是本环节人员**的活动人员，先补一条
    * `segment_member`，再建分配。
    *
@@ -709,12 +802,20 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
             liveAssignment,
           ),
         )
-        .returning({ id: seatAssignment.id });
+        .returning({
+          id: seatAssignment.id,
+          occupantType: seatAssignment.occupantType,
+          segmentMemberId: seatAssignment.segmentMemberId,
+          organizationId: seatAssignment.organizationId,
+        });
       if (!revoked) return { ok: false as const, error: "这个位置上没有人" };
 
       const { wasConfirmed } = await touchPlan(tx, input.planId, userId);
       await writeLog(tx, input.planId, "unassign", userId, {
         seatId: input.segmentSeatId,
+        occupantType: revoked.occupantType,
+        segmentMemberId: revoked.segmentMemberId,
+        organizationId: revoked.organizationId,
       });
 
       return { ok: true as const, data: { wasConfirmed } };
@@ -765,13 +866,23 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
 
       if (seat.enabled && !enabled) {
         const [occupant] = await tx
-          .select({ name: member.name })
+          .select({
+            name: sql<string>`case
+              when ${seatAssignment.occupantType} = 'organization'
+                then concat('团体：', ${organization.name})
+              else ${member.name}
+            end`.as("occupant_name"),
+          })
           .from(seatAssignment)
-          .innerJoin(
+          .leftJoin(
             segmentMember,
             eq(segmentMember.id, seatAssignment.segmentMemberId),
           )
-          .innerJoin(member, eq(member.id, segmentMember.memberId))
+          .leftJoin(member, eq(member.id, segmentMember.memberId))
+          .leftJoin(
+            organization,
+            eq(organization.id, seatAssignment.organizationId),
+          )
           .where(
             and(
               eq(seatAssignment.planId, planId),
@@ -823,7 +934,8 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
    *
    * 不是"解绑两次再分配两次"：那样中间会短暂出现一个人没座位的状态，而且
    * 一人一座的唯一索引会在中间步骤上炸。这里先把两条都撤销，再插两条新的，
-   * 全在一个事务里。
+   * 全在一个事务里。MVP 对个人/团体一视同仁：任何有效占用对象均随位置交换；
+   * 团体不会被展开成成员，个人的一人一座约束仍由 partial unique 保证。
    */
   .post("/swap", jsonBody(SwapInput), async (c) => {
     const input = c.req.valid("json");
@@ -846,11 +958,43 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
         return { ok: false as const, error: "方案已作废，不能再修改" };
       }
 
+      const targetSeats = await tx
+        .select({
+          id: segmentSeat.id,
+          label: segmentSeat.label,
+          enabled: segmentSeat.enabled,
+          removedAt: segmentSeat.removedAt,
+        })
+        .from(segmentSeat)
+        .where(
+          and(
+            eq(segmentSeat.planId, input.planId),
+            inArray(segmentSeat.id, [input.seatAId, input.seatBId]),
+          ),
+        );
+      if (
+        targetSeats.length !== 2 ||
+        targetSeats.some((seat) => seat.removedAt)
+      ) {
+        return { ok: false as const, error: "位置不存在" };
+      }
+      if (targetSeats.some((seat) => !seat.enabled)) {
+        return { ok: false as const, error: "停用的位置不能参与对调" };
+      }
+
       const current = await tx
         .select({
           id: seatAssignment.id,
           seatId: seatAssignment.segmentSeatId,
+          occupantType: seatAssignment.occupantType,
           segmentMemberId: seatAssignment.segmentMemberId,
+          // 确认日志必须保留既有个人座位的团体快照，不能因新增团体占位而丢失。
+          organizationId: sql<number | null>`coalesce(
+            ${seatAssignment.organizationId},
+            ${segmentMember.organizationId}
+          )`
+            .mapWith(segmentMember.organizationId)
+            .as("organization_id"),
         })
         .from(seatAssignment)
         .where(
@@ -879,12 +1023,17 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
         );
 
       // 只有一边有人时，对调退化成"把这个人挪到另一个位置"，是合理语义。
-      const swapped = current.map((row) => ({
+      const swapped = swapAssignmentSeats(
+        current,
+        input.seatAId,
+        input.seatBId,
+      ).map((row) => ({
         planId: input.planId,
         segmentId: plan.segmentId,
-        segmentSeatId:
-          row.seatId === input.seatAId ? input.seatBId : input.seatAId,
+        segmentSeatId: row.seatId,
+        occupantType: row.occupantType,
         segmentMemberId: row.segmentMemberId,
+        organizationId: row.organizationId,
         assignedBy: userId,
       }));
       await tx.insert(seatAssignment).values(swapped);
@@ -893,6 +1042,12 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
       await writeLog(tx, input.planId, "swap", userId, {
         seatAId: input.seatAId,
         seatBId: input.seatBId,
+        occupants: current.map((row) => ({
+          seatId: row.seatId,
+          occupantType: row.occupantType,
+          segmentMemberId: row.segmentMemberId,
+          organizationId: row.organizationId,
+        })),
       });
 
       return { ok: true as const, data: { wasConfirmed } };
@@ -968,18 +1123,37 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
       const assignments = await tx
         .select({
           seatId: seatAssignment.segmentSeatId,
+          occupantType: seatAssignment.occupantType,
           segmentMemberId: seatAssignment.segmentMemberId,
+          organizationId: sql<number | null>`coalesce(
+            ${seatAssignment.organizationId},
+            ${segmentMember.organizationId}
+          )`
+            .mapWith(segmentMember.organizationId)
+            .as("organization_id"),
+          organizationName: organization.name,
           memberId: member.id,
           memberName: member.name,
           mobile: member.mobile,
-          organizationId: segmentMember.organizationId,
+          occupantName: sql<string>`case
+            when ${seatAssignment.occupantType} = 'organization'
+              then concat('团体：', ${organization.name})
+            else ${member.name}
+          end`.as("occupant_name"),
         })
         .from(seatAssignment)
-        .innerJoin(
+        .leftJoin(
           segmentMember,
           eq(segmentMember.id, seatAssignment.segmentMemberId),
         )
-        .innerJoin(member, eq(member.id, segmentMember.memberId))
+        .leftJoin(member, eq(member.id, segmentMember.memberId))
+        .leftJoin(
+          organization,
+          eq(
+            organization.id,
+            sql`coalesce(${seatAssignment.organizationId}, ${segmentMember.organizationId})`,
+          ),
+        )
         .where(and(eq(seatAssignment.planId, planId), liveAssignment));
 
       const seatById = new Map(
@@ -1026,11 +1200,13 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
         assignments: assignments.map((row) => ({
           seatId: row.seatId,
           seatLabel: seatById.get(row.seatId)?.label ?? null,
+          occupantType: row.occupantType,
           segmentMemberId: row.segmentMemberId,
+          organizationId: row.organizationId,
+          organizationName: row.organizationName,
           memberId: row.memberId,
           memberName: row.memberName,
           mobile: row.mobile,
-          organizationId: row.organizationId,
         })),
       });
 
@@ -1130,8 +1306,8 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
   });
 
 /**
- * 建一条分配。`assign` 和 `assignActivityMember` 共用——后者只是先补了一条
- * 环节人员，落分配这一步完全一样。
+ * 建个人分配。`assign` 和 `assignActivityMember` 共用——后者只是先补一条环节
+ * 人员，落分配这一步完全一样。
  */
 async function assignSeat(
   tx: Tx,
@@ -1139,6 +1315,55 @@ async function assignSeat(
     planId: number;
     segmentSeatId: number;
     segmentMemberId: number;
+    userId: string;
+  },
+) {
+  return assignOccupant(tx, {
+    ...input,
+    occupantType: "person",
+    organizationId: null,
+  });
+}
+
+/** 团体占位不创建任何人员关系，只把真实环节范围内的团体作为占用对象落库。 */
+async function assignOrganizationSeat(
+  tx: Tx,
+  input: {
+    planId: number;
+    segmentSeatId: number;
+    organizationId: number;
+    userId: string;
+  },
+) {
+  return assignOccupant(tx, {
+    ...input,
+    occupantType: "organization",
+    segmentMemberId: null,
+  });
+}
+
+type SeatOccupantInput =
+  | {
+      occupantType: "person";
+      segmentMemberId: number;
+      organizationId: null;
+    }
+  | {
+      occupantType: "organization";
+      segmentMemberId: null;
+      organizationId: number;
+    };
+
+/**
+ * 两种占用对象共用的落库路径。团体没有“一团一座”限制；个人则在撤旧后由
+ * partial unique 兜底“一方案一人一座”。范围校验放在插入前，避免把数据库
+ * 外键异常暴露成 500。
+ */
+async function assignOccupant(
+  tx: Tx,
+  input: SeatOccupantInput & {
+    planId: number;
+    segmentSeatId: number;
     userId: string;
   },
 ) {
@@ -1175,9 +1400,32 @@ async function assignSeat(
     return { ok: false as const, error: `位置 ${seat.label} 本环节已停用` };
   }
 
-  // 先撤掉这个位置上的旧人和这个人的旧位置，再插新的。不这么做的话，
-  // 两条 partial unique（一座一人、一人一座）会直接把插入打回来，而报错文案
-  // 是数据库的，用户看不懂。
+  if (input.occupantType === "person") {
+    const [segmentPerson] = await tx
+      .select({ id: segmentMember.id })
+      .from(segmentMember)
+      .where(
+        and(
+          eq(segmentMember.id, input.segmentMemberId),
+          eq(segmentMember.segmentId, plan.segmentId),
+        ),
+      );
+    if (!segmentPerson) {
+      return { ok: false as const, error: "该人员不在当前环节范围内" };
+    }
+  } else {
+    const [segmentOrganization] = await organizationInSegmentScopeQuery(
+      tx,
+      plan.segmentId,
+      input.organizationId,
+    );
+    if (!segmentOrganization) {
+      return { ok: false as const, error: "该团体不在当前环节范围内" };
+    }
+  }
+
+  // 先撤掉这个位置上的旧占用对象；个人还要撤自己的旧位置，才能在事务中保持
+  // 一方案一人一座。团体可占多个位置，绝不能在这里把同团体其他占位误解除。
   await tx
     .update(seatAssignment)
     .set({ revokedBy: input.userId, revokedAt: new Date() })
@@ -1186,7 +1434,9 @@ async function assignSeat(
         eq(seatAssignment.planId, input.planId),
         or(
           eq(seatAssignment.segmentSeatId, input.segmentSeatId),
-          eq(seatAssignment.segmentMemberId, input.segmentMemberId),
+          input.occupantType === "person"
+            ? eq(seatAssignment.segmentMemberId, input.segmentMemberId)
+            : undefined,
         ),
         liveAssignment,
       ),
@@ -1196,14 +1446,18 @@ async function assignSeat(
     planId: input.planId,
     segmentId: plan.segmentId,
     segmentSeatId: input.segmentSeatId,
+    occupantType: input.occupantType,
     segmentMemberId: input.segmentMemberId,
+    organizationId: input.organizationId,
     assignedBy: input.userId,
   });
 
   const { wasConfirmed } = await touchPlan(tx, input.planId, input.userId);
   await writeLog(tx, input.planId, "assign", input.userId, {
     seatId: input.segmentSeatId,
+    occupantType: input.occupantType,
     segmentMemberId: input.segmentMemberId,
+    organizationId: input.organizationId,
   });
 
   return { ok: true as const, data: { wasConfirmed } };

@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { db } from "../../infra/db";
 import { activitySegment } from "../agenda/schema";
-import { listCandidatesQuery } from "./routes";
+import {
+  listCandidatesQuery,
+  listOrganizationCandidatesQuery,
+  organizationInSegmentScopeQuery,
+} from "./routes";
 import { segmentSeatingPlan } from "./schema";
 import { currentPlanJoin, inSeatingScope } from "./stats";
 
@@ -25,6 +29,32 @@ describe("listCandidatesQuery", () => {
 
   test("候选人显式返回环节层团体快照", () => {
     expect(rendered).toContain('"segment_member"."organization_id"');
+  });
+
+  test("已占座查询显式限为个人占座，团体不会冒充个人", () => {
+    expect(rendered).toContain(
+      '"seat_assignment"."occupant_type" = \'person\'',
+    );
+  });
+});
+
+describe("团体占位范围查询", () => {
+  const candidatesSql = listOrganizationCandidatesQuery(7).toSQL().sql;
+  const scopeSql = organizationInSegmentScopeQuery(db, 7, 3).toSQL().sql;
+
+  test("候选团体只从当前环节的 organizationId 快照去重读取", () => {
+    expect(candidatesSql).toContain('from "segment_member"');
+    expect(candidatesSql).toContain('inner join "organization"');
+    expect(candidatesSql).toContain(
+      '"organization"."id" = "segment_member"."organization_id"',
+    );
+    expect(candidatesSql).toContain('"segment_member"."segment_id"');
+  });
+
+  test("伪造或跨环节团体 id 会被范围查询排除", () => {
+    expect(scopeSql).toContain('"segment_member"."segment_id"');
+    expect(scopeSql).toContain('"segment_member"."organization_id"');
+    expect(scopeSql).toContain("limit");
   });
 });
 

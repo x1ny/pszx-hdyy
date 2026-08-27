@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
+  check,
   foreignKey,
   index,
   integer,
@@ -15,6 +16,7 @@ import {
 import { activitySegment } from "../agenda/schema";
 import { user } from "../auth/schema";
 import { segmentMember } from "../member/schema";
+import { organization } from "../organization/schema";
 import {
   activityVenueZone,
   type SeatKind,
@@ -61,6 +63,10 @@ export const SEATING_ACTIONS = [
   "void",
 ] as const;
 export type SeatingAction = (typeof SEATING_ACTIONS)[number];
+
+/** 座位的占用对象：个人占座或团体占位。 */
+export const SEAT_OCCUPANT_TYPES = ["person", "organization"] as const;
+export type SeatOccupantType = (typeof SEAT_OCCUPANT_TYPES)[number];
 
 // ---------------------------------------------------------------------------
 // 方案
@@ -231,10 +237,11 @@ export const segmentSeat = pgTable(
 );
 
 /**
- * 座位分配。**指向 `segment_member.id`，不是活动人员**。
+ * 座位分配。每条有效行只指向一个占用对象：个人或团体。
  *
- * 这是 member/schema.ts 已经写死的决定：照文档字面指活动人员的话，就能把非本
- * 环节的人排进本环节座位，环节人员层在数据上完全旁路（§8）。
+ * 个人指向 `segment_member.id`，而非活动人员：否则非本环节的人也能被排进来，
+ * 环节人员层会在数据上被完全旁路。团体则指向 organization 主档，并由写路径
+ * 校验它真实出现在方案环节的 `segment_member.organizationId` 范围快照中。
  *
  * 行上**不存 label 快照**（§3.1）：分配发生在确认之前，分配时抄下来的编号到
  * 确认时可能已经改过。"发通知那一刻座位叫什么"由 confirm 的日志快照负责。
@@ -252,7 +259,19 @@ export const seatAssignment = pgTable(
     segmentId: bigint("segment_id", { mode: "number" }).notNull(),
 
     segmentSeatId: bigint("segment_seat_id", { mode: "number" }).notNull(),
-    segmentMemberId: bigint("segment_member_id", { mode: "number" }).notNull(),
+    occupantType: text("occupant_type")
+      .$type<SeatOccupantType>()
+      .notNull()
+      .default("person"),
+
+    /** 个人占座时必填；由下面 CHECK 与同环节复合外键共同守住。 */
+    segmentMemberId: bigint("segment_member_id", { mode: "number" }),
+
+    /** 团体占位时必填；范围关系由 routes.ts 按环节快照校验。 */
+    organizationId: bigint("organization_id", { mode: "number" }).references(
+      () => organization.id,
+      { onDelete: "no action" },
+    ),
 
     assignedBy: text("assigned_by").references(() => user.id, {
       onDelete: "set null",
@@ -273,10 +292,33 @@ export const seatAssignment = pgTable(
       .on(table.segmentSeatId)
       .where(sql`${table.revokedAt} is null`),
 
-    /** 一人一座（同一方案内）。 */
+    /**
+     * 一人一座（同一方案内）。组织行的 segment_member_id 为 NULL；虽然
+     * PostgreSQL 的 UNIQUE 本来也允许多个 NULL，仍把条件写出来，明确约束的
+     * 是个人而不是团体。
+     */
     uniqueIndex("uk_seat_assignment_member")
       .on(table.planId, table.segmentMemberId)
-      .where(sql`${table.revokedAt} is null`),
+      .where(
+        sql`${table.revokedAt} is null and ${table.segmentMemberId} is not null`,
+      ),
+
+    /**
+     * 有效目标恰好一个，且必须与 occupant_type 匹配。CHECK 落在库层而非只靠
+     * handler，导入脚本或未来新接口也不能写出“既是个人又是团体”的脏行。
+     */
+    check(
+      "chk_seat_assignment_occupant",
+      sql`(
+        (${table.occupantType} = 'person'
+          and ${table.segmentMemberId} is not null
+          and ${table.organizationId} is null)
+        or
+        (${table.occupantType} = 'organization'
+          and ${table.segmentMemberId} is null
+          and ${table.organizationId} is not null)
+      )`,
+    ),
 
     // 座位必须属于这个方案。
     foreignKey({
@@ -291,9 +333,9 @@ export const seatAssignment = pgTable(
       name: "fk_seat_assignment_plan",
     }),
     /**
-     * 人必须是这个环节的人。加上上一条，"A 活动的方案 + B 活动的人"就不成立了
-     * ——两条同锚在 `segmentId` 上，而 segment_member 自己的外键又把 segment 和
-     * activity 焊死。所以这里**不需要**再冗余 activityId / memberId。
+     * 个人必须是这个环节的人。segment_member_id 为 null 的团体行按 PostgreSQL
+     * MATCH SIMPLE 跳过这条复合外键；那条路径由 organizationId 外键 + routes.ts
+     * 的环节团体快照查询守住。
      */
     foreignKey({
       columns: [table.segmentMemberId, table.segmentId],

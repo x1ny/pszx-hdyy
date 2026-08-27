@@ -136,6 +136,13 @@ export const AssignInput = z.object({
   segmentMemberId: id,
 });
 
+/** 团体占位：团体必须由服务端验证处于当前方案环节的范围快照中。 */
+export const AssignOrganizationInput = z.object({
+  planId: id,
+  segmentSeatId: id,
+  organizationId: id,
+});
+
 export const UnassignInput = z.object({ planId: id, segmentSeatId: id });
 
 export const SwapInput = z.object({
