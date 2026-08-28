@@ -231,7 +231,8 @@ function GeneratePage() {
   const organizationSelectionMemberCount = organizationMembers.filter(
     (member) =>
       member.organizationId !== null &&
-      selectedOrganizations.has(member.organizationId),
+      selectedOrganizations.has(member.organizationId) &&
+      !selected.has(member.memberId),
   ).length;
 
   const allOnPageSelected =
