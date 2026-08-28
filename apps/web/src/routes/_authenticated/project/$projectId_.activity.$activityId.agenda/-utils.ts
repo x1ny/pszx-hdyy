@@ -210,10 +210,25 @@ export type TimelineDay = {
   carryOverCount: number;
   /** 跨议程线的真实时间重叠区块，纯视觉提示，不是业务字段 */
   bands: TimelineBand[];
+  /**
+   * 当天时间轴的跨度（分钟）。块宽是相对轨道的百分比，只有配上这个跨度才知道
+   * 一分钟折合多少像素——渲染层用它按 TIMELINE_PX_PER_MINUTE 把轨道撑到够宽，
+   * 而不是去改单个块的宽度（原因见 buildAgendaTimeline() 注释第 2 条）。
+   */
+  spanMinutes: number;
 };
 
 const MINUTE = 60_000;
 const HALF_HOUR = 30 * MINUTE;
+/**
+ * 时间轴的横向尺度：每分钟 2px，即每小时 120px。
+ *
+ * 这个值是"短环节读得清"和"少横向滚动"之间的取舍点：30 分钟的环节 60px，
+ * 名称截断但状态图标还看得见；08:00–18:00 这种常规会期一天 1200px，普通笔记本
+ * 一屏正好装下，只有真排到深夜的长天才需要滚。轨道实际宽度取
+ * max(容器宽, 跨度 × 本值)，所以短的一天在宽屏上照样铺满，不会变小。
+ */
+export const TIMELINE_PX_PER_MINUTE = 2;
 /** 只有一个 20 分钟环节时，别把它拉成占满整条轴 */
 const MIN_SPAN = 2 * 60 * MINUTE;
 /**
@@ -234,11 +249,14 @@ type DayItem = {
   continuesNextDay: boolean;
 };
 
-const tickStep = (span: number) => {
-  if (span <= 6 * 60 * MINUTE) return HALF_HOUR;
-  if (span <= 12 * 60 * MINUTE) return 60 * MINUTE;
-  return 2 * 60 * MINUTE;
-};
+/**
+ * 轨道尺度恒定（每小时至少 120px），所以刻度密度只按时间挑就够：一小时一格
+ * 永远至少隔着 120px，不会挤。更粗的档位（旧实现超过 12 小时用 2 小时一格）
+ * 是为了迁就"整天塞进一屏"的窄轨道，现在轨道会自己撑开，那一档反而让人对不
+ * 准块的位置。
+ */
+const tickStep = (span: number) =>
+  span <= 6 * 60 * MINUTE ? HALF_HOUR : 60 * MINUTE;
 
 /** 按本地日历取次日零点，而不是加 86_400_000——有夏令时的时区加不出零点。 */
 const nextLocalDay = (dayStartMs: number) => {
@@ -294,9 +312,13 @@ function expandSegmentDays(segment: Segment): DayItem[] {
  * 1. **按自然日分组，一天一条轴。** 旧实现是把一条轴拉长到覆盖整个跨度
  *    （`resolveTickStep` 里有 24h / 7d 的档位），三天的活动画出来每个环节
  *    都是一根细线。
- * 2. **最小宽度交给 CSS，不回头改百分比。** 旧实现用 60 行迭代碰撞检测去
- *    撑轨道宽度（`calculateTrackWidth`），改了百分比刻度线就对不上了；
- *    这里块宽严格按时间比例，太窄的靠 `min-width` + 轨道横向滚动解决。
+ * 2. **最小宽度加在轨道上，不加在块上。** 块宽严格按时间比例，"短环节太窄
+ *    看不清"只能靠把整条轨道等比撑宽（`spanMinutes` × TIMELINE_PX_PER_MINUTE）
+ *    再横向滚动来解决——轨道变宽，块和刻度线一起放大，比例关系不破。给块自己
+ *    加 `min-width` 则会让宽度不再等于时长：块越过自己的结束时间压住后一个块，
+ *    而 packRows() 是按时间判重叠的，根本发现不了（这正是曾经的重叠 bug）。
+ *    但这也不是旧实现那种 60 行迭代碰撞检测（`calculateTrackWidth`），就是一
+ *    个乘法，刻度线照样对得上。
  *
  * 分组口径是**环节覆盖的自然日**，不是它开始的那一天：跨日环节在它经过的
  * 每一天都要画出来（中间的整天铺满，末日画到真实结束时间），否则续接日的
@@ -391,6 +413,7 @@ export function buildAgendaTimeline(
         label: dayFormat.format(new Date(dayStart)),
         ticks,
         lanes,
+        spanMinutes: span / MINUTE,
         segmentCount: drawn.length,
         carryOverCount: drawn.filter((block) => block.continuesFromPrevDay)
           .length,
@@ -419,7 +442,8 @@ function packRows(
     const block: TimelineBlock = {
       segment: item.segment,
       leftPct: pct(item.visibleStartMs),
-      // 零时长环节宽度就是 0，靠 CSS min-width 撑出可点击的宽度。
+      // 零时长环节宽度就是 0，靠 CSS 上一个很小的 min-width 撑出可点击的
+      // 宽度（只有几分钟以内的退化数据会被它顶到，量级是几像素）。
       widthPct: Math.max(pct(item.visibleEndMs) - pct(item.visibleStartMs), 0),
       dayStartMs: item.dayStartMs,
       continuesFromPrevDay: item.continuesFromPrevDay,

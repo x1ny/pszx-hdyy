@@ -14,9 +14,27 @@ import {
   formatTimelineBlockRange,
   lineLabel,
   SEGMENT_TYPE_LABELS,
+  TIMELINE_PX_PER_MINUTE,
   type TimelineDay,
 } from "../-utils";
 import { SegmentConfigIcons } from "./segment-config-icons";
+
+/** 泳道左侧的议程线名称列（w-32）+ 轨道两侧内边距（px-4），px。 */
+const LANE_LABEL_PX = 128;
+const TRACK_PADDING_PX = 32;
+
+/**
+ * 一天的轨道至少要多宽，才能让每分钟占到 TIMELINE_PX_PER_MINUTE 像素。
+ *
+ * 撑的是轨道不是块：块宽是相对轨道的百分比，轨道变宽，块和刻度线一起等比放大，
+ * "宽度 = 时长"这个前提不破。反过来给块加 min-width 就会把它撑过自己的结束
+ * 时间去压住后一个块——那是之前时间轴重叠的原因。
+ *
+ * 取 max()：轨道比容器窄时铺满容器（短的一天在宽屏上照样占满），比容器宽时
+ * 交给外层 overflow-x-auto 横向滚动。
+ */
+const trackMinWidth = (spanMinutes: number) =>
+  `max(52rem, ${LANE_LABEL_PX + TRACK_PADDING_PX + Math.ceil(spanMinutes * TIMELINE_PX_PER_MINUTE)}px)`;
 
 /**
  * 议程时间轴：泳道 = 议程线，块按时间比例定位。
@@ -69,10 +87,14 @@ export function AgendaTimeline({
             </span>
           </div>
 
-          {/* 轨道整体横向滚动：块宽严格按时间比例，太窄的靠 min-width 撑开，
-              撑出去的部分在这里滚动，而不是回头去改百分比把刻度线弄歪 */}
+          {/* 轨道整体横向滚动：块宽严格按时间比例，短环节靠把整条轨道按当天
+              跨度撑宽来保证可读，撑出去的部分在这里滚动——不回头去改单个块的
+              宽度，那样刻度线和块的位置就对不上了 */}
           <div className="overflow-x-auto">
-            <div className="min-w-[52rem] px-4 py-3">
+            <div
+              className="px-4 py-3"
+              style={{ minWidth: trackMinWidth(day.spanMinutes) }}
+            >
               <div className="flex">
                 <div className="w-32 shrink-0" />
                 <div className="relative h-5 flex-1">
@@ -136,9 +158,13 @@ export function AgendaTimeline({
                                 type="button"
                                 onClick={() => onSelect(segment)}
                                 aria-label={`${segment.name}，${formatTimelineBlockRange(segment, block)}${block.continuesFromPrevDay ? "，从前一天延续" : ""}`}
-                                title={`${segment.name} ${formatTimelineBlockRange(segment, block)}`}
+                                title={`${segment.name} ${formatTimelineBlockRange(segment, block)} · ${SEGMENT_TYPE_LABELS[segment.segmentType]}${segment.locationText ? ` · ${segment.locationText}` : ""}`}
                                 className={cn(
-                                  "absolute inset-y-0 flex min-w-28 cursor-pointer flex-col justify-center overflow-hidden rounded-md border px-1.5 py-1.5 text-left transition-colors",
+                                  // min-w-2 只是给零时长/几分钟的退化数据留一个
+                                  // 能点得到的宽度，量级几像素；真正让短环节可读
+                                  // 的是上面撑宽的轨道。@container 让下面的内容
+                                  // 按块的实际宽度决定收起哪几行。
+                                  "@container absolute inset-y-0 flex min-w-2 cursor-pointer flex-col justify-center overflow-hidden rounded-md border px-1.5 py-1.5 text-left transition-colors",
                                   lane.line.lineType === "main"
                                     ? "border-primary/25 bg-primary/10 hover:bg-primary/15"
                                     : "border-chart-2/25 bg-chart-2/10 hover:bg-chart-2/15",
@@ -155,24 +181,34 @@ export function AgendaTimeline({
                                   width: `${block.widthPct}%`,
                                 }}
                               >
+                                {/* 块窄到放不下时逐级收起，而不是塞一堆截断到
+                                    看不懂的碎字：名称永远留着，图标是"有没有问题"
+                                    的一眼信号所以退得最晚，被收起的内容都在
+                                    title / aria-label 里，hover 和点开详情都拿得到。
+
+                                    阈值按 content box 标定——容器查询量的是内容
+                                    盒，不含这里的 px-1.5 和 1px 边框，所以块的实
+                                    际宽度要比阈值多 14px 才会命中。按每小时 120px
+                                    折算：2.5rem→约 27 分钟起显示图标，5.5rem→约
+                                    51 分钟起显示时间和类型/地点。 */}
                                 <span className="truncate font-medium text-xs leading-4">
                                   {block.continuesFromPrevDay && (
-                                    <span className="mr-1 rounded-sm bg-muted px-1 py-px font-normal text-[10px] text-muted-foreground">
+                                    <span className="mr-1 hidden rounded-sm bg-muted px-1 py-px font-normal text-[10px] text-muted-foreground @min-[5.5rem]:inline">
                                       接上日
                                     </span>
                                   )}
                                   {segment.name}
                                 </span>
                                 {/* 续接日从当天 00:00 展示，环节列表/详情仍保留真实起止。 */}
-                                <span className="truncate text-[11px] text-muted-foreground leading-4 tabular-nums">
+                                <span className="hidden truncate text-[11px] text-muted-foreground leading-4 tabular-nums @min-[5.5rem]:block">
                                   {formatTimelineBlockRange(segment, block)}
                                 </span>
-                                <span className="truncate text-[11px] text-muted-foreground leading-4">
+                                <span className="hidden truncate text-[11px] text-muted-foreground leading-4 @min-[5.5rem]:block">
                                   {SEGMENT_TYPE_LABELS[segment.segmentType]}
                                   {segment.locationText &&
                                     ` · ${segment.locationText}`}
                                 </span>
-                                <div className="mt-0.5 flex h-4 min-w-0 items-center">
+                                <div className="mt-0.5 hidden h-4 min-w-0 items-center @min-[2.5rem]:flex">
                                   <SegmentConfigIcons
                                     segment={segment}
                                     memberCount={memberCounts.get(segment.id)}

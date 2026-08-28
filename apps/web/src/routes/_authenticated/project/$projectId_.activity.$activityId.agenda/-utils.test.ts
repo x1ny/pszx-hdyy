@@ -5,6 +5,7 @@ import {
   buildSequenceLabels,
   formatSegmentRange,
   formatTimelineBlockRange,
+  TIMELINE_PX_PER_MINUTE,
 } from "./-utils";
 
 // 时间轴是这个模块唯一有真实算法的地方，也是唯一不点页面就能验证的地方。
@@ -297,6 +298,66 @@ describe("buildAgendaTimeline", () => {
     const block = days[0].lanes[0].rows[0][0];
     // 20 分钟 / 2 小时 ≈ 16.7%，而不是撑满 100%
     expect(block.widthPct).toBeCloseTo((20 / 120) * 100, 5);
+  });
+
+  // 下面三条守的是同一件事：块的宽度必须严格等于它的时长。短环节看不清要靠
+  // 把整条轨道撑宽解决，一旦有人再去给块加 min-width，这三条会一起挂。
+  it("同一泳道内相邻的块按时间排开，前一块不会越过后一块的开始时间", () => {
+    // 复现截图：08:00–08:30 之后紧跟 09:00–10:30。之前块上的 min-w-28
+    // 会把 30 分钟的块撑成 112px（约 97 分钟），直接压住后一块 43px。
+    const days = buildAgendaTimeline(
+      [MAIN],
+      [
+        segment(1, "2026-08-20 08:00", "2026-08-20 08:30"),
+        segment(1, "2026-08-20 09:00", "2026-08-20 10:30"),
+        segment(1, "2026-08-20 16:23", "2026-08-20 22:00"),
+      ],
+    );
+
+    const row = days[0].lanes[0].rows[0];
+    expect(row).toHaveLength(3);
+    for (let index = 0; index < row.length - 1; index += 1) {
+      expect(row[index].leftPct + row[index].widthPct).toBeLessThanOrEqual(
+        row[index + 1].leftPct,
+      );
+    }
+  });
+
+  it("块宽严格等于时长占轴的比例，短环节不会被撑过自己的结束时间", () => {
+    const days = buildAgendaTimeline(
+      [MAIN, FORUM_A],
+      [
+        segment(1, "2026-08-20 08:00", "2026-08-20 08:30"),
+        segment(1, "2026-08-20 11:00", "2026-08-20 12:00"),
+        // 把当天的轴撑到 08:00–24:00，即 16 小时——短块占比最小的场景
+        segment(2, "2026-08-20 15:58", "2026-08-21 00:00"),
+      ],
+    );
+
+    const day = days[0];
+    expect(day.spanMinutes).toBe(16 * 60);
+
+    const [half, hour] = day.lanes[0].rows[0];
+    expect(half.widthPct).toBeCloseTo((30 / day.spanMinutes) * 100, 10);
+    expect(hour.widthPct).toBeCloseTo((60 / day.spanMinutes) * 100, 10);
+
+    // 轨道按 spanMinutes × 每分钟像素撑开后，30 分钟的块拿到 60px、
+    // 1 小时的块拿到 120px——短环节的可读性是这么来的，不是靠 min-width。
+    const trackPx = day.spanMinutes * TIMELINE_PX_PER_MINUTE;
+    expect((half.widthPct / 100) * trackPx).toBeCloseTo(60, 10);
+    expect((hour.widthPct / 100) * trackPx).toBeCloseTo(120, 10);
+  });
+
+  it("超过 12 小时的一天也按整点打刻度，不再退回两小时一格", () => {
+    const days = buildAgendaTimeline(
+      [MAIN],
+      [segment(1, "2026-08-20 08:00", "2026-08-21 00:00")],
+    );
+
+    const labels = days[0].ticks.map((tick) => tick.label);
+    expect(labels[0]).toBe("08:00");
+    expect(labels[1]).toBe("09:00");
+    expect(labels).toHaveLength(17);
   });
 
   it("时间轴不画作废环节，但正常环节照画", () => {
