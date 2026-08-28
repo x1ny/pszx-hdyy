@@ -4,6 +4,7 @@ import {
   AddProjectMembersByOrganizationInput,
   AddSegmentMembersByOrganizationInput,
   CreateMemberInput,
+  ListActivityMembersInput,
   ListMembersInput,
   ListOrganizationMemberCandidatesInput,
   SyncActivityMemberSegmentsInput,
@@ -196,6 +197,27 @@ describe("按团体添加人员输入", () => {
 
     expect(parsed.name).toBe("王芳");
     expect(parsed.companyPosition).toBe("会长");
+  });
+});
+
+describe("活动人员列表输入", () => {
+  test("支持按成员状态筛选，给邀请函页排除停用人员", () => {
+    expect(
+      ListActivityMembersInput.parse({
+        activityId: 2,
+        memberStatus: "enabled",
+        page: 1,
+        pageSize: 10,
+      }).memberStatus,
+    ).toBe("enabled");
+    expect(
+      ListActivityMembersInput.safeParse({
+        activityId: 2,
+        memberStatus: "unknown",
+        page: 1,
+        pageSize: 10,
+      }).success,
+    ).toBe(false);
   });
 });
 

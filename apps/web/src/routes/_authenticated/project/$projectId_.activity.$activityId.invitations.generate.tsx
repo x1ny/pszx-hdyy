@@ -15,14 +15,17 @@ import {
   todayIsoDate,
 } from "#/features/invitation/labels";
 import {
-  type InvitationTemplate,
   createInvitationBatch,
   getInvitationTemplate,
   getLastVariableValues,
+  type InvitationTemplate,
   invitationTemplateListQueryOptions,
   previewInvitationTemplate,
 } from "#/features/invitation/queries";
-import { activityMemberListQueryOptions } from "#/features/member/relation-queries";
+import {
+  activityMemberAllEnabledQueryOptions,
+  activityMemberListQueryOptions,
+} from "#/features/member/relation-queries";
 import { FilterActions } from "#/shared/components/filter-bar.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import { Checkbox } from "#/shared/components/ui/checkbox.tsx";
@@ -30,6 +33,8 @@ import {
   Dialog,
   DialogBody,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "#/shared/components/ui/dialog.tsx";
@@ -40,7 +45,13 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "#/shared/components/ui/empty.tsx";
-import { Field, FieldLabel } from "#/shared/components/ui/field.tsx";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "#/shared/components/ui/field.tsx";
 import { Input } from "#/shared/components/ui/input.tsx";
 import {
   Select,
@@ -87,6 +98,10 @@ function GeneratePage() {
   const [nameFilter, setNameFilter] = useState<string>();
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Map<number, string>>(new Map());
+  const [organizationDialogOpen, setOrganizationDialogOpen] = useState(false);
+  const [selectedOrganizations, setSelectedOrganizations] = useState<
+    Set<number>
+  >(new Set());
 
   const [template, setTemplate] = useState<InvitationTemplate>();
   const [variables, setVariables] = useState<Record<string, string>>({});
@@ -97,12 +112,43 @@ function GeneratePage() {
     activityMemberListQueryOptions({
       activityId,
       name: nameFilter,
+      memberStatus: "enabled",
       page,
       pageSize: MEMBER_PAGE_SIZE,
     }),
   );
   const members = membersQuery.data?.list ?? [];
   const memberTotal = membersQuery.data?.total ?? 0;
+
+  const organizationMembersQuery = useQuery({
+    ...activityMemberAllEnabledQueryOptions(activityId),
+    enabled: organizationDialogOpen,
+  });
+  const organizationMembers = organizationMembersQuery.data ?? [];
+  const organizationOptions = useMemo(() => {
+    const groups = new Map<
+      number,
+      { id: number; name: string; memberCount: number }
+    >();
+
+    for (const member of organizationMembers) {
+      if (member.organizationId === null || !member.organizationName) continue;
+      const current = groups.get(member.organizationId);
+      if (current) {
+        current.memberCount += 1;
+      } else {
+        groups.set(member.organizationId, {
+          id: member.organizationId,
+          name: member.organizationName,
+          memberCount: 1,
+        });
+      }
+    }
+
+    return [...groups.values()].sort((left, right) =>
+      left.name.localeCompare(right.name, "zh-CN"),
+    );
+  }, [organizationMembers]);
 
   const templatesQuery = useQuery(
     invitationTemplateListQueryOptions({
@@ -150,6 +196,43 @@ function GeneratePage() {
       return next;
     });
   };
+
+  const toggleOrganization = (organizationId: number, checked: boolean) => {
+    setSelectedOrganizations((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(organizationId);
+      else next.delete(organizationId);
+      return next;
+    });
+  };
+
+  const openOrganizationDialog = () => {
+    setSelectedOrganizations(new Set());
+    setOrganizationDialogOpen(true);
+  };
+
+  const applyOrganizationSelection = () => {
+    setSelected((prev) => {
+      const next = new Map(prev);
+      for (const member of organizationMembers) {
+        if (
+          member.organizationId !== null &&
+          selectedOrganizations.has(member.organizationId)
+        ) {
+          next.set(member.memberId, member.name);
+        }
+      }
+      return next;
+    });
+    setOrganizationDialogOpen(false);
+    setSelectedOrganizations(new Set());
+  };
+
+  const organizationSelectionMemberCount = organizationMembers.filter(
+    (member) =>
+      member.organizationId !== null &&
+      selectedOrganizations.has(member.organizationId),
+  ).length;
 
   const allOnPageSelected =
     members.length > 0 && members.every((row) => selected.has(row.memberId));
@@ -257,34 +340,44 @@ function GeneratePage() {
                   : null}
               </span>
             </div>
-            <form
-              className="flex items-center gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const next = nameInput.trim() || undefined;
-                // 条件没变时 setState 会被 React 原地吞掉，显式重拉一次，让
-                // 「查询」同时承担刷新语义（理由见 filter-bar.tsx）。
-                if (next === nameFilter && page === 1) {
-                  membersQuery.refetch();
-                  return;
-                }
-                setNameFilter(next);
-                setPage(1);
-              }}
-            >
-              <div className="relative">
-                <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  className="w-48 pl-8"
-                  placeholder="搜索姓名"
-                  value={nameInput}
-                  onChange={(event) => setNameInput(event.target.value)}
-                />
-              </div>
-              {/* 卡片头里的一条内嵌筛选，不套 FilterBar 的边框和底色，但触发方式
-                  和按钮样式跟列表页保持一致。这里没有别的条件，不需要重置。 */}
-              <FilterActions />
-            </form>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={openOrganizationDialog}
+              >
+                <UsersRoundIcon data-icon="inline-start" />
+                按团体勾选
+              </Button>
+              <form
+                className="flex items-center gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const next = nameInput.trim() || undefined;
+                  // 条件没变时 setState 会被 React 原地吞掉，显式重拉一次，让
+                  // 「查询」同时承担刷新语义（理由见 filter-bar.tsx）。
+                  if (next === nameFilter && page === 1) {
+                    membersQuery.refetch();
+                    return;
+                  }
+                  setNameFilter(next);
+                  setPage(1);
+                }}
+              >
+                <div className="relative">
+                  <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    className="w-48 pl-8"
+                    placeholder="搜索姓名"
+                    value={nameInput}
+                    onChange={(event) => setNameInput(event.target.value)}
+                  />
+                </div>
+                {/* 卡片头里的一条内嵌筛选，不套 FilterBar 的边框和底色，但触发方式
+                    和按钮样式跟列表页保持一致。这里没有别的条件，不需要重置。 */}
+                <FilterActions />
+              </form>
+            </div>
           </div>
 
           <Table>
@@ -301,6 +394,7 @@ function GeneratePage() {
                   />
                 </TableHead>
                 <TableHead>姓名</TableHead>
+                <TableHead>所属团体</TableHead>
                 <TableHead>单位职务</TableHead>
                 <TableHead>手机号</TableHead>
                 <TableHead>来源</TableHead>
@@ -312,7 +406,7 @@ function GeneratePage() {
                 Array.from({ length: 3 }, (_, index) => (
                   // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
                   <TableRow key={index}>
-                    {Array.from({ length: 6 }, (_, cell) => (
+                    {Array.from({ length: 7 }, (_, cell) => (
                       // biome-ignore lint/suspicious/noArrayIndexKey: 同上
                       <TableCell key={cell}>
                         <Skeleton className="h-5 w-full" />
@@ -322,7 +416,7 @@ function GeneratePage() {
                 ))
               ) : members.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={7}>
                     <Empty className="border-0">
                       <EmptyHeader>
                         <EmptyMedia variant="icon">
@@ -349,6 +443,9 @@ function GeneratePage() {
                     </TableCell>
                     <TableCell className="font-medium">{row.name}</TableCell>
                     <TableCell className="text-muted-foreground">
+                      {row.organizationName || "-"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
                       {row.companyPosition || "-"}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
@@ -368,7 +465,7 @@ function GeneratePage() {
 
           <div className="flex items-center justify-between gap-2 border-t p-3">
             <span className="text-muted-foreground text-sm">
-              共 {memberTotal} 名活动人员
+              共 {memberTotal} 名可邀请人员
             </span>
             <div className="flex items-center gap-2">
               <Button
@@ -472,6 +569,125 @@ function GeneratePage() {
           ) : null}
         </div>
       </div>
+
+      <Dialog
+        open={organizationDialogOpen}
+        onOpenChange={(open) => {
+          setOrganizationDialogOpen(open);
+          if (!open) setSelectedOrganizations(new Set());
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>按团体勾选</DialogTitle>
+            <DialogDescription>
+              选择一个或多个团体，确认后会勾选这些团体在当前活动中的全部启用人员。
+              你仍可以回到人员列表逐人调整。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody>
+            {organizationMembersQuery.isPending ? (
+              <FieldGroup className="gap-2">
+                {Array.from({ length: 4 }, (_, index) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有业务身份
+                  <Skeleton key={index} className="h-14 w-full" />
+                ))}
+              </FieldGroup>
+            ) : organizationMembersQuery.isError ? (
+              <div className="flex flex-col items-center gap-3 py-8 text-center">
+                <p className="text-muted-foreground text-sm">
+                  团体加载失败，请重试。
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => organizationMembersQuery.refetch()}
+                >
+                  重试
+                </Button>
+              </div>
+            ) : organizationOptions.length === 0 ? (
+              <Empty className="border-0">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <UsersRoundIcon />
+                  </EmptyMedia>
+                  <EmptyTitle>当前活动没有可选团体</EmptyTitle>
+                  <EmptyDescription>
+                    只有当前活动中仍有启用人员的团体会显示在这里；无团体人员仍可在下方列表中单独勾选。
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    选择后将批量勾选团体成员
+                  </span>
+                  <span className="font-medium">
+                    已选 {selectedOrganizations.size} 个团体
+                  </span>
+                </div>
+                <FieldGroup className="gap-2">
+                  {organizationOptions.map((organization) => {
+                    const checkboxId = `invitation-organization-${organization.id}`;
+                    return (
+                      <Field
+                        key={organization.id}
+                        orientation="horizontal"
+                        className="rounded-md border px-3 py-3"
+                      >
+                        <Checkbox
+                          id={checkboxId}
+                          checked={selectedOrganizations.has(organization.id)}
+                          onCheckedChange={(checked) =>
+                            toggleOrganization(
+                              organization.id,
+                              checked === true,
+                            )
+                          }
+                        />
+                        <FieldContent>
+                          <FieldLabel htmlFor={checkboxId}>
+                            {organization.name}
+                          </FieldLabel>
+                          <FieldDescription>
+                            {organization.memberCount} 名可邀请人员
+                          </FieldDescription>
+                        </FieldContent>
+                      </Field>
+                    );
+                  })}
+                </FieldGroup>
+                {selectedOrganizations.size > 0 ? (
+                  <p className="text-muted-foreground text-xs">
+                    本次将新增勾选 {organizationSelectionMemberCount}{" "}
+                    名人员；已勾选的人不会重复计算。
+                  </p>
+                ) : null}
+              </div>
+            )}
+          </DialogBody>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setOrganizationDialogOpen(false)}
+            >
+              取消
+            </Button>
+            <Button
+              disabled={
+                selectedOrganizations.size === 0 ||
+                organizationMembersQuery.isPending ||
+                organizationMembersQuery.isError
+              }
+              onClick={applyOrganizationSelection}
+            >
+              确认勾选
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="sm:max-w-4xl">

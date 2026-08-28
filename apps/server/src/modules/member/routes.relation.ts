@@ -24,6 +24,7 @@ import {
   listInvitationsByActivityMember,
   releaseInvitationsByActivityMember,
 } from "../invitation/cascade";
+import { organization } from "../organization/schema";
 import { activity } from "../project/schema";
 import { activityResource, resourceMemberBinding } from "../resource/schema";
 import {
@@ -465,6 +466,7 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
       groupName,
       ownerName,
       organizationId,
+      memberStatus,
       page,
       pageSize,
     } = c.req.valid("json");
@@ -478,6 +480,7 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
       source ? ilike(activityMember.source, `%${source}%`) : undefined,
       groupName ? ilike(activityMember.groupName, `%${groupName}%`) : undefined,
       ownerName ? ilike(activityMember.ownerName, `%${ownerName}%`) : undefined,
+      memberStatus ? eq(member.status, memberStatus) : undefined,
     );
 
     const { limit, offset } = toLimitOffset({ page, pageSize });
@@ -487,6 +490,7 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
         .select({
           id: activityMember.id,
           organizationId: activityMember.organizationId,
+          organizationName: organization.name,
           ...identityFields,
           source: activityMember.source,
           groupName: activityMember.groupName,
@@ -498,6 +502,10 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
         })
         .from(activityMember)
         .innerJoin(member, eq(member.id, activityMember.memberId))
+        .leftJoin(
+          organization,
+          eq(organization.id, activityMember.organizationId),
+        )
         .where(where)
         .orderBy(asc(activityMember.id))
         .limit(limit)

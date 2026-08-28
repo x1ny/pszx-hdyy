@@ -42,7 +42,34 @@ type MemberIdPage = {
   total: number;
 };
 
+type PageResult<T> = {
+  list: readonly T[];
+  total: number;
+};
+
 const SNAPSHOT_PAGE_SIZE = 100;
+
+/**
+ * 团体选择弹窗需要知道当前活动的完整启用人员集合，不能只读取主表当前页。
+ * 复用分页接口按最大页长拉完，避免团体成员跨页时漏勾。
+ */
+async function collectPages<T>(
+  fetchPage: (page: number) => Promise<PageResult<T>>,
+) {
+  const rows: T[] = [];
+  let page = 1;
+  let total = Number.POSITIVE_INFINITY;
+
+  while (rows.length < total) {
+    const result = await fetchPage(page);
+    total = result.total;
+    rows.push(...result.list);
+    if (result.list.length === 0) break;
+    page += 1;
+  }
+
+  return rows;
+}
 
 /**
  * 关系列表是分页接口，选择器却必须知道当前范围的完整成员集合，不能只拿页面上
@@ -51,19 +78,8 @@ const SNAPSHOT_PAGE_SIZE = 100;
 async function collectMemberIds(
   fetchPage: (page: number) => Promise<MemberIdPage>,
 ) {
-  const ids: number[] = [];
-  let page = 1;
-  let total = Number.POSITIVE_INFINITY;
-
-  while (ids.length < total) {
-    const result = await fetchPage(page);
-    total = result.total;
-    ids.push(...result.list.map((row) => row.memberId));
-    if (result.list.length === 0) break;
-    page += 1;
-  }
-
-  return ids;
+  const rows = await collectPages(fetchPage);
+  return rows.map((row) => row.memberId);
 }
 
 export const projectMemberSnapshotQueryOptions = (projectId: number) =>
@@ -140,6 +156,8 @@ export const activityMemberKeys = {
     [...activityMemberKeys.all, "sources", activityId] as const,
   snapshot: (activityId: number) =>
     [...activityMemberKeys.all, "snapshot", activityId] as const,
+  allEnabled: (activityId: number) =>
+    [...activityMemberKeys.all, "allEnabled", activityId] as const,
   segmentOptions: (activityId: number) =>
     [...activityMemberKeys.all, "segmentOptions", activityId] as const,
 };
@@ -161,6 +179,24 @@ export const activityMemberSnapshotQueryOptions = (activityId: number) =>
         unwrap(
           api.api.activityMember.list.$post({
             json: { activityId, page, pageSize: SNAPSHOT_PAGE_SIZE },
+          }),
+        ),
+      ),
+  });
+
+export const activityMemberAllEnabledQueryOptions = (activityId: number) =>
+  queryOptions({
+    queryKey: activityMemberKeys.allEnabled(activityId),
+    queryFn: () =>
+      collectPages((page) =>
+        unwrap(
+          api.api.activityMember.list.$post({
+            json: {
+              activityId,
+              memberStatus: "enabled",
+              page,
+              pageSize: SNAPSHOT_PAGE_SIZE,
+            },
           }),
         ),
       ),

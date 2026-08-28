@@ -326,6 +326,8 @@ export const ListActivityMembersInput = PageInput.extend({
   groupName: filter,
   ownerName: filter,
   organizationId: id.optional(),
+  // 邀请函生成页只展示当前仍启用的人员，其他活动人员页仍可读取完整关系。
+  memberStatus: MemberStatusEnum.optional(),
 });
 
 export const ListActivityMemberSourcesInput = z.object({
