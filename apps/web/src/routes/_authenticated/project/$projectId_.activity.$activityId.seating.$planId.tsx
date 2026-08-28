@@ -56,7 +56,11 @@ import {
   swapSeats,
   unassignSeat,
 } from "./-venue-queries";
-import { PLAN_STATUS_CHIP, PLAN_STATUS_LABELS } from "./-venue-utils";
+import {
+  buildOrganizationSeatInfoById,
+  PLAN_STATUS_CHIP,
+  PLAN_STATUS_LABELS,
+} from "./-venue-utils";
 
 export const Route = createFileRoute(
   "/_authenticated/project/$projectId_/activity/$activityId/seating/$planId",
@@ -131,6 +135,19 @@ function SeatingCanvasPage() {
         (bundle?.assignments ?? []).map((row) => [row.segmentSeatId, row]),
       ),
     [bundle?.assignments],
+  );
+  const organizationSeatInfoById = useMemo(
+    () =>
+      buildOrganizationSeatInfoById({
+        assignments: bundle?.assignments ?? [],
+        seats: bundle?.seats ?? [],
+        organizations: organizationStatsQuery.data?.list ?? [],
+      }),
+    [
+      bundle?.assignments,
+      bundle?.seats,
+      organizationStatsQuery.data?.list,
+    ],
   );
   const seatStatus = useMemo(() => {
     const map = new Map<
@@ -632,6 +649,7 @@ function SeatingCanvasPage() {
               assignment={selectedAssignment}
               readOnly={readOnly}
               pending={assignMutation.isPending || unassignMutation.isPending}
+              organizationSeatInfoById={organizationSeatInfoById}
               onAssign={(segmentMemberId) =>
                 selectedSeat &&
                 assignMutation.mutate({

@@ -16,6 +16,7 @@ import {
   type PlanSeatRow,
   seatingCandidatesQueryOptions,
 } from "../-venue-queries";
+import type { OrganizationSeatInfo } from "../-venue-utils";
 
 /**
  * 排位画布右侧的人员面板。
@@ -33,6 +34,7 @@ export function SeatAssignPanel({
   assignment,
   readOnly,
   pending,
+  organizationSeatInfoById,
   onAssign,
   onUnassign,
 }: {
@@ -41,6 +43,7 @@ export function SeatAssignPanel({
   assignment: PlanAssignmentRow | null;
   readOnly: boolean;
   pending: boolean;
+  organizationSeatInfoById: ReadonlyMap<number, OrganizationSeatInfo>;
   onAssign: (segmentMemberId: number) => void;
   onUnassign: () => void;
 }) {
@@ -156,6 +159,16 @@ export function SeatAssignPanel({
             <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
               {candidatesQuery.data.list.map((person) => {
                 const taken = person.takenSeatLabel;
+                const organizationInfo =
+                  person.organizationId === null
+                    ? undefined
+                    : organizationSeatInfoById.get(person.organizationId);
+                const groupSeatStatus = organizationInfo?.seatLabels.length
+                  ? `团体座位 ${organizationInfo.seatLabels.join("、")}`
+                  : null;
+                const seatStatus = taken
+                  ? `在 ${taken}`
+                  : groupSeatStatus;
                 const isHere =
                   assignment?.segmentMemberId === person.segmentMemberId;
                 return (
@@ -173,7 +186,18 @@ export function SeatAssignPanel({
                     )}
                   >
                     <div className="min-w-0">
-                      <div className="truncate">{person.name}</div>
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <div className="min-w-0 truncate">{person.name}</div>
+                        {organizationInfo?.name ? (
+                          <Badge
+                            variant="outline"
+                            className="max-w-32 shrink truncate"
+                            title={organizationInfo.name}
+                          >
+                            {organizationInfo.name}
+                          </Badge>
+                        ) : null}
+                      </div>
                       <p className="truncate text-muted-foreground text-xs">
                         {person.companyPosition || person.mobile || "—"}
                       </p>
@@ -182,9 +206,12 @@ export function SeatAssignPanel({
                         消失有用，点一下就是换座。 */}
                     {isHere ? (
                       <span className="shrink-0 text-xs">当前</span>
-                    ) : taken ? (
-                      <span className="shrink-0 text-muted-foreground text-xs">
-                        在 {taken}
+                    ) : seatStatus ? (
+                      <span
+                        className="max-w-44 shrink-0 truncate text-muted-foreground text-xs"
+                        title={seatStatus}
+                      >
+                        {seatStatus}
                       </span>
                     ) : (
                       <UserPlusIcon className="size-3.5 shrink-0 text-muted-foreground" />

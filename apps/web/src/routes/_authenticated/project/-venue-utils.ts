@@ -1,5 +1,8 @@
 import type {
   ActivityVenueStatus,
+  OrganizationSeatingStat,
+  PlanAssignmentRow,
+  PlanSeatRow,
   PlanStatus,
   ZonePurpose,
 } from "./-venue-queries";
@@ -71,3 +74,106 @@ export const UNCONFIGURED_CHIP =
 export const PLAN_STATUS_VALUES = Object.keys(
   PLAN_STATUS_LABELS,
 ) as PlanStatus[];
+
+/**
+ * 候选人员列表需要的团体展示信息。
+ *
+ * `seatLabels` 只包含团体占位，不包含同一团体成员的个人排座。个人排座和
+ * 团体占位是两种不同的业务语义，不能因为 `getPlan` 为个人分配也返回了团体
+ * 快照，就把个人座位误显示成团体座位。
+ */
+export type OrganizationSeatInfo = {
+  name: string;
+  seatLabels: readonly string[];
+};
+
+type OrganizationAssignmentForDisplay = Pick<
+  PlanAssignmentRow,
+  "segmentSeatId" | "occupantType" | "organizationId" | "organizationName"
+>;
+
+type SeatForDisplay = Pick<PlanSeatRow, "id" | "label" | "ordinal">;
+
+type OrganizationForDisplay = Pick<
+  OrganizationSeatingStat,
+  "organizationId" | "name"
+>;
+
+/**
+ * 把当前排位方案和当前环节团体范围组合成候选列表可直接消费的索引。
+ *
+ * `assignments` 来自 `getPlan`，服务端已经过滤掉撤销记录；这里仍然只接受
+ * `occupantType === "organization"`，因为个人分配行也会带上进入环节时的团体
+ * 快照。位置按方案的 `ordinal` 排序，避免数据库返回顺序变化导致界面顺序跳动。
+ */
+export function buildOrganizationSeatInfoById({
+  assignments,
+  seats,
+  organizations,
+}: {
+  assignments: readonly OrganizationAssignmentForDisplay[];
+  seats: readonly SeatForDisplay[];
+  organizations: readonly OrganizationForDisplay[];
+}): ReadonlyMap<number, OrganizationSeatInfo> {
+  const infoByOrganizationId = new Map<
+    number,
+    { name: string; seatLabels: string[] }
+  >();
+
+  for (const organization of organizations) {
+    infoByOrganizationId.set(organization.organizationId, {
+      name: organization.name,
+      seatLabels: [],
+    });
+  }
+
+  const seatById = new Map(seats.map((seat) => [seat.id, seat]));
+  const groupSeatsByOrganizationId = new Map<number, SeatForDisplay[]>();
+
+  for (const assignment of assignments) {
+    if (assignment.organizationId === null) continue;
+
+    const existing = infoByOrganizationId.get(assignment.organizationId);
+    if (!existing) {
+      infoByOrganizationId.set(assignment.organizationId, {
+        name: assignment.organizationName ?? "",
+        seatLabels: [],
+      });
+    } else if (!existing.name && assignment.organizationName) {
+      existing.name = assignment.organizationName;
+    }
+
+    // 个人分配同样能提供当前环节的团体名称，但只有团体分配才能提供团体座位。
+    if (assignment.occupantType !== "organization") continue;
+
+    const seat = seatById.get(assignment.segmentSeatId);
+    if (!seat) continue;
+
+    const groupSeats =
+      groupSeatsByOrganizationId.get(assignment.organizationId) ?? [];
+    groupSeats.push(seat);
+    groupSeatsByOrganizationId.set(assignment.organizationId, groupSeats);
+  }
+
+  for (const [organizationId, groupSeats] of groupSeatsByOrganizationId) {
+    const info = infoByOrganizationId.get(organizationId);
+    if (!info) continue;
+
+    const labels = new Set<string>();
+    for (const seat of groupSeats.sort(
+      (left, right) => left.ordinal - right.ordinal || left.id - right.id,
+    )) {
+      labels.add(seat.label);
+    }
+    info.seatLabels = [...labels];
+  }
+
+  const result = new Map<number, OrganizationSeatInfo>();
+  for (const [organizationId, info] of infoByOrganizationId) {
+    result.set(organizationId, {
+      name: info.name,
+      seatLabels: [...info.seatLabels],
+    });
+  }
+  return result;
+}
