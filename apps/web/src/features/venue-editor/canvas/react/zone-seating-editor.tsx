@@ -77,6 +77,7 @@ export function ZoneSeatingEditor({
   rightPanel,
   legend,
   toolbarActions,
+  headerContent,
   frameRef,
   frameClassName,
   isFullscreen,
@@ -99,6 +100,8 @@ export function ZoneSeatingEditor({
   legend?: React.ReactNode;
   /** 工具栏右侧的页面专属操作，例如全屏。 */
   toolbarActions?: React.ReactNode;
+  /** 标题下、工具栏前的页面级操作提示；全屏时它仍属于编辑器容器。 */
+  headerContent?: React.ReactNode;
   /** 包住标题、工具栏、画布、图例和右侧面板的容器，供页面请求全屏。 */
   frameRef?: React.RefObject<HTMLDivElement | null>;
   /** 全屏/页面铺满时由调用方提供的布局类。 */
@@ -460,6 +463,8 @@ export function ZoneSeatingEditor({
           </p>
         </div>
       </div>
+
+      {headerContent}
 
       <div className="flex min-h-0 flex-1 gap-3">
         <div className="flex min-w-0 flex-1 flex-col gap-3">

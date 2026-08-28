@@ -143,11 +143,7 @@ function SeatingCanvasPage() {
         seats: bundle?.seats ?? [],
         organizations: organizationStatsQuery.data?.list ?? [],
       }),
-    [
-      bundle?.assignments,
-      bundle?.seats,
-      organizationStatsQuery.data?.list,
-    ],
+    [bundle?.assignments, bundle?.seats, organizationStatsQuery.data?.list],
   );
   const seatStatus = useMemo(() => {
     const map = new Map<
@@ -448,6 +444,41 @@ function SeatingCanvasPage() {
       params: { projectId, activityId },
     });
 
+  // 非全屏时提示沿用页面里的原位置；全屏的可视壳只覆盖 ZoneSeatingEditor，
+  // 所以把同一份提示改由它的 headerContent 承载。两处始终只会渲染一处，选座
+  // 状态和取消/完成处理函数也只有这一份。
+  const editorOperationNotices =
+    organizationSelectionSession || swapFrom ? (
+      <div className="flex flex-col gap-3">
+        {organizationSelectionSession ? (
+          <OrganizationSeatSelectionNotice
+            draft={organizationSelectionSession}
+            result={organizationSelectionResult}
+            onCancel={cancelOrganizationSeatSelection}
+            onComplete={completeOrganizationSeatSelection}
+          />
+        ) : null}
+
+        {swapFrom ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-4 py-2 text-sm">
+            <ArrowLeftRightIcon className="size-4 shrink-0 text-primary" />
+            <span>
+              正在对调 <strong>{swapFrom.label}</strong>
+              ——点画布上的另一个座位完成对调。
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-auto"
+              onClick={() => setSwapFrom(null)}
+            >
+              取消
+            </Button>
+          </div>
+        ) : null}
+      </div>
+    ) : null;
+
   if (!doc || !zone || !state) {
     // blob 解不出来（换过渲染器、或者数据坏了）。核心表里的位置还在，所以这里
     // 给一个能看的降级说明而不是白屏——底层设计 §9 那条降级视图的最低要求。
@@ -516,32 +547,7 @@ function SeatingCanvasPage() {
         </div>
       )}
 
-      {organizationSelectionSession ? (
-        <OrganizationSeatSelectionNotice
-          draft={organizationSelectionSession}
-          result={organizationSelectionResult}
-          onCancel={cancelOrganizationSeatSelection}
-          onComplete={completeOrganizationSeatSelection}
-        />
-      ) : null}
-
-      {swapFrom && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-4 py-2 text-sm">
-          <ArrowLeftRightIcon className="size-4 shrink-0 text-primary" />
-          <span>
-            正在对调 <strong>{swapFrom.label}</strong>
-            ——点画布上的另一个座位完成对调。
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="ml-auto"
-            onClick={() => setSwapFrom(null)}
-          >
-            取消
-          </Button>
-        </div>
-      )}
+      {!isFullscreen ? editorOperationNotices : null}
 
       <ZoneSeatingEditor
         frameRef={fullscreenRef}
@@ -550,6 +556,7 @@ function SeatingCanvasPage() {
             ? "fixed inset-0 z-50 h-dvh w-dvw overflow-hidden bg-background p-4"
             : undefined
         }
+        headerContent={isFullscreen ? editorOperationNotices : null}
         zone={zone}
         state={state}
         selection={selection}
