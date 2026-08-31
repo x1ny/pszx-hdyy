@@ -7,6 +7,7 @@ import {
   UsersIcon,
 } from "lucide-react";
 import { useState } from "react";
+import { organizationSeatColor } from "#/features/venue-editor/canvas/seat-occupant-visual";
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import { Input } from "#/shared/components/ui/input.tsx";
@@ -163,12 +164,14 @@ export function SeatAssignPanel({
                   person.organizationId === null
                     ? undefined
                     : organizationSeatInfoById.get(person.organizationId);
+                const organizationColor =
+                  person.organizationId === null
+                    ? undefined
+                    : organizationSeatColor(person.organizationId);
                 const groupSeatStatus = organizationInfo?.seatLabels.length
                   ? `团体座位 ${organizationInfo.seatLabels.join("、")}`
                   : null;
-                const seatStatus = taken
-                  ? `在 ${taken}`
-                  : groupSeatStatus;
+                const seatStatus = taken ? `在 ${taken}` : groupSeatStatus;
                 const isHere =
                   assignment?.segmentMemberId === person.segmentMemberId;
                 return (
@@ -178,7 +181,7 @@ export function SeatAssignPanel({
                     disabled={pending || isHere}
                     onClick={() => onAssign(person.segmentMemberId)}
                     className={cn(
-                      "flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                      "flex items-center justify-between gap-3 rounded-md px-2 py-2 text-left text-sm transition-colors",
                       isHere
                         ? "cursor-default bg-primary/10 text-primary"
                         : "cursor-pointer hover:bg-muted",
@@ -186,19 +189,21 @@ export function SeatAssignPanel({
                     )}
                   >
                     <div className="min-w-0">
-                      <div className="flex min-w-0 items-center gap-1.5">
-                        <div className="min-w-0 truncate">{person.name}</div>
-                        {organizationInfo?.name ? (
-                          <Badge
-                            variant="outline"
-                            className="max-w-32 shrink truncate"
+                      <div className="flex min-w-0 items-baseline gap-2 leading-5">
+                        <div className="min-w-0 truncate font-medium">
+                          {person.name}
+                        </div>
+                        {organizationInfo?.name && organizationColor ? (
+                          <span
+                            className="max-w-32 shrink truncate font-medium text-xs"
+                            style={{ color: organizationColor.stroke }}
                             title={organizationInfo.name}
                           >
                             {organizationInfo.name}
-                          </Badge>
+                          </span>
                         ) : null}
                       </div>
-                      <p className="truncate text-muted-foreground text-xs">
+                      <p className="mt-0.5 truncate text-muted-foreground text-xs leading-4">
                         {person.companyPosition || person.mobile || "—"}
                       </p>
                     </div>

@@ -79,36 +79,22 @@ export const SeatNode = memo(function SeatNode({
         <title>
           {occupant.kind === "organization"
             ? occupant.primaryLabel
-            : [occupant.primaryLabel, occupant.secondaryLabel]
+            : [occupant.primaryLabel, occupant.organizationName]
                 .filter(Boolean)
                 .join(" · ")}
         </title>
       ) : null}
       {selected && (
-        // 外圈用前景色描边、内圈用主色，且有独立的勾选角标。这样普通、已排、
-        // VIP 与停用座位不管底色或透明度怎样，选中信号都不只依赖颜色。
-        <g
-          className="motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-75 motion-safe:duration-150"
-          data-seat-selection-ring="true"
+        // 一层半透明底光足够表达选中，同时不遮挡座位自身的占用颜色与停用斜杠。
+        <circle
+          data-seat-selection-glow="true"
+          cx={cx}
+          cy={cy}
+          r={SEAT_R + 4}
+          fill="var(--primary)"
+          fillOpacity={0.18}
           style={{ pointerEvents: "none" }}
-        >
-          <circle
-            cx={cx}
-            cy={cy}
-            r={SEAT_R + 4.5}
-            fill="var(--background)"
-            stroke="var(--foreground)"
-            strokeWidth={1.8}
-          />
-          <circle
-            cx={cx}
-            cy={cy}
-            r={SEAT_R + 2.5}
-            fill="none"
-            stroke="var(--primary)"
-            strokeWidth={1.6}
-          />
-        </g>
+        />
       )}
 
       <g opacity={planDisabled ? 0.35 : 1}>
@@ -116,17 +102,13 @@ export const SeatNode = memo(function SeatNode({
           cx={cx}
           cy={cy}
           r={SEAT_R}
-          // 有团体的占用使用确定性色板；无团体个人保持原主色。VIP/普通空座
-          // 继续沿用原样式，状态不只靠文字区分。
+          // 已排座只保留占用色，不再加描边；空座用低透明度主色形成淡蓝轮廓。
           fill={
             occupant?.color.fill ?? (vip ? "var(--warning)" : "var(--card)")
           }
-          stroke={
-            selected
-              ? "var(--foreground)"
-              : (occupant?.color.stroke ?? "var(--border)")
-          }
-          strokeWidth={selected ? 1.8 : 1.2}
+          stroke={occupied ? "none" : "var(--primary)"}
+          strokeOpacity={occupied ? undefined : 0.24}
+          strokeWidth={occupied ? 0 : 1.2}
         />
         {seat.kind === "standing" && (
           // 站位画成空心方块，跟座位一眼能分开——不能只靠颜色，色觉障碍用户看不出。
@@ -151,19 +133,6 @@ export const SeatNode = memo(function SeatNode({
             strokeWidth={1.5}
           />
         )}
-        {occupant?.kind === "organization" ? (
-          <text
-            x={cx}
-            y={cy + 2.5}
-            textAnchor="middle"
-            fontSize={6.5}
-            fontWeight={700}
-            fill={occupant.color.foreground}
-            style={{ userSelect: "none", pointerEvents: "none" }}
-          >
-            团
-          </text>
-        ) : null}
         {showLabel && (!occupied || occupantLabel?.showSeatLabel) ? (
           <text
             x={cx}
@@ -183,48 +152,13 @@ export const SeatNode = memo(function SeatNode({
             y={primaryLabelY}
             textAnchor="middle"
             fontSize={occupantLabel.primaryFontSize}
-            fontWeight={650}
             fill="var(--foreground)"
             style={{ userSelect: "none", pointerEvents: "none" }}
           >
             {occupantLabel.primaryLabel}
           </text>
         ) : null}
-        {occupantLabel?.secondaryLabel ? (
-          <text
-            data-seat-occupant-label="secondary"
-            x={cx}
-            y={primaryLabelY + 8}
-            textAnchor="middle"
-            fontSize={occupantLabel.secondaryFontSize}
-            fill="var(--muted-foreground)"
-            style={{ userSelect: "none", pointerEvents: "none" }}
-          >
-            {occupantLabel.secondaryLabel}
-          </text>
-        ) : null}
       </g>
-
-      {selected && (
-        <g data-seat-selection="true" style={{ pointerEvents: "none" }}>
-          <circle
-            cx={cx + SEAT_R * 0.7}
-            cy={cy - SEAT_R * 0.7}
-            r={4.25}
-            fill="var(--background)"
-            stroke="var(--foreground)"
-            strokeWidth={1.3}
-          />
-          <path
-            d={`M ${cx + 3.9} ${cy - 6.7} l 2.3 2.2 l 4 -4.2`}
-            fill="none"
-            stroke="var(--foreground)"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.5}
-          />
-        </g>
-      )}
     </g>
   );
 });

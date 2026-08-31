@@ -57,7 +57,7 @@ const selectedSeatStates: [string, SeatState][] = [
 describe("SeatNode selection marker", () => {
   it.each(
     selectedSeatStates,
-  )("keeps the high-contrast ring and check badge for a selected %s seat", (_name, props) => {
+  )("uses one static glow for a selected %s seat", (_name, props) => {
     const { container } = render(
       <svg aria-label="座位节点">
         <SeatNode
@@ -72,16 +72,11 @@ describe("SeatNode selection marker", () => {
       </svg>,
     );
 
-    const marker = container.querySelector("[data-seat-selection]");
-    expect(
-      container.querySelector("[data-seat-selection-ring]"),
-    ).toBeInTheDocument();
-    expect(marker).toBeInTheDocument();
-    expect(marker?.querySelector("path")).toBeInTheDocument();
-    expect(marker?.querySelector("circle")).toHaveAttribute(
-      "stroke",
-      "var(--foreground)",
-    );
+    const glow = container.querySelector("[data-seat-selection-glow]");
+    expect(glow).toBeInTheDocument();
+    expect(glow).toHaveAttribute("fill", "var(--primary)");
+    expect(glow).not.toHaveAttribute("class");
+    expect(container.querySelector("path")).toBeNull();
   });
 
   it("does not render selection adornment for an unselected seat", () => {
@@ -97,10 +92,10 @@ describe("SeatNode selection marker", () => {
       </svg>,
     );
 
-    expect(container.querySelector("[data-seat-selection]")).toBeNull();
+    expect(container.querySelector("[data-seat-selection-glow]")).toBeNull();
   });
 
-  it("renders member name and organization name with the deterministic organization color", () => {
+  it("renders a normal-weight member name without the organization subtitle or occupied border", () => {
     const { container } = render(
       <svg aria-label="座位节点">
         <SeatNode
@@ -115,16 +110,20 @@ describe("SeatNode selection marker", () => {
       </svg>,
     );
 
-    expect(
-      container.querySelector('text[data-seat-occupant-label="primary"]'),
-    ).toHaveTextContent("王明");
+    const primaryLabel = container.querySelector(
+      'text[data-seat-occupant-label="primary"]',
+    );
+    expect(primaryLabel).toHaveTextContent("王明");
+    expect(primaryLabel).not.toHaveAttribute("font-weight");
     expect(
       container.querySelector('text[data-seat-occupant-label="secondary"]'),
-    ).toHaveTextContent("纺织协会");
-    expect(container.querySelector("circle[r='9']")).toHaveAttribute(
+    ).toBeNull();
+    const occupiedCircle = container.querySelector("circle[r='9']");
+    expect(occupiedCircle).toHaveAttribute(
       "fill",
       organizationSeatColor(4).fill,
     );
+    expect(occupiedCircle).toHaveAttribute("stroke", "none");
   });
 
   it("keeps the default occupied style for an individual without organization", () => {
@@ -177,6 +176,25 @@ describe("SeatNode selection marker", () => {
       container.querySelector('text[data-seat-occupant-label="secondary"]'),
     ).toBeNull();
     expect(container).not.toHaveTextContent("团体占位");
+    expect(container).not.toHaveTextContent("团");
+  });
+
+  it("uses a pale blue border for an empty seat", () => {
+    const { container } = render(
+      <svg aria-label="座位节点">
+        <SeatNode
+          seat={seat}
+          origin={{ x: 0, y: 0 }}
+          selected={false}
+          offset={null}
+          showLabel
+        />
+      </svg>,
+    );
+
+    const emptyCircle = container.querySelector("circle[r='9']");
+    expect(emptyCircle).toHaveAttribute("stroke", "var(--primary)");
+    expect(emptyCircle).toHaveAttribute("stroke-opacity", "0.24");
   });
 
   it("compacts occupant labels when zoomed out without losing selection marker", () => {
@@ -207,7 +225,7 @@ describe("SeatNode selection marker", () => {
       container.querySelector('text[data-seat-occupant-label="secondary"]'),
     ).toBeNull();
     expect(
-      container.querySelector("[data-seat-selection]"),
+      container.querySelector("[data-seat-selection-glow]"),
     ).toBeInTheDocument();
   });
 });

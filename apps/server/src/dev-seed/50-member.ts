@@ -2,6 +2,7 @@ import {
   activityMember,
   member,
   projectMember,
+  type SegmentMemberRole,
   segmentMember,
 } from "../modules/member/schema";
 import { DEMO, type SeedFn } from "./context";
@@ -92,6 +93,14 @@ const organizationIdAt = (index: number): number | null =>
         ? DEMO.organizationIds.designerAssociation
         : null;
 
+// 主论坛要能真实调排位，所以覆盖活动里的绝大多数人员；刻意排除张伟（index 2），
+// 他只参加与主论坛重叠的分论坛。这样候选人足够多，同时议程页仍然只有王芳那一处
+// 预设的跨环节时间冲突，不会因为补排位演示数据额外制造第二处冲突。
+const FORUM_MEMBER_INDEXES = [0, 1, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
+
+const forumRoleAt = (index: number): SegmentMemberRole =>
+  index === 0 ? "演讲嘉宾" : index < 4 ? "嘉宾" : "参会人员";
+
 export const seed: SeedFn = async (db, { userId }) => {
   const audit = { createdBy: userId, updatedBy: userId };
 
@@ -169,32 +178,23 @@ export const seed: SeedFn = async (db, { userId }) => {
       segmentRole: "演讲嘉宾",
       ...audit,
     },
-    {
+    ...FORUM_MEMBER_INDEXES.map((index) => ({
       segmentId: DEMO.segmentIds.forum,
       activityId: DEMO.activityId,
-      activityMemberId: 1,
-      memberId: 1,
-      organizationId: organizationIdAt(0),
-      segmentRole: "演讲嘉宾",
+      activityMemberId: index + 1,
+      memberId: index + 1,
+      organizationId: organizationIdAt(index),
+      segmentRole: forumRoleAt(index),
       ...audit,
-    },
+    })),
     {
-      // 和上面那条属于时间重叠的两个环节（见 30-agenda.ts）：这是议程页
+      // 和主论坛那条属于时间重叠的两个环节（见 30-agenda.ts）：这是议程页
       // 「同一人员环节时间冲突」提示的唯一触发数据，删掉它那个功能就没法调了。
       segmentId: DEMO.segmentIds.negotiation,
       activityId: DEMO.activityId,
       activityMemberId: 1,
       memberId: 1,
       organizationId: organizationIdAt(0),
-      segmentRole: "嘉宾",
-      ...audit,
-    },
-    {
-      segmentId: DEMO.segmentIds.forum,
-      activityId: DEMO.activityId,
-      activityMemberId: 2,
-      memberId: 2,
-      organizationId: organizationIdAt(1),
       segmentRole: "嘉宾",
       ...audit,
     },

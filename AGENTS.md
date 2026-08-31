@@ -95,6 +95,7 @@ CORS、`trustedOrigins` 不用加域名、`VITE_API_URL` 不用设，所以同�
 
 - `/project/1` 演示项目（下挂 2 个活动）
 - `/project/1/activity/1/agenda` 议程，**刻意埋了一处人员时间冲突**，冲突提示不用手工造数据就能验
+- `/project/1/activity/1/seating/1` 主论坛排位，10 个座位、11 名候选人，含个人和团体两种初始占用
 - `/member` 24 个人员，够翻 3 页，含 1 个停用状态
 - `/venue`（1 个场地 / 2 区域 / 10 座位）、`/supplier`（3 家，含停用和多类目）
 

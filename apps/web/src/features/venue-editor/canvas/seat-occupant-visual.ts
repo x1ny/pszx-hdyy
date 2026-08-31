@@ -22,8 +22,6 @@ export type SeatOccupantVisual = {
   kind: "person" | "organization";
   /** 个人为姓名，团体占位为团体名称；绝不拿团体名冒充个人姓名。 */
   primaryLabel: string;
-  /** 只会出现在有团体的个人座位上。 */
-  secondaryLabel?: string;
   organizationId?: number;
   organizationName?: string;
   color: SeatOccupantColor;
@@ -42,23 +40,33 @@ export const DEFAULT_OCCUPIED_COLOR: SeatOccupantColor = {
   foreground: "var(--primary-foreground)",
 };
 
+/** CSS 变量无法写入导出 SVG 时，无团体个人沿用既有的导出品牌蓝。 */
+export const DEFAULT_OCCUPIED_EXPORT_COLOR: SeatOccupantColor = {
+  fill: "#2563EB",
+  stroke: "#2563EB",
+  foreground: "#FFFFFF",
+};
+
 /**
  * 固定、确定性的色板。颜色只由稳定正整数 organizationId 决定，不存数据库；
- * fill 用于座位/图例色块，stroke 用于团体次级文字和轮廓。
+ * fill 用于座位/图例色块，stroke 用于右侧团体小字。fill 以相近的 OkLCh 感知
+ * 明度控制视觉权重，并把最常见的前三槽排成产品参考图里的绿、橙、紫；stroke
+ * 是同色相的深色文字阶，在白底上均满足 4.5:1。相邻槽位刻意跨色相排列，且
+ * 排除无团体个人的品牌蓝，避免不同业务含义看起来像同一类。
  */
 export const ORGANIZATION_SEAT_PALETTE = [
-  { fill: "#2563EB", stroke: "#1D4ED8", foreground: "#FFFFFF" },
-  { fill: "#7C3AED", stroke: "#6D28D9", foreground: "#FFFFFF" },
-  { fill: "#DB2777", stroke: "#BE185D", foreground: "#FFFFFF" },
-  { fill: "#DC2626", stroke: "#B91C1C", foreground: "#FFFFFF" },
-  { fill: "#C2410C", stroke: "#9A3412", foreground: "#FFFFFF" },
-  { fill: "#A16207", stroke: "#854D0E", foreground: "#FFFFFF" },
-  { fill: "#15803D", stroke: "#166534", foreground: "#FFFFFF" },
-  { fill: "#0F766E", stroke: "#115E59", foreground: "#FFFFFF" },
-  { fill: "#0E7490", stroke: "#155E75", foreground: "#FFFFFF" },
-  { fill: "#4F46E5", stroke: "#4338CA", foreground: "#FFFFFF" },
-  { fill: "#9333EA", stroke: "#7E22CE", foreground: "#FFFFFF" },
-  { fill: "#BE123C", stroke: "#9F1239", foreground: "#FFFFFF" },
+  { fill: "#1EAB53", stroke: "#27713D", foreground: "#FFFFFF" },
+  { fill: "#D18500", stroke: "#865400", foreground: "#FFFFFF" },
+  { fill: "#9F75E1", stroke: "#6A5095", foreground: "#FFFFFF" },
+  { fill: "#DA637A", stroke: "#934252", foreground: "#FFFFFF" },
+  { fill: "#00A598", stroke: "#007067", foreground: "#FFFFFF" },
+  { fill: "#AF8A00", stroke: "#765D00", foreground: "#FFFFFF" },
+  { fill: "#C16ABA", stroke: "#82477E", foreground: "#FFFFFF" },
+  { fill: "#7C9217", stroke: "#59690F", foreground: "#FFFFFF" },
+  { fill: "#0097AA", stroke: "#006D7B", foreground: "#FFFFFF" },
+  { fill: "#D05F43", stroke: "#944633", foreground: "#FFFFFF" },
+  { fill: "#B86797", stroke: "#8B446F", foreground: "#FFFFFF" },
+  { fill: "#B97340", stroke: "#8F4D16", foreground: "#FFFFFF" },
 ] as const satisfies readonly SeatOccupantColor[];
 
 export function organizationSeatColor(organizationId: number) {
@@ -98,7 +106,6 @@ export function buildSeatOccupantVisual(
   return {
     kind: "person",
     primaryLabel: input.memberName?.trim() ?? "",
-    secondaryLabel: organizationName,
     organizationId,
     organizationName,
     color: organizationColor,
@@ -135,14 +142,12 @@ const truncateLabel = (label: string, maxLength: number) =>
 
 export type SeatOccupantLabelLayout = {
   primaryLabel: string;
-  secondaryLabel?: string;
   primaryFontSize: number;
-  secondaryFontSize: number;
   showSeatLabel: boolean;
 };
 
 /**
- * 缩小时保留主标签、隐藏次级团体名并更积极截断；放大时限制屏幕字号继续膨胀。
+ * 缩小时更积极截断姓名/团体占位名；放大时限制屏幕字号继续膨胀。
  * 返回世界坐标字号，SVG 和位图导出可用各自 viewportScale 得到同一视觉层级。
  */
 export function seatOccupantLabelLayout(
@@ -160,12 +165,7 @@ export function seatOccupantLabelLayout(
       occupant.primaryLabel,
       tiny ? 4 : compact ? 6 : 10,
     ),
-    secondaryLabel:
-      tiny || !occupant.secondaryLabel
-        ? undefined
-        : truncateLabel(occupant.secondaryLabel, compact ? 8 : 12),
     primaryFontSize: 9 / fontScale,
-    secondaryFontSize: 6.5 / fontScale,
     showSeatLabel: safeScale >= 0.55,
   };
 }

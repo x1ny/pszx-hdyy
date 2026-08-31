@@ -167,7 +167,7 @@ describe("seating plan JPEG export", () => {
     expect(svg).toContain("纺织 &amp; 服装协会");
     expect(svg).toContain("无团体人员");
     expect(svg).toContain('data-export-seat-occupant-kind="organization"');
-    expect(svg).toContain(">团</text>");
+    expect(svg).not.toContain(">团</text>");
     expect(svg).not.toContain("绝不能显示的虚构姓名");
     expect(svg).toContain(organizationSeatColor(3).fill);
     expect(svg.match(/data-export-legend-organization-id="3"/g)).toHaveLength(
@@ -181,6 +181,13 @@ describe("seating plan JPEG export", () => {
     expect(svg).not.toContain("marquee");
     expect(svg).not.toContain("foreignObject");
     expect(svg).not.toContain("<button");
+    expect(svg).toContain('data-export-seat-id="seat-empty"');
+    expect(svg).toContain('stroke="#BFDBFE" stroke-width="1.2"');
+    expect(svg).toContain('stroke="none" stroke-width="0"');
+    expect(svg).not.toContain('data-export-occupant-label="secondary"');
+    expect(svg).not.toMatch(
+      /data-export-occupant-label="primary"[^>]*font-weight/,
+    );
     expect(raster.width).toBe(raster.logicalWidth * 2);
     expect(raster.height).toBe(raster.logicalHeight * 2);
   });

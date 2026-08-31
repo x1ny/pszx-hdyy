@@ -2,8 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeftRightIcon,
-  CircleDotIcon,
-  CircleIcon,
   CircleSlashIcon,
   DiamondIcon,
   DownloadIcon,
@@ -804,11 +802,14 @@ function SeatStatusLegend({
     >
       <span className="font-medium text-foreground">图例</span>
       <span className="flex items-center gap-1">
-        <CircleIcon className="size-3" aria-hidden />
+        <span
+          className="size-3 rounded-full border border-primary/25 bg-card"
+          aria-hidden
+        />
         空闲
       </span>
       <span className="flex items-center gap-1">
-        <CircleDotIcon className="size-3 text-primary" aria-hidden />
+        <span className="size-3 rounded-full bg-primary" aria-hidden />
         无团体个人
       </span>
       <span className="flex items-center gap-1">
@@ -821,10 +822,10 @@ function SeatStatusLegend({
       </span>
       <span className="flex items-center gap-1">
         <span
-          className="flex size-3 items-center justify-center rounded-full border-2 border-foreground text-[8px] leading-none"
+          className="flex size-3.5 items-center justify-center rounded-full bg-primary/15"
           aria-hidden
         >
-          ✓
+          <span className="size-2.5 rounded-full border border-primary/25 bg-card" />
         </span>
         已选中
       </span>
@@ -838,10 +839,9 @@ function SeatStatusLegend({
               className="flex items-center gap-1"
             >
               <span
-                className="size-3 rounded-full border"
+                className="size-3 rounded-full"
                 style={{
                   backgroundColor: organization.color.fill,
-                  borderColor: organization.color.stroke,
                 }}
                 aria-hidden
               />

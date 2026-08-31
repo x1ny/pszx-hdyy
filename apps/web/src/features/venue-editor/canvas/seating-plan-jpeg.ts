@@ -1,5 +1,6 @@
 import type { CanvasDoc, CanvasSeat, CanvasZone } from "./core/document";
 import {
+  DEFAULT_OCCUPIED_EXPORT_COLOR,
   type OrganizationSeatLegendItem,
   organizationSeatLegend,
   type SeatOccupantColor,
@@ -27,10 +28,11 @@ const SEAT_RADIUS = 9;
 const EXPORT_COLORS = {
   background: "#FFFFFF",
   border: "#CBD5E1",
+  emptySeatBorder: "#BFDBFE",
   foreground: "#0F172A",
   mutedForeground: "#64748B",
-  primary: "#2563EB",
-  primaryForeground: "#FFFFFF",
+  primary: DEFAULT_OCCUPIED_EXPORT_COLOR.fill,
+  primaryForeground: DEFAULT_OCCUPIED_EXPORT_COLOR.foreground,
   vip: "#D97706",
 } as const;
 
@@ -219,7 +221,7 @@ function renderZone(zone: CanvasZone): string {
 function occupantTitle(occupant: SeatOccupantVisual): string {
   return occupant.kind === "organization"
     ? occupant.primaryLabel
-    : [occupant.primaryLabel, occupant.secondaryLabel]
+    : [occupant.primaryLabel, occupant.organizationName]
         .filter(Boolean)
         .join(" · ");
 }
@@ -238,7 +240,7 @@ function renderSeat(
   const color = occupant ? resolveOccupantColor(occupant.color) : undefined;
   const fill =
     color?.fill ?? (vip ? EXPORT_COLORS.vip : EXPORT_COLORS.background);
-  const stroke = color?.stroke ?? EXPORT_COLORS.border;
+  const stroke = occupied ? "none" : EXPORT_COLORS.emptySeatBorder;
   const labelLayout = occupant
     ? seatOccupantLabelLayout(occupant, 1)
     : undefined;
@@ -250,10 +252,6 @@ function renderSeat(
     seat.kind === "standing"
       ? `<rect x="${finiteNumber(cx - 4)}" y="${finiteNumber(cy - 4)}" width="8" height="8" fill="none" stroke="${color?.foreground ?? EXPORT_COLORS.mutedForeground}" stroke-width="1.2"/>`
       : "";
-  const organizationMarker =
-    occupant?.kind === "organization"
-      ? `<text x="${finiteNumber(cx)}" y="${finiteNumber(cy + 2.5)}" text-anchor="middle" font-size="6.5" font-weight="700" fill="${color?.foreground ?? EXPORT_COLORS.primaryForeground}">团</text>`
-      : "";
   const disabledMarker = disabled
     ? `<line x1="${finiteNumber(cx - SEAT_RADIUS)}" y1="${finiteNumber(cy + SEAT_RADIUS)}" x2="${finiteNumber(cx + SEAT_RADIUS)}" y2="${finiteNumber(cy - SEAT_RADIUS)}" stroke="${EXPORT_COLORS.mutedForeground}" stroke-width="1.5"/>`
     : "";
@@ -262,16 +260,13 @@ function renderSeat(
       ? `<text data-export-seat-label="true" x="${finiteNumber(cx)}" y="${finiteNumber(occupied ? cy - SEAT_RADIUS - 4 : cy + SEAT_RADIUS + 9)}" text-anchor="middle" font-size="${occupied ? "6.5" : "9"}" fill="${EXPORT_COLORS.mutedForeground}">${escapeXml(seat.label)}</text>`
       : "";
   const primaryLabel = labelLayout?.primaryLabel
-    ? `<text data-export-occupant-label="primary" x="${finiteNumber(cx)}" y="${finiteNumber(primaryLabelY)}" text-anchor="middle" font-size="${finiteNumber(labelLayout.primaryFontSize)}" font-weight="650" fill="${EXPORT_COLORS.foreground}">${escapeXml(labelLayout.primaryLabel)}</text>`
-    : "";
-  const secondaryLabel = labelLayout?.secondaryLabel
-    ? `<text data-export-occupant-label="secondary" x="${finiteNumber(cx)}" y="${finiteNumber(primaryLabelY + 8)}" text-anchor="middle" font-size="${finiteNumber(labelLayout.secondaryFontSize)}" fill="${EXPORT_COLORS.mutedForeground}">${escapeXml(labelLayout.secondaryLabel)}</text>`
+    ? `<text data-export-occupant-label="primary" x="${finiteNumber(cx)}" y="${finiteNumber(primaryLabelY)}" text-anchor="middle" font-size="${finiteNumber(labelLayout.primaryFontSize)}" fill="${EXPORT_COLORS.foreground}">${escapeXml(labelLayout.primaryLabel)}</text>`
     : "";
 
   return `<g data-export-seat-id="${escapeXml(seat.externalId)}" data-export-seat-occupant-kind="${occupant?.kind ?? "empty"}"${occupant?.organizationId ? ` data-export-seat-organization-id="${occupant.organizationId}"` : ""} opacity="${disabled ? "0.35" : "1"}">
     ${title}
-    <circle cx="${finiteNumber(cx)}" cy="${finiteNumber(cy)}" r="${SEAT_RADIUS}" fill="${fill}" stroke="${stroke}" stroke-width="1.2"/>
-    ${standingMarker}${organizationMarker}${disabledMarker}${seatLabel}${primaryLabel}${secondaryLabel}
+    <circle cx="${finiteNumber(cx)}" cy="${finiteNumber(cy)}" r="${SEAT_RADIUS}" fill="${fill}" stroke="${stroke}" stroke-width="${occupied ? "0" : "1.2"}"/>
+    ${standingMarker}${disabledMarker}${seatLabel}${primaryLabel}
   </g>`;
 }
 
@@ -283,7 +278,7 @@ function legendItems(
       key: "empty",
       label: "空闲",
       fill: EXPORT_COLORS.background,
-      stroke: EXPORT_COLORS.border,
+      stroke: EXPORT_COLORS.emptySeatBorder,
       kind: "empty",
     },
     {

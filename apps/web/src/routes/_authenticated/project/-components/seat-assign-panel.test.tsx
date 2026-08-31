@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { organizationSeatColor } from "#/features/venue-editor/canvas/seat-occupant-visual";
 import { seatingCandidatesQueryOptions } from "../-venue-queries";
 import { SeatAssignPanel } from "./seat-assign-panel";
 
@@ -63,12 +64,7 @@ function renderPanel() {
         readOnly={false}
         pending={false}
         organizationSeatInfoById={
-          new Map([
-            [
-              7,
-              { name: "外语志愿者团", seatLabels: ["D2", "D4"] },
-            ],
-          ])
+          new Map([[7, { name: "外语志愿者团", seatLabels: ["D2", "D4"] }]])
         }
         onAssign={vi.fn()}
         onUnassign={vi.fn()}
@@ -81,7 +77,12 @@ describe("SeatAssignPanel", () => {
   it("显示候选人的团体名称，并区分个人已排座和团体占位座位", async () => {
     renderPanel();
 
-    expect(screen.getAllByText("外语志愿者团")).toHaveLength(2);
+    const organizationLabels = screen.getAllByText("外语志愿者团");
+    expect(organizationLabels).toHaveLength(2);
+    for (const label of organizationLabels) {
+      expect(label).toHaveStyle({ color: organizationSeatColor(7).stroke });
+      expect(label).not.toHaveClass("border");
+    }
     expect(screen.getByText("在 D1")).toBeInTheDocument();
     expect(screen.getByText("团体座位 D2、D4")).toBeInTheDocument();
   });
