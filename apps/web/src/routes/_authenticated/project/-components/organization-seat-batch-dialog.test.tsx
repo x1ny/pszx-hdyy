@@ -25,8 +25,8 @@ const organization = {
   colorIndex: 3,
   totalMembers: 6,
   assignedPersonCount: 1,
-  remainingMemberCount: 5,
-  organizationSeatCount: 2,
+  remainingMemberCount: 2,
+  organizationSeatCount: 3,
 };
 
 function renderDialog(
@@ -93,7 +93,8 @@ describe("OrganizationSeatBatchDialog", () => {
     await waitFor(() =>
       expect(screen.getByText("已个人排座明细（1）")).toBeInTheDocument(),
     );
-    expect(screen.getByText("已有团体占位 2")).toBeInTheDocument();
+    expect(screen.getByText("已有团体占位 3")).toBeInTheDocument();
+    expect(screen.getByText("2", { selector: "dt" })).toBeInTheDocument();
     expect(screen.getByText("剩余人数")).toBeInTheDocument();
     expect(screen.getByText("已排成员")).toBeInTheDocument();
 
@@ -102,11 +103,11 @@ describe("OrganizationSeatBatchDialog", () => {
     expect(onStartSeatSelection).toHaveBeenCalledWith({
       organizationId: 7,
       organizationName: "协会甲",
-      suggestedCount: 5,
+      suggestedCount: 2,
     });
     expect(onOpenChange).toHaveBeenCalledWith(false);
     // 进画布不清掉选中的团体：勾选模式退出后不回弹窗，再来一次时它还在。
-    expect(screen.getByText("已有团体占位 2")).toBeInTheDocument();
+    expect(screen.getByText("已有团体占位 3")).toBeInTheDocument();
   });
 
   it("没有目标数量和选座方式这两组设置，选座全部交给画布", async () => {

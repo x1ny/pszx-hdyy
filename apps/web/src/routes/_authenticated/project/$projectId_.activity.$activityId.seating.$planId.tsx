@@ -874,7 +874,7 @@ function OrganizationSeatSelectionNotice({
             已勾选 {pickedCount}
           </Badge>
           <span className="text-muted-foreground text-xs tabular-nums">
-            该团体还有 {remaining} 人未按个人排座
+            该团体还有 {remaining} 人未安排座位
           </span>
         </div>
         <p className="mt-1 text-muted-foreground text-xs">

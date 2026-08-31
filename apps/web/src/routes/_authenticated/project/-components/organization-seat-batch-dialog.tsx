@@ -56,7 +56,7 @@ import {
  * 进入画布勾选时带过去的上下文。
  *
  * **没有目标数量、也没有选座方式**——两者都被画布上的自由勾选取代了。
- * `suggestedCount` 只是提示条上那句"该团体还有 N 人未排座"，不构成任何校验。
+ * `suggestedCount` 只是提示条上那句"该团体还有 N 人未安排座位"，不构成任何校验。
  */
 export type OrganizationSeatBatchSelectionDraft = {
   organizationId: number;

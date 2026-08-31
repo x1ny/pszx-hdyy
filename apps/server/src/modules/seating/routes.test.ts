@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { db } from "../../infra/db";
 import { activitySegment } from "../agenda/schema";
 import {
+  calculateOrganizationRemainingMemberCount,
   listCandidatesQuery,
   listOrganizationCandidatesQuery,
   listOrganizationSeatingStatsQuery,
@@ -69,6 +70,11 @@ describe("团体占位范围查询", () => {
     expect(statsSql).toContain(
       '"organization_assignment"."revoked_at" is null',
     );
+  });
+
+  test("剩余人数同时扣除个人排座和已有团体占位，超额时保持为 0", () => {
+    expect(calculateOrganizationRemainingMemberCount(6, 1, 3)).toBe(2);
+    expect(calculateOrganizationRemainingMemberCount(6, 1, 8)).toBe(0);
   });
 
   test("批量预览只把传入位置当作候选，真正空闲条件仍检查方案、启用和有效占用", () => {

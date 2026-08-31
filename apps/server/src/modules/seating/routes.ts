@@ -169,7 +169,7 @@ export const organizationInSegmentScopeQuery = (
 
 /**
  * 当前方案环节内的团体排位统计。个人已排座只数个人分配；团体占位是另一种目标，
- * 不会反过来把成员算作“已个人排座”。
+ * 不会反过来把成员算作“已个人排座”，但两者都会减少尚未安排的名额。
  */
 export const listOrganizationSeatingStatsQuery = (
   conn: Pick<typeof db, "select">,
@@ -218,13 +218,31 @@ type OrganizationSeatingStatRow = {
   organizationSeatCount: number;
 };
 
+/**
+ * 剩余人数是还没有被个人排座或团体占位覆盖的名额。
+ *
+ * 团体占位允许超过团体人数，所以超额时只显示 0，不把它变成负数；这只是展示
+ * 口径，不是批量占位的服务端限制。
+ */
+export function calculateOrganizationRemainingMemberCount(
+  totalMembers: number,
+  assignedPersonCount: number,
+  organizationSeatCount: number,
+) {
+  return Math.max(
+    0,
+    totalMembers - assignedPersonCount - organizationSeatCount,
+  );
+}
+
 function withOrganizationSeatingStats(rows: OrganizationSeatingStatRow[]) {
   return rows.map((row) => ({
     ...row,
     colorIndex: organizationColorIndex(row.organizationId),
-    remainingMemberCount: Math.max(
-      0,
-      row.totalMembers - row.assignedPersonCount,
+    remainingMemberCount: calculateOrganizationRemainingMemberCount(
+      row.totalMembers,
+      row.assignedPersonCount,
+      row.organizationSeatCount,
     ),
   }));
 }
@@ -932,7 +950,8 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
 
   /**
    * 按传入的有序位置 id 预览团体批量占位。只报告可用、跳过和不足，**绝不写库**；
-   * `targetMode: remaining` 使用尚未个人排座的人数，`custom` 则使用正整数目标。
+   * `targetMode: remaining` 使用尚未被个人排座或团体占位覆盖的人数，`custom` 则使用
+   * 操作者明确指定的目标。
    */
   .post(
     "/previewOrganizationBatch",

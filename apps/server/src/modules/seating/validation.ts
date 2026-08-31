@@ -147,7 +147,7 @@ export const AssignOrganizationInput = z.object({
 
 export const UnassignInput = z.object({ planId: id, segmentSeatId: id });
 
-/** 团体批量占位的目标数：可跟随当前未个人排座人数，或由操作者明确指定。 */
+/** 团体批量占位的目标数：可跟随当前未安排名额，或由操作者明确指定。 */
 const OrganizationSeatTargetInput = z.discriminatedUnion("targetMode", [
   z.object({ targetMode: z.literal("remaining") }),
   z.object({
