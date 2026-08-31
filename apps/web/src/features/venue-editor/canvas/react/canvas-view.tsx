@@ -7,8 +7,12 @@ import {
   zonePolygonPoints,
 } from "../core/interaction";
 import {
+  NAME_READABLE_PITCH_PX,
   type SeatOccupantVisual,
-  seatOccupantLabelLayout,
+  type SeatRenderSpec,
+  seatRenderSpec,
+  truncateSeatText,
+  wrapSeatName,
 } from "../seat-occupant-visual";
 import type { Viewport } from "./use-viewport";
 
@@ -20,9 +24,6 @@ import type { Viewport } from "./use-viewport";
  * 进入区域后才是排位），所以这个组件现在只画区域形状。座位渲染挪到
  * `SeatNode`（这里导出，供 `zone-seating-view.tsx` 复用）。
  */
-
-/** 座位半径。比 interaction.ts 的命中半径小，好点中又不显得挤。 */
-const SEAT_R = 9;
 
 type SeatNodeProps = {
   seat: CanvasSeat;
@@ -40,9 +41,19 @@ type SeatNodeProps = {
    */
   occupant?: SeatOccupantVisual;
   planDisabled?: boolean;
-  /** 用于占用标签的缩放截断；场地编辑器不传时按 1 处理。 */
+  /** 屏幕像素 ÷ 世界单位。用来把下面那份屏幕尺寸换算回世界坐标。 */
   viewportScale?: number;
+  /**
+   * 当前密度下该画多大、画不画得下字。由调用方按整片区域算一次
+   * （`seatFieldPitch × viewportScale` → `seatRenderSpec`）再传进来：
+   * 每个座位各算一遍既浪费，也会让 `memo` 每次拿到不同的对象。
+   */
+  spec?: SeatRenderSpec;
 };
+
+/** 缩放倍率兜底：场地库画布不传时按 1:1 处理。 */
+const safeScale = (scale: number) =>
+  Number.isFinite(scale) && scale > 0 ? scale : 1;
 
 /**
  * 单个座位。`memo` 是性能的关键一环：拖动时只有被拖的那几个的 `offset` 变了，
@@ -60,15 +71,29 @@ export const SeatNode = memo(function SeatNode({
   occupant,
   planDisabled,
   viewportScale = 1,
+  spec,
 }: SeatNodeProps) {
   const cx = origin.x + seat.x + (offset?.x ?? 0);
   const cy = origin.y + seat.y + (offset?.y ?? 0);
   const vip = seat.rank === "vip";
   const occupied = occupant !== undefined;
-  const occupantLabel = occupant
-    ? seatOccupantLabelLayout(occupant, viewportScale)
-    : undefined;
-  const primaryLabelY = cy + SEAT_R + 10;
+
+  // 屏幕像素 → 世界坐标。所有尺寸都走这一步，于是缩放时它们在屏幕上恒定，
+  // 只有座距真的变宽——这就是重叠会消失的原因。
+  const scale = safeScale(viewportScale);
+  const px = (value: number) => value / scale;
+  // 没传 spec 时按"刚好写得下姓名"处理：宁可标签画出来，也不要静默丢字。
+  const render = spec ?? seatRenderSpec(NAME_READABLE_PITCH_PX);
+
+  const SEAT_R = px(render.radiusPx);
+  const occupantLines = occupant
+    ? wrapSeatName(occupant.primaryLabel, render.nameChars, render.nameLines)
+    : [];
+  const seatLabelText =
+    render.seatLabelChars > 0
+      ? truncateSeatText(seat.label, render.seatLabelChars)
+      : "";
+  const primaryLabelY = cy + px(render.nameOffsetPx);
 
   return (
     <g
@@ -90,7 +115,7 @@ export const SeatNode = memo(function SeatNode({
           data-seat-selection-glow="true"
           cx={cx}
           cy={cy}
-          r={SEAT_R + 4}
+          r={SEAT_R + px(4)}
           fill="var(--primary)"
           fillOpacity={0.18}
           style={{ pointerEvents: "none" }}
@@ -99,6 +124,7 @@ export const SeatNode = memo(function SeatNode({
 
       <g opacity={planDisabled ? 0.35 : 1}>
         <circle
+          data-seat-body="true"
           cx={cx}
           cy={cy}
           r={SEAT_R}
@@ -108,18 +134,18 @@ export const SeatNode = memo(function SeatNode({
           }
           stroke={occupied ? "none" : "var(--primary)"}
           strokeOpacity={occupied ? undefined : 0.24}
-          strokeWidth={occupied ? 0 : 1.2}
+          strokeWidth={occupied ? 0 : px(1.2)}
         />
         {seat.kind === "standing" && (
           // 站位画成空心方块，跟座位一眼能分开——不能只靠颜色，色觉障碍用户看不出。
           <rect
-            x={cx - 4}
-            y={cy - 4}
-            width={8}
-            height={8}
+            x={cx - SEAT_R * 0.45}
+            y={cy - SEAT_R * 0.45}
+            width={SEAT_R * 0.9}
+            height={SEAT_R * 0.9}
             fill="none"
             stroke={occupant?.color.foreground ?? "var(--muted-foreground)"}
-            strokeWidth={1.2}
+            strokeWidth={px(1.2)}
           />
         )}
         {planDisabled && (
@@ -130,34 +156,49 @@ export const SeatNode = memo(function SeatNode({
             x2={cx + SEAT_R}
             y2={cy - SEAT_R}
             stroke="var(--muted-foreground)"
-            strokeWidth={1.5}
+            strokeWidth={px(1.5)}
           />
         )}
-        {showLabel && (!occupied || occupantLabel?.showSeatLabel) ? (
+        {showLabel && seatLabelText ? (
           <text
             x={cx}
-            y={occupied ? cy - SEAT_R - 4 : cy + SEAT_R + 9}
+            /**
+             * 只有**姓名真的画出来了**才把编号让到上面去。
+             *
+             * 以前这里判的是 `occupied`：座距密到写不下姓名时，下方明明空着，
+             * 已排座的编号却还是躲到上面，同一排里空座在下、已排座在上，
+             * 参差不齐。有没有人不决定下方占不占，画没画姓名才决定。
+             */
+            y={
+              occupantLines.length > 0
+                ? cy - SEAT_R - px(4)
+                : cy + px(render.nameOffsetPx)
+            }
             textAnchor="middle"
-            fontSize={occupied ? 6.5 : 9}
+            fontSize={px(render.seatLabelFontPx)}
             fill="var(--muted-foreground)"
             style={{ userSelect: "none", pointerEvents: "none" }}
           >
-            {seat.label}
+            {seatLabelText}
           </text>
         ) : null}
-        {occupantLabel?.primaryLabel ? (
+        {occupantLines.map((line, index) => (
           <text
+            // 两行都带 primary，第一行永远是 querySelector 拿到的那个
             data-seat-occupant-label="primary"
+            data-seat-name-line={index + 1}
+            // biome-ignore lint/suspicious/noArrayIndexKey: 行号即身份，第一行永远是第一行
+            key={index}
             x={cx}
-            y={primaryLabelY}
+            y={primaryLabelY + px(render.nameLineHeightPx) * index}
             textAnchor="middle"
-            fontSize={occupantLabel.primaryFontSize}
+            fontSize={px(render.nameFontPx)}
             fill="var(--foreground)"
             style={{ userSelect: "none", pointerEvents: "none" }}
           >
-            {occupantLabel.primaryLabel}
+            {line}
           </text>
-        ) : null}
+        ))}
       </g>
     </g>
   );

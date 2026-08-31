@@ -19,7 +19,11 @@ export type Viewport = { x: number; y: number; scale: number };
 
 /** 缩放范围。下限保证 1600×1000 的世界能整个塞进小窗口，上限够看清座位编号。 */
 const MIN_SCALE = 0.15;
-const MAX_SCALE = 3;
+/**
+ * 上限 6 而不是 3：座距密的区域要放到 3 倍以上才够写下姓名
+ * （见 `seatRenderSpec` 的阶梯），卡在 3 会让「放大到姓名可读」到不了位。
+ */
+const MAX_SCALE = 6;
 
 export function useViewport(
   world: Size,
@@ -82,10 +86,37 @@ export function useViewport(
     });
   }, []);
 
+  /**
+   * 直接缩放到某个倍率，以视口中心为锚。
+   * 「放大到姓名可读」用它——那个动作有一个算得出来的目标倍率，
+   * 不该让用户滚轮试。
+   */
+  const zoomToScale = useCallback(
+    (target: number) => {
+      const element = containerRef.current;
+      if (!element) return;
+      const rect = element.getBoundingClientRect();
+      touched.current = true;
+      setViewport((current) => {
+        const scale = clamp(target, MIN_SCALE, MAX_SCALE);
+        const ratio = scale / current.scale;
+        const anchorX = rect.width / 2;
+        const anchorY = rect.height / 2;
+        return {
+          scale,
+          x: anchorX - (anchorX - current.x) * ratio,
+          y: anchorY - (anchorY - current.y) * ratio,
+        };
+      });
+    },
+    [containerRef],
+  );
+
   return {
     viewport,
     panBy,
     zoomAt,
+    zoomToScale,
     fit,
     canZoomIn: viewport.scale < MAX_SCALE,
     canZoomOut: viewport.scale > MIN_SCALE,

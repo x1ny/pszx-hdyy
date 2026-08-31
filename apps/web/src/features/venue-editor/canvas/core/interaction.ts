@@ -68,7 +68,13 @@ export type DragSubject =
   /** 空白处拉框选座位。 */
   | { kind: "marquee"; start: Point };
 
-/** 座位的命中半径（世界坐标）。比视觉半径大一点，好点中。 */
+/**
+ * 座位命中半径的兜底值（世界坐标）。
+ *
+ * 正常路径上调用方会按当前密度传一个**屏幕坐标换算过来**的半径进来
+ * （`seatRenderSpec().hitRadiusPx / scale`），让"看得见的地方点得中"。
+ * 这个常量只在调用方没算的时候兜底。
+ */
 export const SEAT_HIT_RADIUS = 13;
 /** 缩放手柄的边长（屏幕像素，用时要除以 scale 换算到世界坐标）。 */
 export const HANDLE_SIZE = 9;
@@ -249,24 +255,43 @@ export type SeatDragSubject =
   | { kind: "moveSeats"; seatIds: string[] }
   | { kind: "marquee"; start: Point };
 
-/** 命中最上层的座位。倒序遍历——后画的在上面。 */
-export function hitSeat(doc: CanvasDoc, point: Point): string | null {
+/**
+ * 命中座位，取**最近**的那个。
+ *
+ * 以前是"倒序遍历、命中即返回"，等价于取数组里靠后的那个而不是离指针最近的。
+ * 座距小于命中直径时相邻座位的命中圈重叠，于是点在两座中间会选中错误的一个，
+ * 而且错得没有规律——密集区域的排位就是这么点错座的。
+ *
+ * 仍然倒序遍历、比较用严格小于：距离相等时后画的（视觉上在上层的）赢。
+ */
+export function hitSeat(
+  doc: CanvasDoc,
+  point: Point,
+  hitRadius: number = SEAT_HIT_RADIUS,
+): string | null {
+  let hit: string | null = null;
+  let nearest = Number.POSITIVE_INFINITY;
+
   for (let index = doc.seats.length - 1; index >= 0; index -= 1) {
     const seat = doc.seats[index];
     const world = seatWorldPoint(doc, seat.externalId);
     if (!world) continue;
-    if (Math.hypot(world.x - point.x, world.y - point.y) <= SEAT_HIT_RADIUS) {
-      return seat.externalId;
+    const distance = Math.hypot(world.x - point.x, world.y - point.y);
+    if (distance <= hitRadius && distance < nearest) {
+      nearest = distance;
+      hit = seat.externalId;
     }
   }
-  return null;
+
+  return hit;
 }
 
-/** 框选：返回落在框里的座位。 */
+/** 框选：返回落在框里的座位。命中半径同 `hitSeat`，擦到边缘就算选中。 */
 export function marqueeSelect(
   doc: CanvasDoc,
   from: Point,
   to: Point,
+  hitRadius: number = SEAT_HIT_RADIUS,
 ): string[] {
   const box = normalizeRect(from, to);
 
@@ -275,10 +300,10 @@ export function marqueeSelect(
       const world = seatWorldPoint(doc, seat.externalId);
       if (!world) return false;
       return rectsIntersect(box, {
-        x: world.x - SEAT_HIT_RADIUS,
-        y: world.y - SEAT_HIT_RADIUS,
-        width: SEAT_HIT_RADIUS * 2,
-        height: SEAT_HIT_RADIUS * 2,
+        x: world.x - hitRadius,
+        y: world.y - hitRadius,
+        width: hitRadius * 2,
+        height: hitRadius * 2,
       });
     })
     .map((seat) => seat.externalId);
@@ -294,13 +319,15 @@ export function resolveSeatDragSubject(input: {
   selection: Selection;
   tool: SeatTool;
   forcePan?: boolean;
+  /** 当前密度下的命中半径（世界坐标）。不传按兜底常量。 */
+  hitRadius?: number;
 }): SeatDragSubject {
-  const { point, doc, selection, tool, forcePan } = input;
+  const { point, doc, selection, tool, forcePan, hitRadius } = input;
 
   if (forcePan) return { kind: "pan" };
   if (tool === "seat") return { kind: "none" };
 
-  const seatId = hitSeat(doc, point);
+  const seatId = hitSeat(doc, point, hitRadius);
   if (seatId) {
     const seatIds = selection.seatIds.includes(seatId)
       ? selection.seatIds

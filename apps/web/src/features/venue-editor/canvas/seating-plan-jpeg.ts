@@ -1,11 +1,17 @@
 import type { CanvasDoc, CanvasSeat, CanvasZone } from "./core/document";
+import { seatFieldPitch } from "./core/geometry";
 import {
   DEFAULT_OCCUPIED_EXPORT_COLOR,
+  NAME_READABLE_PITCH_PX,
   type OrganizationSeatLegendItem,
   organizationSeatLegend,
   type SeatOccupantColor,
   type SeatOccupantVisual,
-  seatOccupantLabelLayout,
+  type SeatRenderSpec,
+  scaleForPitch,
+  seatRenderSpec,
+  truncateSeatText,
+  wrapSeatName,
 } from "./seat-occupant-visual";
 
 export const SEATING_PLAN_JPEG_MIME = "image/jpeg";
@@ -23,7 +29,6 @@ const LEGEND_ROW_HEIGHT = 28;
 const LEGEND_ITEM_GAP = 24;
 const LEGEND_SWATCH_SIZE = 14;
 const MIN_CONTENT_WIDTH = 640;
-const SEAT_RADIUS = 9;
 
 const EXPORT_COLORS = {
   background: "#FFFFFF",
@@ -191,11 +196,13 @@ export function planSeatingPlanRaster(
   };
 }
 
-function renderZone(zone: CanvasZone): string {
+function renderZone(zone: CanvasZone, planScale: number): string {
   const shape = zone.shape;
   const fill = exportColor(zone.fill, "#E2E8F0");
   const stroke = exportColor(zone.stroke, EXPORT_COLORS.border);
-  const common = `fill="${fill}" fill-opacity="0.14" stroke="${stroke}" stroke-width="2"`;
+  // 世界组整体被 planScale 放大，所以线宽和字号要先除回去，
+  // 否则纸放大一倍、边框和区域名也跟着粗一倍。
+  const common = `fill="${fill}" fill-opacity="0.14" stroke="${stroke}" stroke-width="${finiteNumber(2 / planScale)}"`;
   let geometry: string;
 
   if (shape.type === "ellipse") {
@@ -214,7 +221,7 @@ function renderZone(zone: CanvasZone): string {
 
   return `<g data-export-zone-id="${escapeXml(zone.externalId)}">
     ${geometry}
-    <text x="${finiteNumber(shape.x + 12)}" y="${finiteNumber(shape.y + 22)}" font-size="14" font-weight="650" fill="${EXPORT_COLORS.foreground}">${escapeXml(zone.name)}</text>
+    <text x="${finiteNumber(shape.x + 12 / planScale)}" y="${finiteNumber(shape.y + 22 / planScale)}" font-size="${finiteNumber(14 / planScale)}" font-weight="650" fill="${EXPORT_COLORS.foreground}">${escapeXml(zone.name)}</text>
   </g>`;
 }
 
@@ -230,6 +237,8 @@ function renderSeat(
   seat: CanvasSeat,
   zone: CanvasZone,
   status: SeatingPlanExportSeatStatus | undefined,
+  spec: SeatRenderSpec,
+  planScale: number,
 ): string {
   const cx = zone.shape.x + seat.x;
   const cy = zone.shape.y + seat.y;
@@ -241,31 +250,43 @@ function renderSeat(
   const fill =
     color?.fill ?? (vip ? EXPORT_COLORS.vip : EXPORT_COLORS.background);
   const stroke = occupied ? "none" : EXPORT_COLORS.emptySeatBorder;
-  const labelLayout = occupant
-    ? seatOccupantLabelLayout(occupant, 1)
-    : undefined;
-  const primaryLabelY = cy + SEAT_RADIUS + 10;
+  // 和画布同一条规则：spec 里都是纸面像素，除以 planScale 回到世界坐标。
+  const px = (value: number) => value / planScale;
+  const radius = px(spec.radiusPx);
+  const occupantLines = occupant
+    ? wrapSeatName(occupant.primaryLabel, spec.nameChars, spec.nameLines)
+    : [];
+  const occupantName = occupantLines[0] ?? "";
+  const seatLabelText =
+    spec.seatLabelChars > 0
+      ? truncateSeatText(seat.label, spec.seatLabelChars)
+      : "";
+  const primaryLabelY = cy + px(spec.nameOffsetPx);
   const title = occupant
     ? `<title>${escapeXml(occupantTitle(occupant))}</title>`
     : "";
   const standingMarker =
     seat.kind === "standing"
-      ? `<rect x="${finiteNumber(cx - 4)}" y="${finiteNumber(cy - 4)}" width="8" height="8" fill="none" stroke="${color?.foreground ?? EXPORT_COLORS.mutedForeground}" stroke-width="1.2"/>`
+      ? `<rect x="${finiteNumber(cx - radius * 0.45)}" y="${finiteNumber(cy - radius * 0.45)}" width="${finiteNumber(radius * 0.9)}" height="${finiteNumber(radius * 0.9)}" fill="none" stroke="${color?.foreground ?? EXPORT_COLORS.mutedForeground}" stroke-width="${finiteNumber(px(1.2))}"/>`
       : "";
   const disabledMarker = disabled
-    ? `<line x1="${finiteNumber(cx - SEAT_RADIUS)}" y1="${finiteNumber(cy + SEAT_RADIUS)}" x2="${finiteNumber(cx + SEAT_RADIUS)}" y2="${finiteNumber(cy - SEAT_RADIUS)}" stroke="${EXPORT_COLORS.mutedForeground}" stroke-width="1.5"/>`
+    ? `<line x1="${finiteNumber(cx - radius)}" y1="${finiteNumber(cy + radius)}" x2="${finiteNumber(cx + radius)}" y2="${finiteNumber(cy - radius)}" stroke="${EXPORT_COLORS.mutedForeground}" stroke-width="${finiteNumber(px(1.5))}"/>`
     : "";
-  const seatLabel =
-    !occupied || labelLayout?.showSeatLabel
-      ? `<text data-export-seat-label="true" x="${finiteNumber(cx)}" y="${finiteNumber(occupied ? cy - SEAT_RADIUS - 4 : cy + SEAT_RADIUS + 9)}" text-anchor="middle" font-size="${occupied ? "6.5" : "9"}" fill="${EXPORT_COLORS.mutedForeground}">${escapeXml(seat.label)}</text>`
-      : "";
-  const primaryLabel = labelLayout?.primaryLabel
-    ? `<text data-export-occupant-label="primary" x="${finiteNumber(cx)}" y="${finiteNumber(primaryLabelY)}" text-anchor="middle" font-size="${finiteNumber(labelLayout.primaryFontSize)}" fill="${EXPORT_COLORS.foreground}">${escapeXml(labelLayout.primaryLabel)}</text>`
+  // 同画布：姓名真的画出来了才把编号让到上面，否则下方空着就该用下方，
+  // 不然同一排里空座和已排座的编号会一上一下参差不齐。
+  const seatLabel = seatLabelText
+    ? `<text data-export-seat-label="true" x="${finiteNumber(cx)}" y="${finiteNumber(occupantName ? cy - radius - px(4) : cy + px(spec.nameOffsetPx))}" text-anchor="middle" font-size="${finiteNumber(px(spec.seatLabelFontPx))}" fill="${EXPORT_COLORS.mutedForeground}">${escapeXml(seatLabelText)}</text>`
     : "";
+  const primaryLabel = occupantLines
+    .map(
+      (line, index) =>
+        `<text data-export-occupant-label="primary" data-export-name-line="${index + 1}" x="${finiteNumber(cx)}" y="${finiteNumber(primaryLabelY + px(spec.nameLineHeightPx) * index)}" text-anchor="middle" font-size="${finiteNumber(px(spec.nameFontPx))}" fill="${EXPORT_COLORS.foreground}">${escapeXml(line)}</text>`,
+    )
+    .join("");
 
   return `<g data-export-seat-id="${escapeXml(seat.externalId)}" data-export-seat-occupant-kind="${occupant?.kind ?? "empty"}"${occupant?.organizationId ? ` data-export-seat-organization-id="${occupant.organizationId}"` : ""} opacity="${disabled ? "0.35" : "1"}">
     ${title}
-    <circle cx="${finiteNumber(cx)}" cy="${finiteNumber(cy)}" r="${SEAT_RADIUS}" fill="${fill}" stroke="${stroke}" stroke-width="${occupied ? "0" : "1.2"}"/>
+    <circle cx="${finiteNumber(cx)}" cy="${finiteNumber(cy)}" r="${finiteNumber(radius)}" fill="${fill}" stroke="${stroke}" stroke-width="${occupied ? "0" : finiteNumber(px(1.2))}"/>
     ${standingMarker}${disabledMarker}${seatLabel}${primaryLabel}
   </g>`;
 }
@@ -353,8 +374,32 @@ export function buildSeatingPlanSvg(
   assertPositiveFinite(input.doc.world.width, "画布宽度");
   assertPositiveFinite(input.doc.world.height, "画布高度");
 
-  const worldWidth = input.doc.world.width;
-  const worldHeight = input.doc.world.height;
+  /**
+   * 纸面按"姓名写得下"反推，而不是死死按 1:1 铺。
+   *
+   * 以前导出图是最容易撞名字的地方——屏幕上还能放大看，纸上放不大。
+   * 现在先算这份布局有多密，密到写不下姓名就把整张纸等比放大，
+   * 直到座距够写下三个汉字为止。只放大、不缩小。
+   */
+  const worldPitch = seatFieldPitch(
+    input.doc.seats.map((seat) => {
+      const zone = input.doc.zones.find(
+        (item) => item.externalId === seat.zoneExternalId,
+      );
+      return {
+        x: (zone?.shape.x ?? 0) + seat.x,
+        y: (zone?.shape.y ?? 0) + seat.y,
+      };
+    }),
+  );
+  const planScale = Math.max(
+    1,
+    Math.min(4, scaleForPitch(worldPitch, NAME_READABLE_PITCH_PX)),
+  );
+  const seatSpec = seatRenderSpec(worldPitch * planScale);
+
+  const worldWidth = input.doc.world.width * planScale;
+  const worldHeight = input.doc.world.height * planScale;
   const contentWidth = Math.max(MIN_CONTENT_WIDTH, worldWidth);
   const logicalWidth = contentWidth + PAGE_PADDING * 2;
   const worldX = PAGE_PADDING + (contentWidth - worldWidth) / 2;
@@ -379,12 +424,22 @@ export function buildSeatingPlanSvg(
   const zonesById = new Map(
     input.doc.zones.map((zone) => [zone.externalId, zone]),
   );
-  const zones = input.doc.zones.map(renderZone).join("\n");
+  const zones = input.doc.zones
+    .map((zone) => renderZone(zone, planScale))
+    .join("\n");
   const seats = input.doc.seats
     .flatMap((seat) => {
       const zone = zonesById.get(seat.zoneExternalId);
       return zone
-        ? [renderSeat(seat, zone, input.seatStatus?.get(seat.externalId))]
+        ? [
+            renderSeat(
+              seat,
+              zone,
+              input.seatStatus?.get(seat.externalId),
+              seatSpec,
+              planScale,
+            ),
+          ]
         : [];
     })
     .join("\n");
@@ -411,8 +466,10 @@ export function buildSeatingPlanSvg(
   ${subtitle}
   <g data-export-world="true" transform="translate(${finiteNumber(worldX)} ${finiteNumber(worldY)})">
     <rect x="0" y="0" width="${finiteNumber(worldWidth)}" height="${finiteNumber(worldHeight)}" fill="${EXPORT_COLORS.background}" stroke="${EXPORT_COLORS.border}" stroke-width="1.5"/>
-    ${zones}
-    ${seats}
+    <g data-export-plan-scale="${finiteNumber(planScale)}" transform="scale(${finiteNumber(planScale)})">
+      ${zones}
+      ${seats}
+    </g>
   </g>
   <g data-export-legend="true">
     <text x="${PAGE_PADDING}" y="${finiteNumber(legendY + 16)}" font-size="14" font-weight="650" fill="${EXPORT_COLORS.foreground}">图例</text>

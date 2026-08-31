@@ -27,6 +27,7 @@ import {
 import {
   boundsOf,
   clampPointToRect,
+  DEFAULT_SEAT_PITCH,
   ellipseContains,
   fitViewport,
   normalizeRect,
@@ -36,6 +37,7 @@ import {
   rectsIntersect,
   scalePoint,
   scalePoints,
+  seatFieldPitch,
   toAbsolutePoints,
   toScreen,
   toWorld,
@@ -195,6 +197,62 @@ describe("geometry", () => {
 
   test("boundsOf 空数组返回零矩形而不是 Infinity", () => {
     expect(boundsOf([])).toEqual({ x: 0, y: 0, width: 0, height: 0 });
+  });
+
+  test("seatFieldPitch 在规整网格上就是相邻座位的间距", () => {
+    const grid = [];
+    for (let row = 0; row < 6; row += 1) {
+      for (let col = 0; col < 10; col += 1) {
+        grid.push({ x: col * 20, y: row * 50 });
+      }
+    }
+    // 行距 50 比座距 20 大，最近邻是同排的邻座
+    expect(seatFieldPitch(grid)).toBeCloseTo(20, 5);
+  });
+
+  test("seatFieldPitch 用中位数，不被个别贴脸的座位一票否决", () => {
+    const row = Array.from({ length: 12 }, (_, index) => ({
+      x: index * 30,
+      y: 0,
+    }));
+    // 塞一个几乎重合的异常点：取最小值会把整片区域判成 0.5，取中位数不会
+    row.push({ x: 30.5, y: 0 });
+    expect(seatFieldPitch(row)).toBeCloseTo(30, 5);
+  });
+
+  test("seatFieldPitch 忽略完全重合的座位，不返回 0", () => {
+    const points = [
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      { x: 40, y: 0 },
+      { x: 80, y: 0 },
+    ];
+    expect(seatFieldPitch(points)).toBeGreaterThan(0);
+  });
+
+  test("seatFieldPitch 少于两个座位时给兜底值", () => {
+    expect(seatFieldPitch([])).toBe(DEFAULT_SEAT_PITCH);
+    expect(seatFieldPitch([{ x: 5, y: 5 }])).toBe(DEFAULT_SEAT_PITCH);
+  });
+
+  test("seatFieldPitch 在宴会圆桌这种非网格布局上取桌内座距", () => {
+    const tables = [];
+    for (const center of [
+      { x: 0, y: 0 },
+      { x: 400, y: 0 },
+      { x: 0, y: 400 },
+    ]) {
+      for (let index = 0; index < 10; index += 1) {
+        const angle = (index / 10) * Math.PI * 2;
+        tables.push({
+          x: center.x + Math.cos(angle) * 60,
+          y: center.y + Math.sin(angle) * 60,
+        });
+      }
+    }
+    // 桌内相邻座位约 2πr/10 ≈ 37，桌间 400——取到的是前者
+    expect(seatFieldPitch(tables)).toBeGreaterThan(30);
+    expect(seatFieldPitch(tables)).toBeLessThan(45);
   });
 
   test("boundsOf 单点是零尺寸矩形", () => {
@@ -1028,6 +1086,62 @@ describe("interaction · 排位画布", () => {
     const world = seatWorldPoint(doc, doc.seats[0].externalId);
     if (!world) throw new Error("no seat");
     expect(hitSeat(doc, world)).toBe(doc.seats[0].externalId);
+  });
+
+  /** 座距 10 的一排：命中半径 13 时相邻座位的命中圈必然重叠。 */
+  const denseRow = () => {
+    const doc = emptyCanvasDoc();
+    doc.zones.push({
+      externalId: "z",
+      name: "密集区",
+      kind: "seating",
+      ordinal: 0,
+      fill: "#000000",
+      stroke: "#000000",
+      shape: { type: "rect", x: 0, y: 0, width: 200, height: 100 },
+    });
+    for (let index = 0; index < 5; index += 1) {
+      doc.seats.push({
+        externalId: `s${index}`,
+        zoneExternalId: "z",
+        label: `A${index}`,
+        kind: "seat",
+        rank: "normal",
+        ordinal: index,
+        x: 20 + index * 10,
+        y: 50,
+      });
+    }
+    return doc;
+  };
+
+  test("hitSeat 命中圈重叠时取最近的，不是数组里靠后的", () => {
+    const doc = denseRow();
+
+    // 正落在 s1 上：s0 和 s2 也都在 13 的半径内，靠后的 s2 以前会赢
+    expect(hitSeat(doc, { x: 30, y: 50 }, 13)).toBe("s1");
+    // 偏向 s3 一侧：取更近的那个
+    expect(hitSeat(doc, { x: 48, y: 50 }, 13)).toBe("s3");
+    // 半径之外谁都不命中
+    expect(hitSeat(doc, { x: 200, y: 50 }, 13)).toBeNull();
+  });
+
+  test("命中半径由调用方给，缩放后才能跟着圆点大小走", () => {
+    const doc = denseRow();
+    const world = seatWorldPoint(doc, "s0");
+    if (!world) throw new Error("no seat");
+
+    const nearby = { x: world.x + 20, y: world.y };
+    // 默认半径 13 够不着 20 之外的点，放大到 30 就命中
+    expect(hitSeat(doc, nearby, 13)).toBe("s2");
+    expect(hitSeat(doc, { x: world.x - 20, y: world.y }, 13)).toBeNull();
+    expect(hitSeat(doc, { x: world.x - 20, y: world.y }, 30)).toBe("s0");
+
+    // 框选同理：擦到边缘算选中，边缘有多宽由命中半径决定
+    const tiny = marqueeSelect(doc, world, world, 0.1);
+    const generous = marqueeSelect(doc, world, world, 25);
+    expect(tiny).toEqual(["s0"]);
+    expect(generous.length).toBeGreaterThan(tiny.length);
   });
 });
 

@@ -6,6 +6,7 @@ import {
   RedoIcon,
   ScanIcon,
   SofaIcon,
+  TypeIcon,
   UndoIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -18,7 +19,12 @@ import {
   removeSeats,
 } from "../core/commands";
 import type { CanvasDoc, CanvasZone } from "../core/document";
-import { normalizeRect, type Point, toWorld } from "../core/geometry";
+import {
+  normalizeRect,
+  type Point,
+  seatFieldPitch,
+  toWorld,
+} from "../core/geometry";
 import {
   canRedo,
   canUndo,
@@ -38,7 +44,12 @@ import {
   type SeatTool,
   type Selection,
 } from "../core/interaction";
-import type { SeatOccupantVisual } from "../seat-occupant-visual";
+import {
+  NAME_READABLE_PITCH_PX,
+  type SeatOccupantVisual,
+  scaleForPitch,
+  seatRenderSpec,
+} from "../seat-occupant-visual";
 import { SeatNode, ZoneGeometry } from "./canvas-view";
 import { TemplateDialog } from "./template-dialog";
 import { useViewport } from "./use-viewport";
@@ -146,13 +157,38 @@ export function ZoneSeatingEditor({
     () => ({ width: zone.shape.width, height: zone.shape.height }),
     [zone.shape.width, zone.shape.height],
   );
-  const { viewport, panBy, zoomAt, fit } = useViewport(zoneSize, containerRef);
+  const { viewport, panBy, zoomAt, zoomToScale, fit } = useViewport(
+    zoneSize,
+    containerRef,
+  );
 
   const zoneSeats = useMemo(
     () =>
       state.doc.seats.filter((seat) => seat.zoneExternalId === zone.externalId),
     [state.doc.seats, zone.externalId],
   );
+
+  /**
+   * 这片座位有多密——**整个呈现层唯一的输入量**。跟着座位集合变，
+   * 不跟着缩放变，所以只在增删座位时重算一次。
+   */
+  const worldPitch = useMemo(
+    () => seatFieldPitch(zoneSeats.map((seat) => ({ x: seat.x, y: seat.y }))),
+    [zoneSeats],
+  );
+  /**
+   * 当前密度下该画多大、写得下几个字。整片区域共用一个对象，
+   * `SeatNode` 的 `memo` 才不会因为每个座位各拿一个新对象而全部失效。
+   */
+  const renderSpec = useMemo(
+    () => seatRenderSpec(worldPitch * viewport.scale),
+    [worldPitch, viewport.scale],
+  );
+  /**
+   * 命中半径换算回世界坐标。跟视觉半径同源，所以**看得见的地方就点得中**——
+   * 以前这里是写死的 13 世界单位，缩放之后和圆点大小完全脱钩。
+   */
+  const hitRadius = renderSpec.hitRadiusPx / viewport.scale;
 
   /**
    * 供 `hitSeat`/`marqueeSelect` 用的"零点区域"文档——把这块区域的 shape.x/y
@@ -175,6 +211,7 @@ export function ZoneSeatingEditor({
     selection,
     tool,
     spaceDown,
+    hitRadius,
     assignOnly,
     isFullscreen,
     onExitFullscreen,
@@ -186,6 +223,7 @@ export function ZoneSeatingEditor({
     selection,
     tool,
     spaceDown,
+    hitRadius,
     assignOnly,
     isFullscreen,
     onExitFullscreen,
@@ -228,6 +266,7 @@ export function ZoneSeatingEditor({
           selection: sel,
           tool: t,
           spaceDown: pan,
+          hitRadius: radius,
         } = live.current;
 
         const forcePan = pan || pointer.button === 1;
@@ -237,6 +276,7 @@ export function ZoneSeatingEditor({
           selection: sel,
           tool: t,
           forcePan,
+          hitRadius: radius,
         });
 
         // 入座阶段不许挪座位——把"拖一个已选中座位"降级成"什么都不做"，
@@ -309,7 +349,12 @@ export function ZoneSeatingEditor({
             );
             return;
           case "marquee": {
-            const seatIds = marqueeSelect(d, finished.subject.start, point);
+            const seatIds = marqueeSelect(
+              d,
+              finished.subject.start,
+              point,
+              live.current.hitRadius,
+            );
             onSelectionChange({ zoneIds: [], seatIds });
             return;
           }
@@ -350,7 +395,7 @@ export function ZoneSeatingEditor({
       return;
     }
 
-    const seatId = hitSeat(d, point);
+    const seatId = hitSeat(d, point, live.current.hitRadius);
     onSelectionChange(
       seatId ? { zoneIds: [], seatIds: [seatId] } : EMPTY_SELECTION,
     );
@@ -431,7 +476,11 @@ export function ZoneSeatingEditor({
 
   const cursor = spaceDown ? "grab" : tool === "seat" ? "copy" : "default";
   const selectedSeats = new Set(selection.seatIds);
-  const showLabels = viewport.scale >= 0.5;
+
+  const showLabels = renderSpec.seatLabelChars > 0;
+  /** 姓名还没写得下时，「看姓名」按钮才有意义。 */
+  const nameReadableScale = scaleForPitch(worldPitch, NAME_READABLE_PITCH_PX);
+  const namesHidden = renderSpec.nameChars === 0;
 
   return (
     <div
@@ -533,6 +582,22 @@ export function ZoneSeatingEditor({
               适配
             </Button>
 
+            {/* 姓名写不下时，一次跳到写得下的倍率——那个倍率是算得出来的，
+                不该让用户滚轮试。写得下之后按钮就没意义了，隐藏。 */}
+            {zoneSeats.length > 0 && namesHidden && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                title={`放大到能显示姓名（约 ${nameReadableScale.toFixed(1)} 倍）`}
+                onClick={() => zoomToScale(nameReadableScale)}
+              >
+                <TypeIcon />
+                看姓名
+              </Button>
+            )}
+
             {(toolbarActions || !assignOnly) && (
               <div className="ml-auto flex items-center gap-1">
                 {toolbarActions}
@@ -591,6 +656,7 @@ export function ZoneSeatingEditor({
                         occupant={status?.occupant}
                         planDisabled={status?.disabled}
                         viewportScale={viewport.scale}
+                        spec={renderSpec}
                       />
                     );
                   })}

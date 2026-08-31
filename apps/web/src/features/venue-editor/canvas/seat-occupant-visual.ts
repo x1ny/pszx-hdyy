@@ -135,37 +135,171 @@ export function organizationSeatLegend(
   );
 }
 
-const truncateLabel = (label: string, maxLength: number) =>
+/** 超长标签截断，`maxLength` 含省略号本身。 */
+export const truncateSeatText = (label: string, maxLength: number) =>
   label.length > maxLength
     ? `${label.slice(0, Math.max(1, maxLength - 1))}…`
     : label;
 
-export type SeatOccupantLabelLayout = {
-  primaryLabel: string;
-  primaryFontSize: number;
-  showSeatLabel: boolean;
+/**
+ * 座位的呈现规格。**每一个数都是屏幕像素**，调用方按自己的缩放倍率换算成
+ * 世界坐标（除以 scale）。
+ *
+ * 这条分界线是整份修复的核心：**位置属于世界坐标，尺寸属于屏幕坐标**。
+ * 以前半径和字号都写死在世界坐标里，缩放时标签宽度和座距同比例变化，
+ * 比值恒定——所以放大永远不解决重叠。把尺寸搬到屏幕坐标之后，放大只让
+ * 座距变宽、字不跟着长，重叠才真的会消失。
+ */
+export type SeatRenderSpec = {
+  /** 座位符号半径 */
+  radiusPx: number;
+  /**
+   * 命中半径。**永远不小于视觉半径**——看得见的地方就点得中。
+   *
+   * 同时保证一个最小可点尺寸：密集区域圆点会缩成 2px 的点，但那时候仍然要
+   * 点得动。允许它超过半个座距、和邻座的命中圈重叠，因为 `hitSeat` 取的是
+   * **最近**的那个，重叠只会让"点在两座中间"落到更近的一边，不会选错。
+   */
+  hitRadiusPx: number;
+  /** 姓名**每行**最多渲染几个字符（含省略号）；0 表示这一档不画姓名 */
+  nameChars: number;
+  /** 姓名最多折几行。纵向还空着时允许折成两行，横向写不下的字接着往下写。 */
+  nameLines: number;
+  nameFontPx: number;
+  /** 姓名行高 */
+  nameLineHeightPx: number;
+  /** 姓名第一行基线到圆心的距离 */
+  nameOffsetPx: number;
+  /** 座位编号最多几个字符；0 表示不画 */
+  seatLabelChars: number;
+  seatLabelFontPx: number;
 };
 
 /**
- * 缩小时更积极截断姓名/团体占位名；放大时限制屏幕字号继续膨胀。
- * 返回世界坐标字号，SVG 和位图导出可用各自 viewportScale 得到同一视觉层级。
+ * 姓名折行。中文按字数切，不找词边界——座位标签这个尺度上没有必要。
+ *
+ * 整个名字放得下时**均分到各行**，而不是先把第一行塞满：
+ * "泉州市纺织服装商会" 按塞满切会得到 "泉州市纺织服装商 / 会"，
+ * 末行吊着一个字很难看；均分成 "泉州市纺织 / 服装商会" 才像话。
+ * 放不下时才退回"前几行填满、末行截断"。
  */
-export function seatOccupantLabelLayout(
-  occupant: SeatOccupantVisual,
-  viewportScale: number,
-): SeatOccupantLabelLayout {
-  const safeScale =
-    Number.isFinite(viewportScale) && viewportScale > 0 ? viewportScale : 1;
-  const tiny = safeScale < 0.55;
-  const compact = safeScale < 0.9;
-  const fontScale = Math.min(1.3, Math.max(0.6, safeScale));
+export function wrapSeatName(
+  label: string,
+  charsPerLine: number,
+  maxLines: number,
+): string[] {
+  if (!label || charsPerLine <= 0 || maxLines <= 0) return [];
+  if (label.length <= charsPerLine) return [label];
+  if (maxLines === 1) return [truncateSeatText(label, charsPerLine)];
+
+  const lines: string[] = [];
+  if (label.length <= charsPerLine * maxLines) {
+    const perLine = Math.ceil(label.length / maxLines);
+    for (let start = 0; start < label.length; start += perLine) {
+      lines.push(label.slice(start, start + perLine));
+    }
+    return lines;
+  }
+
+  let rest = label;
+  while (lines.length < maxLines - 1) {
+    lines.push(rest.slice(0, charsPerLine));
+    rest = rest.slice(charsPerLine);
+  }
+  lines.push(truncateSeatText(rest, charsPerLine));
+  return lines;
+}
+
+/**
+ * 姓名可读所需的最小屏幕座距：3 个汉字（12px 字号）加 4px 间隙。
+ * 「放大到姓名可读」按钮就是把视口缩放到 `这个值 / 世界座距`。
+ */
+export const NAME_READABLE_PITCH_PX = 40;
+
+/**
+ * 最小可点尺寸（屏幕像素）。鼠标按 12px 给——密集区域座位缩成 2px 的点之后
+ * 仍然要点得动，不能让"看得见"和"点得中"一起消失。
+ */
+export const MIN_TOUCH_TARGET_PX = 12;
+
+/** 一行字在给定座距里塞得下几个汉字——留 4px 不让相邻标签贴脸。 */
+const charsThatFit = (pitchPx: number, fontPx: number) =>
+  Math.floor((pitchPx - 4) / fontPx);
+
+/**
+ * 响应式呈现阶梯。输入只有一个数：**相邻座位在屏幕上差多少像素**。
+ *
+ * 没有任何"魔法变换"——不挪座位、不改间距、不对不同元素用不同的缩放。
+ * 整张图始终等比缩放，这里只决定"在当前这个密度下画得下什么"，
+ * 和 CSS 的响应式断点是同一回事。
+ */
+export function seatRenderSpec(screenPitchPx: number): SeatRenderSpec {
+  const pitch =
+    Number.isFinite(screenPitchPx) && screenPitchPx > 0 ? screenPitchPx : 1;
+
+  /**
+   * 符号半径 = 座距的固定比例，**有上限、没有下限**。
+   *
+   * 上限 12px：座位图是示意图不是等比测绘图，圆点长到一定程度就没有更多
+   * 信息量了，再大只会挤占标签的位置。代价是屏幕座距超过 40px 之后半径
+   * 钉死——那一段里放大画布圆点不再跟着变大，这是明确接受的取舍。
+   *
+   * 不设下限：缩小方向一路等比缩下去，缩得很远时圆点接近消失。那个尺度上
+   * 本来也不该看清单个座位，硬撑一个最小尺寸反而会让密集区域糊成一片。
+   *
+   * `pitch` 已含缩放倍率，所以在上限以下时换算回世界坐标是常量——
+   * 那一段里圆点严格跟着画布等比缩放。
+   */
+  const radiusPx = Math.min(12, pitch * 0.3);
+
+  /**
+   * 能写几个字**只由座距决定**，不设固定上限。
+   *
+   * 这里曾经有个 `Math.min(6, …)`，结果是座位之间明明还空着一大片，
+   * "泉州市纺织服装商会" 照样被砍成 "泉州市纺织…"。那个 6 没有任何依据——
+   * 会不会撞到邻座，`charsThatFit` 已经算准了，再压一道只会白白截断。
+   */
+  const nameFontPx =
+    pitch >= 60 ? 13 : pitch >= NAME_READABLE_PITCH_PX ? 12 : 11;
+  const nameFit = charsThatFit(pitch, nameFontPx);
+  // 少于 3 个字的姓名（"张…"）没有信息量，不如不画，让颜色和悬停去承担。
+  const nameChars = nameFit >= 3 ? nameFit : 0;
+
+  const seatLabelFontPx = pitch >= NAME_READABLE_PITCH_PX ? 9 : 8;
+  const seatLabelFit = charsThatFit(pitch, seatLabelFontPx);
+  const seatLabelChars = seatLabelFit >= 2 ? seatLabelFit : 0;
+
+  const nameLineHeightPx = nameFontPx * 1.15;
+  const nameOffsetPx = radiusPx + nameFontPx * 0.92 + 2;
+
+  /**
+   * 纵向还剩多少地方，决定姓名折不折第二行。
+   *
+   * 预算按最坏情况算：正下方那个座位如果也排了人，它的**编号在圆点上方**
+   * （见 canvas-view 的 seatLabel），所以第二行不能越过 `座距 - 半径 - 编号高度`。
+   * `pitch` 取的是最近邻距离，是纵向间距的下界，用它当预算天然保守，
+   * 宁可少折一行也不越界。
+   */
+  const secondLineBottom = nameOffsetPx + nameLineHeightPx;
+  const nextRowTop = pitch - radiusPx - seatLabelFontPx - 4;
+  const nameLines = nameChars > 0 && secondLineBottom <= nextRowTop ? 2 : 1;
 
   return {
-    primaryLabel: truncateLabel(
-      occupant.primaryLabel,
-      tiny ? 4 : compact ? 6 : 10,
-    ),
-    primaryFontSize: 9 / fontScale,
-    showSeatLabel: safeScale >= 0.55,
+    radiusPx,
+    hitRadiusPx: Math.max(radiusPx, MIN_TOUCH_TARGET_PX),
+    nameChars,
+    nameLines,
+    nameFontPx: nameChars > 0 ? nameFontPx : 0,
+    nameLineHeightPx,
+    nameOffsetPx,
+    seatLabelChars,
+    seatLabelFontPx,
   };
 }
+
+/**
+ * 把缩放倍率换算成"想要多大屏幕座距"所需的缩放。
+ * 世界座距为 0（只有一个座位）时返回 1，不做无意义的缩放。
+ */
+export const scaleForPitch = (worldPitch: number, targetPitchPx: number) =>
+  worldPitch > 0 ? targetPitchPx / worldPitch : 1;

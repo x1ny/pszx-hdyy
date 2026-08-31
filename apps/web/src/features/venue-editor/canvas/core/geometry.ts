@@ -88,7 +88,7 @@ export function pointInPolygon(point: Point, polygon: Point[]): boolean {
 }
 
 /** 一组点的包围盒。空数组返回零矩形而不是 Infinity。 */
-export function boundsOf(points: Point[]): Rect {
+export function boundsOf(points: readonly Point[]): Rect {
   if (points.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
 
   let minX = points[0].x;
@@ -104,6 +104,68 @@ export function boundsOf(points: Point[]): Rect {
   }
 
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+/** 一片区域里一个座位都没有（或只有一个）时的兜底座距。 */
+export const DEFAULT_SEAT_PITCH = 34;
+
+/**
+ * 一片座位的**典型座距**：每个座位到最近邻的距离，取中位数。
+ *
+ * 这是整个呈现层唯一的输入量——标签会不会撞在一起、符号该画多大、缩到什么
+ * 程度就该放弃文字，全部由它派生（见 `seatRenderSpec`）。
+ *
+ * 取中位数而不是最小值：最小值会被任意一对贴得极近的座位一票否决，整片区域
+ * 的呈现档位就被两个异常点拖到最低。中位数表达的是"这片座位普遍多密"，那才
+ * 是标签相撞的判据。距离为 0 的重合座位直接跳过，同理。
+ *
+ * 用均匀网格求最近邻，期望 O(n)：格子边长按"平均每格一个点"来定，于是自身格
+ * 加周围 8 格里几乎总能找到真正的最近邻。稀疏角落里少数点找不到候选就跳过，
+ * 它们不影响中位数。
+ */
+export function seatFieldPitch(points: readonly Point[]): number {
+  if (points.length < 2) return DEFAULT_SEAT_PITCH;
+
+  const box = boundsOf(points);
+  /**
+   * 格子边长按**长边**估，不按面积——一整排座位（领导席、单排看台）的包围盒
+   * 高度是 0，用面积算出来的格子会退化成接近 0，于是周围 8 格里一个邻居都找
+   * 不到，中位数被少数几对异常点接管。这条是单排布局踩出来的。
+   */
+  const extent = Math.max(box.width, box.height, 1);
+  const cell = Math.max(Number.EPSILON, extent / Math.sqrt(points.length));
+
+  const key = (cx: number, cy: number) => `${cx},${cy}`;
+  const buckets = new Map<string, Point[]>();
+  for (const point of points) {
+    const k = key(Math.floor(point.x / cell), Math.floor(point.y / cell));
+    const bucket = buckets.get(k);
+    if (bucket) bucket.push(point);
+    else buckets.set(k, [point]);
+  }
+
+  const nearest: number[] = [];
+  for (const point of points) {
+    const cx = Math.floor(point.x / cell);
+    const cy = Math.floor(point.y / cell);
+    let best = Number.POSITIVE_INFINITY;
+    for (let dx = -1; dx <= 1; dx += 1) {
+      for (let dy = -1; dy <= 1; dy += 1) {
+        const bucket = buckets.get(key(cx + dx, cy + dy));
+        if (!bucket) continue;
+        for (const other of bucket) {
+          const distance = Math.hypot(other.x - point.x, other.y - point.y);
+          if (distance > 0 && distance < best) best = distance;
+        }
+      }
+    }
+    if (Number.isFinite(best)) nearest.push(best);
+  }
+
+  if (nearest.length === 0) return DEFAULT_SEAT_PITCH;
+  nearest.sort((left, right) => left - right);
+  const median = nearest[Math.floor(nearest.length / 2)];
+  return median > 0 ? median : DEFAULT_SEAT_PITCH;
 }
 
 /**
