@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   type OrganizationSeatSelectionCandidate,
-  resolveOrganizationSeatSelection,
+  resolveOrganizationSeatPick,
 } from "./organization-seat-selection";
 
 const candidates: OrganizationSeatSelectionCandidate[] = [
@@ -49,83 +49,112 @@ const candidates: OrganizationSeatSelectionCandidate[] = [
   },
 ];
 
-describe("resolveOrganizationSeatSelection", () => {
-  it("连续模式从起点按 ordinal 向后取启用空位，并报告中间跳过", () => {
+const pick = (
+  input: Partial<Parameters<typeof resolveOrganizationSeatPick>[0]>,
+) =>
+  resolveOrganizationSeatPick({
+    action: "toggle",
+    zoneExternalId: "zone-a",
+    requestedExternalIds: [],
+    currentExternalIds: [],
+    candidates,
+    ...input,
+  });
+
+describe("resolveOrganizationSeatPick", () => {
+  it("点空位选上，再点一次取消——checkbox 语义", () => {
+    const selected = pick({
+      action: "toggle",
+      requestedExternalIds: ["A4"],
+      currentExternalIds: ["A1"],
+    });
+    expect(selected.selectedExternalIds).toEqual(["A1", "A4"]);
+
+    const cleared = pick({
+      action: "toggle",
+      requestedExternalIds: ["A4"],
+      currentExternalIds: selected.selectedExternalIds,
+    });
+    expect(cleared.selectedExternalIds).toEqual(["A1"]);
+  });
+
+  it("点不可用位置既不选上也不清空已选，只报告原因", () => {
     expect(
-      resolveOrganizationSeatSelection({
-        mode: "continuous",
-        targetCount: 2,
-        zoneExternalId: "zone-a",
+      pick({
+        action: "toggle",
         requestedExternalIds: ["A2"],
-        candidates,
+        currentExternalIds: ["A1", "A4"],
       }),
     ).toEqual({
-      selectedExternalIds: ["A4", "A5"],
-      skipped: [
-        { externalId: "A2", label: "A2", reason: "occupied" },
-        { externalId: "A3", label: "A3", reason: "disabled" },
-      ],
-      overflowCount: 0,
-      insufficient: 0,
+      selectedExternalIds: ["A1", "A4"],
+      rejected: [{ externalId: "A2", label: "A2", reason: "occupied" }],
+      dropped: [],
     });
   });
 
-  it("连续模式不会跨越当前方案区域寻找位置", () => {
+  it("框选并入已有选择，不取消框外的，也不重复计入框内已选的", () => {
     expect(
-      resolveOrganizationSeatSelection({
-        mode: "continuous",
-        targetCount: 3,
-        zoneExternalId: "zone-a",
-        requestedExternalIds: ["A4"],
-        candidates,
+      pick({
+        action: "add",
+        requestedExternalIds: ["A4", "A5"],
+        currentExternalIds: ["A1", "A4"],
       }),
     ).toMatchObject({
-      selectedExternalIds: ["A4", "A5"],
-      insufficient: 1,
+      selectedExternalIds: ["A1", "A4", "A5"],
+      rejected: [],
     });
   });
 
-  it("框选无论拖拽方向，都按 ordinal 取前 N 个可用位置", () => {
-    const forward = resolveOrganizationSeatSelection({
-      mode: "marquee",
-      targetCount: 2,
-      zoneExternalId: "zone-a",
-      requestedExternalIds: ["A1", "A5", "A4"],
-      candidates,
+  it("框选跳过停用和已占用，无论拖拽方向结果都按 ordinal 排序", () => {
+    const forward = pick({
+      action: "add",
+      requestedExternalIds: ["A1", "A2", "A3", "A4", "A5"],
     });
-    const backward = resolveOrganizationSeatSelection({
-      mode: "marquee",
-      targetCount: 2,
-      zoneExternalId: "zone-a",
-      requestedExternalIds: ["A5", "A4", "A1"],
-      candidates,
+    const backward = pick({
+      action: "add",
+      requestedExternalIds: ["A5", "A4", "A3", "A2", "A1"],
     });
 
-    expect(forward).toMatchObject({
-      selectedExternalIds: ["A1", "A4"],
-      overflowCount: 1,
-      insufficient: 0,
-    });
-    expect(backward).toEqual(forward);
-  });
-
-  it("框选会过滤停用和占用位置，并将不足和跳过信息交给界面", () => {
-    expect(
-      resolveOrganizationSeatSelection({
-        mode: "marquee",
-        targetCount: 3,
-        zoneExternalId: "zone-a",
-        requestedExternalIds: ["A1", "A2", "A3", "A4"],
-        candidates,
-      }),
-    ).toEqual({
-      selectedExternalIds: ["A1", "A4"],
-      skipped: [
+    expect(forward).toEqual({
+      selectedExternalIds: ["A1", "A4", "A5"],
+      rejected: [
         { externalId: "A2", label: "A2", reason: "occupied" },
         { externalId: "A3", label: "A3", reason: "disabled" },
       ],
-      overflowCount: 0,
-      insufficient: 1,
+      dropped: [],
+    });
+    expect(backward.selectedExternalIds).toEqual(forward.selectedExternalIds);
+  });
+
+  it("不跨区域：别的区域的位置既不会被框进来，也不会留在选择里", () => {
+    expect(
+      pick({
+        action: "add",
+        requestedExternalIds: ["B1"],
+        currentExternalIds: ["A1", "B1"],
+      }).selectedExternalIds,
+    ).toEqual(["A1"]);
+  });
+
+  it("sync 把期间失效的位置移出选择并说明原因", () => {
+    const stale = candidates.map((seat) =>
+      seat.externalId === "A4"
+        ? { ...seat, availability: "occupied" as const }
+        : seat,
+    );
+
+    expect(
+      resolveOrganizationSeatPick({
+        action: "sync",
+        zoneExternalId: "zone-a",
+        requestedExternalIds: [],
+        currentExternalIds: ["A1", "A4", "A5"],
+        candidates: stale,
+      }),
+    ).toEqual({
+      selectedExternalIds: ["A1", "A5"],
+      rejected: [],
+      dropped: [{ externalId: "A4", label: "A4", reason: "occupied" }],
     });
   });
 });

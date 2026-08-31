@@ -29,6 +29,11 @@ type SeatNodeProps = {
   seat: CanvasSeat;
   origin: Point;
   selected: boolean;
+  /**
+   * 选中态画成**虚线圈**而不是实心底光——团体占位模式下座位是一排 checkbox，
+   * 选中意味着"待提交"，跟平时"当前正在看这个座位"是两回事，视觉上必须分得开。
+   */
+  picking?: boolean;
   /** 拖拽期间的临时位移。**不写进文档**，所以整份 doc 不重建、memo 全部生效。 */
   offset: Point | null;
   showLabel: boolean;
@@ -66,6 +71,7 @@ export const SeatNode = memo(function SeatNode({
   seat,
   origin,
   selected,
+  picking,
   offset,
   showLabel,
   occupant,
@@ -109,18 +115,40 @@ export const SeatNode = memo(function SeatNode({
                 .join(" · ")}
         </title>
       ) : null}
-      {selected && (
-        // 一层半透明底光足够表达选中，同时不遮挡座位自身的占用颜色与停用斜杠。
-        <circle
-          data-seat-selection-glow="true"
-          cx={cx}
-          cy={cy}
-          r={SEAT_R + px(4)}
-          fill="var(--primary)"
-          fillOpacity={0.18}
-          style={{ pointerEvents: "none" }}
-        />
-      )}
+      {selected &&
+        (picking ? (
+          /**
+           * 勾选态：虚线圈 + 极淡底色。
+           *
+           * 虚线是刻意的——它读起来是"框住了、还没落定"，正好对应"已经勾上、
+           * 但还没提交"。实线或纯底光都太像"已经是这样了"，在一屏里跟真正已占
+           * 用的座位混在一起分不出来。线宽和虚线段长都走 `px()` 换算回世界坐标，
+           * 所以缩放时它在屏幕上恒定，密集区域不会糊成一团。
+           */
+          <circle
+            data-seat-pick-ring="true"
+            cx={cx}
+            cy={cy}
+            r={SEAT_R + px(4.5)}
+            fill="var(--primary)"
+            fillOpacity={0.1}
+            stroke="var(--primary)"
+            strokeWidth={px(1.6)}
+            strokeDasharray={`${px(3.5)} ${px(2.5)}`}
+            style={{ pointerEvents: "none" }}
+          />
+        ) : (
+          // 一层半透明底光足够表达选中，同时不遮挡座位自身的占用颜色与停用斜杠。
+          <circle
+            data-seat-selection-glow="true"
+            cx={cx}
+            cy={cy}
+            r={SEAT_R + px(4)}
+            fill="var(--primary)"
+            fillOpacity={0.18}
+            style={{ pointerEvents: "none" }}
+          />
+        ))}
 
       <g opacity={planDisabled ? 0.35 : 1}>
         <circle

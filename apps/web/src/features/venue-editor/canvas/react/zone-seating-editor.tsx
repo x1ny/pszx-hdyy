@@ -70,6 +70,18 @@ import { useViewport } from "./use-viewport";
 
 const TAP_THRESHOLD_PX = 4;
 
+/**
+ * 这次选择变化是**怎么来的**。
+ *
+ * 编辑器只报告手势，不解释业务含义：`tap` 是点了一下（`seatIds` 为空即点在
+ * 空白处），`marquee` 是拉框，`clear` 是 Escape / 删除之类的显式清空。
+ *
+ * 有这个参数，调用方才能把同一份 `Selection` 解释成不同的东西——排位页的团体
+ * 占位模式就靠它把「点座位」做成勾选取反、把「框选」做成并入，而普通模式仍然
+ * 是整体替换。否则「点空白清空」和「框选到 0 个座位」在调用方眼里是同一件事。
+ */
+export type SelectionChangeOrigin = "tap" | "marquee" | "clear";
+
 const TOOL_ITEMS: { value: SeatTool; label: string; icon: typeof SofaIcon }[] =
   [
     { value: "select", label: "选择", icon: MousePointer2Icon },
@@ -96,11 +108,13 @@ export function ZoneSeatingEditor({
   onEscape,
   seatStatus,
   assignOnly,
+  pickMode,
 }: {
   zone: CanvasZone;
   state: EditorState;
   selection: Selection;
-  onSelectionChange: (next: Selection) => void;
+  /** `origin` 说明这次变化来自哪种手势，见 `SelectionChangeOrigin`。 */
+  onSelectionChange: (next: Selection, origin: SelectionChangeOrigin) => void;
   onCommand: (run: (current: EditorState) => EditorState) => void;
   onBack: () => void;
   backLabel?: string;
@@ -146,6 +160,14 @@ export function ZoneSeatingEditor({
    * 场地库和活动空间两处仍然全功能编辑，不传这个 prop。
    */
   assignOnly?: boolean;
+  /**
+   * 勾选模式：选中的座位画成虚线圈，表示"已勾上、待提交"。
+   *
+   * 编辑器本身**不因此改变任何交互**——点选还是点选、框选还是框选，怎么把手势
+   * 解释成勾选是调用方的事（见 `SelectionChangeOrigin`）。这里只负责让这一批
+   * 选中态跟平时的"当前查看的座位"长得不一样。
+   */
+  pickMode?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -355,7 +377,7 @@ export function ZoneSeatingEditor({
               point,
               live.current.hitRadius,
             );
-            onSelectionChange({ zoneIds: [], seatIds });
+            onSelectionChange({ zoneIds: [], seatIds }, "marquee");
             return;
           }
           default:
@@ -398,6 +420,7 @@ export function ZoneSeatingEditor({
     const seatId = hitSeat(d, point, live.current.hitRadius);
     onSelectionChange(
       seatId ? { zoneIds: [], seatIds: [seatId] } : EMPTY_SELECTION,
+      "tap",
     );
   };
 
@@ -430,7 +453,7 @@ export function ZoneSeatingEditor({
             event.preventDefault();
             return;
           }
-          onSelectionChange(EMPTY_SELECTION);
+          onSelectionChange(EMPTY_SELECTION, "clear");
         }
         return;
       }
@@ -441,7 +464,7 @@ export function ZoneSeatingEditor({
         return;
       }
       if (event.key === "Escape") {
-        onSelectionChange(EMPTY_SELECTION);
+        onSelectionChange(EMPTY_SELECTION, "clear");
         setTool("select");
         return;
       }
@@ -449,7 +472,7 @@ export function ZoneSeatingEditor({
         const sel = live.current.selection;
         if (sel.seatIds.length > 0) {
           onCommand((s) => execute(s, removeSeats(sel.seatIds)));
-          onSelectionChange(EMPTY_SELECTION);
+          onSelectionChange(EMPTY_SELECTION, "clear");
         }
       }
     };
@@ -647,6 +670,7 @@ export function ZoneSeatingEditor({
                         seat={seat}
                         origin={{ x: 0, y: 0 }}
                         selected={selectedSeats.has(seat.externalId)}
+                        picking={pickMode}
                         offset={
                           dragOffset?.seatIds.has(seat.externalId)
                             ? dragOffset.delta

@@ -5,6 +5,7 @@ import {
   CircleSlashIcon,
   DiamondIcon,
   DownloadIcon,
+  Loader2Icon,
   Maximize2Icon,
   Minimize2Icon,
   TriangleAlertIcon,
@@ -20,10 +21,13 @@ import {
 } from "#/features/venue-editor/canvas/core/interaction";
 import {
   type OrganizationSeatSelectionCandidate,
-  type OrganizationSeatSelectionResult,
-  resolveOrganizationSeatSelection,
+  type OrganizationSeatSelectionSkip,
+  resolveOrganizationSeatPick,
 } from "#/features/venue-editor/canvas/organization-seat-selection";
-import { ZoneSeatingEditor } from "#/features/venue-editor/canvas/react/zone-seating-editor";
+import {
+  type SelectionChangeOrigin,
+  ZoneSeatingEditor,
+} from "#/features/venue-editor/canvas/react/zone-seating-editor";
 import {
   buildSeatOccupantVisual,
   type OrganizationSeatLegendItem,
@@ -46,6 +50,7 @@ import {
   supportsFullscreenRequest,
 } from "./-fullscreen-utils";
 import {
+  assignOrganizationSeatBatch,
   assignSeat,
   organizationSeatingStatsQueryOptions,
   seatingKeys,
@@ -97,12 +102,15 @@ function SeatingCanvasPage() {
 
   const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
   const [organizationBatchOpen, setOrganizationBatchOpen] = useState(false);
-  const [organizationBatchDraft, setOrganizationBatchDraft] =
-    useState<OrganizationSeatBatchSelectionDraft | null>(null);
   const [organizationSelectionSession, setOrganizationSelectionSession] =
     useState<OrganizationSeatBatchSelectionDraft | null>(null);
-  const [organizationSelectionResult, setOrganizationSelectionResult] =
-    useState<OrganizationSeatSelectionResult | null>(null);
+  /**
+   * 上一次勾选动作被挡下的位置。**只反映最近一次动作**，不累积——它回答的是
+   * "我刚才点/框的那一下为什么没全选上"，累积起来反而看不出是哪一次的事。
+   */
+  const [organizationPickSkipped, setOrganizationPickSkipped] = useState<
+    OrganizationSeatSelectionSkip[]
+  >([]);
   const [isExporting, setIsExporting] = useState(false);
 
   /**
@@ -203,16 +211,6 @@ function SeatingCanvasPage() {
   const selectedAssignment = selectedSeat
     ? (assignmentBySeatId.get(selectedSeat.id) ?? null)
     : null;
-  // 保持编辑器传回的顺序：团体批量接口把它定义为操作者的显式位置顺序。
-  const selectedSeats = useMemo(
-    () =>
-      selection.seatIds.flatMap((externalId) => {
-        const seat = seatByExternalId.get(externalId);
-        return seat ? [{ id: seat.id, label: seat.label }] : [];
-      }),
-    [seatByExternalId, selection.seatIds],
-  );
-
   const readOnly = bundle?.plan.status === "voided";
   const organizationBatchUnavailableReason = readOnly
     ? "方案已作废，不能再修改"
@@ -320,49 +318,140 @@ function SeatingCanvasPage() {
   ) => {
     setSwapFrom(null);
     setSelection(EMPTY_SELECTION);
-    setOrganizationBatchDraft(draft);
     setOrganizationSelectionSession(draft);
-    setOrganizationSelectionResult(null);
+    setOrganizationPickSkipped([]);
     setOrganizationBatchOpen(false);
   };
 
-  const cancelOrganizationSeatSelection = () => {
+  /**
+   * 退出团体占位模式，回到普通排位画布。
+   *
+   * 提交、取消、Escape 三条路都收口在这里，**都不回弹窗**——弹窗只是入口，
+   * 勾选和写入都在画布上完成，退出之后没有它还要接着做的事。
+   */
+  const exitOrganizationSeatSelection = () => {
     setOrganizationSelectionSession(null);
-    setOrganizationSelectionResult(null);
+    setOrganizationPickSkipped([]);
     setSelection(EMPTY_SELECTION);
-    // 返回设置弹窗不等于仍处于画布选座模式；Escape 与取消按钮都在这里收口。
-    setOrganizationBatchOpen(true);
   };
 
-  const completeOrganizationSeatSelection = () => {
+  /**
+   * 团体占位模式下画布数据刷新后，把勾选集按最新可用性过一遍。
+   *
+   * 勾选是纯前端暂存，期间别人可能把其中某个位置占走。不同步的话提示条会一直
+   * 报着"已选 8 个"，直到提交那一刻才被服务端挡回——那时候用户已经不知道是
+   * 哪一个出的问题了。
+   *
+   * 用 `setSelection` 的函数式更新读当前选择，而不是把 `selection` 放进依赖
+   * ——否则每勾一下都会重跑一次归一，而勾选那条路径上可用性根本没变。
+   */
+  useEffect(() => {
     if (!organizationSelectionSession) return;
-    if (
-      !organizationSelectionResult ||
-      organizationSelectionResult.insufficient > 0
-    ) {
-      toast.error("可用位置不足，请调整起点或框选范围后再完成");
+    setSelection((current) => {
+      const result = resolveOrganizationSeatPick({
+        action: "sync",
+        zoneExternalId: zone?.externalId ?? "",
+        requestedExternalIds: [],
+        currentExternalIds: current.seatIds,
+        candidates: organizationSelectionCandidates,
+      });
+      if (!result.dropped.length) return current;
+      toast.warning(
+        `${result.dropped.length} 个已勾选的位置被占用或停用，已从本次选择中移出`,
+      );
+      return { zoneIds: [], seatIds: result.selectedExternalIds };
+    });
+  }, [
+    organizationSelectionSession,
+    organizationSelectionCandidates,
+    zone?.externalId,
+  ]);
+
+  const organizationBatchMutation = useMutation({
+    mutationFn: (input: {
+      organizationId: number;
+      organizationName: string;
+      orderedSeatIds: number[];
+    }) =>
+      assignOrganizationSeatBatch({
+        planId,
+        organizationId: input.organizationId,
+        orderedSeatIds: input.orderedSeatIds,
+        // 目标数就是操作者勾了几个。服务端仍然逐个复核可用性，只是不再由它
+        // 决定"该占几个"——那个决定已经完整地表达在这批勾选里了。
+        targetMode: "custom",
+        targetCount: input.orderedSeatIds.length,
+      }),
+    onSuccess: (result, input) => {
+      if (!result.applied) {
+        // 勾选之后被别的操作者抢走了位置。刷新画布让占用色显示出来，勾选集由
+        // 上面的 sync 自动剔除失效项，用户补勾几个就能再提交。
+        toast.error("部分位置已被占用，已刷新画布，请补选后重新提交");
+        invalidate();
+        return;
+      }
+      toast.success(
+        `已为「${input.organizationName}」占用 ${result.seatIds.length} 个位置`,
+      );
+      if (result.wasConfirmed) {
+        toast.warning("这份排位已经确认发布过，改动后需要重新确认");
+      }
+      exitOrganizationSeatSelection();
+      invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  /**
+   * 完成选座 = 直接提交。
+   *
+   * 不再回弹窗做二次预览：勾了哪些位置画布上一眼看得见，再让用户去弹窗里确认
+   * 一遍同一件事只是多一步。可用性由服务端在同一个事务里复核，冲突走上面的
+   * `applied === false` 分支。
+   */
+  const completeOrganizationSeatSelection = () => {
+    const session = organizationSelectionSession;
+    if (!session || organizationBatchMutation.isPending) return;
+
+    const orderedSeatIds = selection.seatIds.flatMap((externalId) => {
+      const seat = seatByExternalId.get(externalId);
+      return seat ? [seat.id] : [];
+    });
+    if (!orderedSeatIds.length) {
+      toast.error("请先在画布上勾选至少一个位置");
       return;
     }
-    setOrganizationSelectionSession(null);
-    setOrganizationSelectionResult(null);
-    setOrganizationBatchOpen(true);
+
+    organizationBatchMutation.mutate({
+      organizationId: session.organizationId,
+      organizationName: session.organizationName,
+      orderedSeatIds,
+    });
   };
 
   /**
    * 对调模式下，点中另一个座位就是"选目标"而不是"改选中"。
    * 点空白处（没有座位）当取消——不然进了对调模式就只能靠按钮退出。
    */
-  const handleSelectionChange = (next: Selection) => {
+  const handleSelectionChange = (
+    next: Selection,
+    origin: SelectionChangeOrigin,
+  ) => {
     if (organizationSelectionSession) {
-      const result = resolveOrganizationSeatSelection({
-        mode: organizationSelectionSession.mode,
-        targetCount: organizationSelectionSession.targetCount,
+      // 勾选模式下座位是 checkbox：点一下取反，框选并入，点空白什么都不做。
+      // Escape 想退出模式走 onEscape，不该在这里被当成"清空勾选"。
+      if (origin === "clear") return;
+      if (origin === "tap" && !next.seatIds.length) return;
+
+      const result = resolveOrganizationSeatPick({
+        action: origin === "tap" ? "toggle" : "add",
         zoneExternalId: zone?.externalId ?? "",
         requestedExternalIds: next.seatIds,
+        currentExternalIds: selection.seatIds,
         candidates: organizationSelectionCandidates,
       });
-      setOrganizationSelectionResult(result);
       setSelection({ zoneIds: [], seatIds: result.selectedExternalIds });
+      setOrganizationPickSkipped(result.rejected);
       return;
     }
 
@@ -451,8 +540,10 @@ function SeatingCanvasPage() {
         {organizationSelectionSession ? (
           <OrganizationSeatSelectionNotice
             draft={organizationSelectionSession}
-            result={organizationSelectionResult}
-            onCancel={cancelOrganizationSeatSelection}
+            pickedCount={selection.seatIds.length}
+            skipped={organizationPickSkipped}
+            submitting={organizationBatchMutation.isPending}
+            onCancel={exitOrganizationSeatSelection}
             onComplete={completeOrganizationSeatSelection}
           />
         ) : null}
@@ -566,11 +657,12 @@ function SeatingCanvasPage() {
         backLabel="返回排位列表"
         seatStatus={seatStatus}
         assignOnly
+        pickMode={organizationSelectionSession !== null}
         isFullscreen={isFullscreen}
         onExitFullscreen={exitFullscreen}
         onEscape={() => {
           if (!organizationSelectionSession) return false;
-          cancelOrganizationSeatSelection();
+          exitOrganizationSeatSelection();
           return true;
         }}
         toolbarActions={
@@ -628,80 +720,104 @@ function SeatingCanvasPage() {
                 <OrganizationSeatBatchDialog
                   open={organizationBatchOpen}
                   planId={planId}
-                  selectedSeats={selectedSeats}
                   readOnly={readOnly}
-                  selectionDraft={organizationBatchDraft}
                   onOpenChange={setOrganizationBatchOpen}
-                  onDismiss={() => {
-                    setOrganizationBatchDraft(null);
-                    setOrganizationSelectionSession(null);
-                    setOrganizationSelectionResult(null);
-                  }}
                   onStartSeatSelection={startOrganizationSeatSelection}
                   onApplied={() => {
+                    // 整体解除会把画布上的位置腾空，当前选中的那个可能正是被
+                    // 解除的一个；清掉选择比让右侧面板对着一份旧状态安全。
                     setSelection(EMPTY_SELECTION);
-                    setOrganizationBatchDraft(null);
-                    setOrganizationSelectionSession(null);
-                    setOrganizationSelectionResult(null);
                     invalidate();
                   }}
                 />
               </>
             )}
-            <SeatAssignPanel
-              planId={planId}
-              seat={selectedSeat}
-              assignment={selectedAssignment}
-              readOnly={readOnly}
-              pending={assignMutation.isPending || unassignMutation.isPending}
-              organizationSeatInfoById={organizationSeatInfoById}
-              onAssign={(segmentMemberId) =>
-                selectedSeat &&
-                assignMutation.mutate({
-                  seatId: selectedSeat.id,
-                  segmentMemberId,
-                })
-              }
-              onUnassign={() =>
-                selectedSeat && unassignMutation.mutate(selectedSeat.id)
-              }
-            />
 
-            {/* 对调只在这个座位上有人时才有意义——空座位要"换人"直接在上面的
-                候选人列表里点一下就行，不需要走对调。 */}
-            {selectedSeat && selectedAssignment && !readOnly && (
-              <Button
-                variant="outline"
-                disabled={swapMutation.isPending}
-                onClick={() =>
-                  setSwapFrom({
-                    id: selectedSeat.id,
-                    label: selectedSeat.label,
-                  })
-                }
-              >
-                <ArrowLeftRightIcon />
-                与其它座位对调
-              </Button>
-            )}
+            {/**
+             * 勾选模式下右侧整块让位。
+             *
+             * 画布上那批虚线圈是"待提交的一批"，此时再摆一个"位置 A4 · 给它排人"
+             * 的面板，两种含义会打架：那个 A4 只是这批里的第一个，不是用户选中的
+             * 单个座位。更实际的是——在这里排人或停用位置会当场改掉自己刚勾上的
+             * 位置，提交时才以"部分位置已被占用"的形式弹回来。
+             */}
+            {organizationSelectionSession ? (
+              <aside className="flex flex-col gap-2 rounded-lg border border-primary/30 bg-primary/5 p-4">
+                <div className="flex items-center gap-2 font-medium text-sm">
+                  <UsersRoundIcon className="size-4 text-primary" />
+                  团体占位模式
+                </div>
+                <p className="text-muted-foreground text-xs leading-5">
+                  正在为「{organizationSelectionSession.organizationName}
+                  」勾选位置。这期间画布只做勾选，排人、对调、启用停用都先停用，
+                  提交或取消之后恢复。
+                </p>
+                <p className="font-medium text-sm tabular-nums">
+                  已勾选 {selection.seatIds.length} 个位置
+                </p>
+              </aside>
+            ) : (
+              <>
+                <SeatAssignPanel
+                  planId={planId}
+                  seat={selectedSeat}
+                  assignment={selectedAssignment}
+                  readOnly={readOnly}
+                  pending={
+                    assignMutation.isPending || unassignMutation.isPending
+                  }
+                  organizationSeatInfoById={organizationSeatInfoById}
+                  onAssign={(segmentMemberId) =>
+                    selectedSeat &&
+                    assignMutation.mutate({
+                      seatId: selectedSeat.id,
+                      segmentMemberId,
+                    })
+                  }
+                  onUnassign={() =>
+                    selectedSeat && unassignMutation.mutate(selectedSeat.id)
+                  }
+                />
 
-            {/* 启用/停用是本环节的业务状态，不是几何，跟排人一样即时提交
-                （§17.5）——排位阶段的画布已经只读，不需要再有一个只为它
-                存在的本地脏状态和保存按钮。 */}
-            {selectedSeat && !readOnly && (
-              <Button
-                variant="outline"
-                disabled={setEnabledMutation.isPending}
-                onClick={() =>
-                  selectedSeat &&
-                  setEnabledMutation.mutate({
-                    seatId: selectedSeat.id,
-                    enabled: !selectedSeat.enabled,
-                  })
-                }
-              >
-                {selectedSeat.enabled ? "本环节停用此位置" : "本环节启用此位置"}
-              </Button>
+                {/* 对调只在这个座位上有人时才有意义——空座位要"换人"直接在上面的
+                    候选人列表里点一下就行，不需要走对调。 */}
+                {selectedSeat && selectedAssignment && !readOnly && (
+                  <Button
+                    variant="outline"
+                    disabled={swapMutation.isPending}
+                    onClick={() =>
+                      setSwapFrom({
+                        id: selectedSeat.id,
+                        label: selectedSeat.label,
+                      })
+                    }
+                  >
+                    <ArrowLeftRightIcon />
+                    与其它座位对调
+                  </Button>
+                )}
+
+                {/* 启用/停用是本环节的业务状态，不是几何，跟排人一样即时提交
+                    （§17.5）——排位阶段的画布已经只读，不需要再有一个只为它
+                    存在的本地脏状态和保存按钮。 */}
+                {selectedSeat && !readOnly && (
+                  <Button
+                    variant="outline"
+                    disabled={setEnabledMutation.isPending}
+                    onClick={() =>
+                      selectedSeat &&
+                      setEnabledMutation.mutate({
+                        seatId: selectedSeat.id,
+                        enabled: !selectedSeat.enabled,
+                      })
+                    }
+                  >
+                    {selectedSeat.enabled
+                      ? "本环节停用此位置"
+                      : "本环节启用此位置"}
+                  </Button>
+                )}
+              </>
             )}
           </div>
         }
@@ -715,20 +831,30 @@ const ORGANIZATION_SELECTION_SKIP_LABELS = {
   occupied: "已占用",
 } as const;
 
+/**
+ * 团体占位模式的操作条。
+ *
+ * 这里的数字是**参考不是门槛**：勾少于剩余人数照样能提交（现场常见的做法就是
+ * 先圈一片，人到齐了再补），勾多了也不拦——多出来的位置是不是要留，操作者比
+ * 系统清楚。所以只呈现对比，不做校验。
+ */
 function OrganizationSeatSelectionNotice({
   draft,
-  result,
+  pickedCount,
+  skipped,
+  submitting,
   onCancel,
   onComplete,
 }: {
   draft: OrganizationSeatBatchSelectionDraft;
-  result: OrganizationSeatSelectionResult | null;
+  pickedCount: number;
+  skipped: readonly OrganizationSeatSelectionSkip[];
+  submitting: boolean;
   onCancel: () => void;
   onComplete: () => void;
 }) {
-  const selectedCount = result?.selectedExternalIds.length ?? 0;
-  const insufficient = result?.insufficient ?? draft.targetCount;
-  const ready = result !== null && insufficient === 0;
+  const remaining = draft.suggestedCount;
+  const gap = remaining - pickedCount;
 
   return (
     <section
@@ -739,51 +865,63 @@ function OrganizationSeatSelectionNotice({
         <div className="flex flex-wrap items-center gap-2">
           <UsersRoundIcon className="size-4 shrink-0 text-primary" />
           <span className="font-medium">
-            正在为「{draft.organizationName}」
-            {draft.mode === "continuous" ? "连续选座" : "框选区域"}
+            正在为「{draft.organizationName}」勾选位置
           </span>
-          <Badge variant={ready ? "secondary" : "outline"}>
-            已选 {selectedCount} / {draft.targetCount}
+          <Badge
+            variant={pickedCount ? "default" : "outline"}
+            className="tabular-nums"
+          >
+            已勾选 {pickedCount}
           </Badge>
+          <span className="text-muted-foreground text-xs tabular-nums">
+            该团体还有 {remaining} 人未按个人排座
+          </span>
         </div>
         <p className="mt-1 text-muted-foreground text-xs">
-          {draft.mode === "continuous"
-            ? "点击画布中的起始座位，系统会按位置顺序向后取可用座位。"
-            : "从画布空白处拖拽框住位置，系统会按位置顺序取框内可用座位。"}
+          点座位勾选或取消，从空白处拖拽可框选一片并入；不排满也可以直接提交。
         </p>
-        {result?.skipped.length ? (
+        {skipped.length ? (
           <p className="mt-1 text-muted-foreground text-xs">
-            已跳过 {result.skipped.length} 个不可用位置（
-            {result.skipped
+            刚才有 {skipped.length} 个位置不能勾选（
+            {skipped
               .slice(0, 3)
               .map(
                 (seat) =>
-                  seat.label +
-                  "：" +
-                  ORGANIZATION_SELECTION_SKIP_LABELS[seat.reason],
+                  `${seat.label}：${ORGANIZATION_SELECTION_SKIP_LABELS[seat.reason]}`,
               )
               .join("、")}
-            {result.skipped.length > 3 ? "…" : ""}）。
+            {skipped.length > 3 ? "…" : ""}）。
           </p>
         ) : null}
-        {result?.overflowCount ? (
-          <p className="mt-1 text-muted-foreground text-xs">
-            框内多出的 {result.overflowCount}{" "}
-            个可用位置未选入，已按位置顺序只保留前 {draft.targetCount} 个。
+        {pickedCount > 0 && gap > 0 ? (
+          <p className="mt-1 text-muted-foreground text-xs tabular-nums">
+            比剩余人数少 {gap} 个，提交后仍可再来一次补上。
           </p>
         ) : null}
-        {insufficient > 0 ? (
-          <p className="mt-1 text-destructive text-xs">
-            还差 {insufficient} 个可用位置，暂不能完成选座。
+        {gap < 0 ? (
+          <p className="mt-1 text-warning-foreground text-xs tabular-nums">
+            比剩余人数多 {-gap} 个位置，确认是有意多留的再提交。
           </p>
         ) : null}
       </div>
       <div className="ml-auto flex items-center gap-2">
-        <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={submitting}
+          onClick={onCancel}
+        >
           取消选座
         </Button>
-        <Button type="button" size="sm" disabled={!ready} onClick={onComplete}>
-          完成选座
+        <Button
+          type="button"
+          size="sm"
+          disabled={submitting || pickedCount === 0}
+          onClick={onComplete}
+        >
+          {submitting ? <Loader2Icon className="animate-spin" /> : null}
+          提交占位（{pickedCount}）
         </Button>
       </div>
     </section>
