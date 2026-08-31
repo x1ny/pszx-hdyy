@@ -17,7 +17,7 @@ export const seed: SeedFn = async (db, { userId }) => {
     id: DEMO.venueId,
     name: "杭州国际博览中心 A 馆",
     address: "杭州市萧山区奔竞大道 353 号",
-    description: "开发用演示场地：两个区域、十个座位。",
+    description: "开发用演示场地：两个区域、五十个座位。",
     status: "enabled",
     createdBy: userId,
     updatedBy: userId,
@@ -43,7 +43,7 @@ export const seed: SeedFn = async (db, { userId }) => {
   ]);
 
   await db.insert(venueSeat).values(
-    Array.from({ length: 10 }, (_, index) => ({
+    Array.from({ length: 50 }, (_, index) => ({
       venueId: DEMO.venueId,
       zoneId: 1,
       externalId: `seat-a-${index + 1}`,
@@ -77,7 +77,7 @@ export const seed: SeedFn = async (db, { userId }) => {
       name: "主会场坐席区",
       kind: "seating",
       purpose: DEFAULT_PURPOSE_BY_KIND.seating,
-      capacity: 10,
+      capacity: 50,
       status: "active",
       ordinal: 0,
     },

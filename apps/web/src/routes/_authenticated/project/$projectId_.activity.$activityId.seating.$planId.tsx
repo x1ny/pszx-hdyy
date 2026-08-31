@@ -643,7 +643,7 @@ function SeatingCanvasPage() {
         frameClassName={
           isFullscreen
             ? "fixed inset-0 z-50 h-dvh w-dvw overflow-hidden bg-background p-4"
-            : undefined
+            : "h-[680px] flex-none"
         }
         headerContent={isFullscreen ? editorOperationNotices : null}
         zone={zone}
@@ -698,7 +698,7 @@ function SeatingCanvasPage() {
         }
         legend={<SeatStatusLegend organizations={organizationLegend} />}
         rightPanel={
-          <div className="flex w-72 shrink-0 flex-col gap-3">
+          <div className="flex min-h-0 w-72 shrink-0 flex-col gap-3">
             {!readOnly && (
               <>
                 <Button

@@ -35,6 +35,33 @@ const NAMES = [
   "梁爽",
   "谢婉",
   "唐宁",
+  "宋佳",
+  "潘婷",
+  "许晨",
+  "沈悦",
+  "韩松",
+  "董洁",
+  "蒋楠",
+  "邱明",
+  "袁媛",
+  "傅杰",
+  "叶青",
+  "卢俊",
+  "方圆",
+  "杜娟",
+  "魏东",
+  "沈琳",
+  "彭飞",
+  "曹颖",
+  "秦川",
+  "罗欣",
+  "顾成",
+  "程璐",
+  "冯凯",
+  "邵宁",
+  "曾诚",
+  "陆瑶",
+  "贺敏",
 ];
 
 const COMPANY_POSITIONS = [
@@ -83,6 +110,7 @@ const NATIVE_PLACES = [
 // 外籍那一位。籍贯必须为空——服务端会拒绝"非中国籍 + 有籍贯"的组合，
 // 种子里放一条正好让这条联动规则在开发环境里一直有个活样本。
 const FOREIGN_INDEX = 19;
+const CROSS_SEGMENT_MEMBER_INDEX = 2;
 
 const organizationIdAt = (index: number): number | null =>
   index < 7
@@ -93,10 +121,11 @@ const organizationIdAt = (index: number): number | null =>
         ? DEMO.organizationIds.designerAssociation
         : null;
 
-// 主论坛要能真实调排位，所以覆盖活动里的绝大多数人员；刻意排除张伟（index 2），
-// 他只参加与主论坛重叠的分论坛。这样候选人足够多，同时议程页仍然只有王芳那一处
-// 预设的跨环节时间冲突，不会因为补排位演示数据额外制造第二处冲突。
-const FORUM_MEMBER_INDEXES = [0, 1, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
+// 主论坛固定放 50 人供排座；刻意排除张伟（index 2），他只参加与主论坛重叠的
+// 分论坛。这样既能压测 50 人候选列表，也保留跨环节人员范围和唯一冲突样本。
+const FORUM_MEMBER_INDEXES = NAMES.map((_, index) => index).filter(
+  (index) => index !== CROSS_SEGMENT_MEMBER_INDEX,
+);
 
 const forumRoleAt = (index: number): SegmentMemberRole =>
   index === 0 ? "演讲嘉宾" : index < 4 ? "嘉宾" : "参会人员";
@@ -132,15 +161,15 @@ export const seed: SeedFn = async (db, { userId }) => {
       email: `member${index + 1}@example.com`,
       language: "中文",
       status:
-        index === NAMES.length - 1
+        index === CROSS_SEGMENT_MEMBER_INDEX
           ? ("disabled" as const)
           : ("enabled" as const),
       ...audit,
     })),
   );
 
-  // 全部 24 人进项目，活动只进前 12 人 —— 两层的数量刻意不同，这样
-  // 「项目人员」和「活动人员」两张列表的数字对不上时能立刻看出是哪一层的问题。
+  // 全部 51 人进项目和活动；主论坛进 50 人，张伟只参加分论坛。这样排座候选
+  // 刚好 50 人，同时保留「跨环节人员不出现在当前排座列表」的调试样本。
   await db.insert(projectMember).values(
     NAMES.map((_, index) => ({
       id: index + 1,
@@ -153,7 +182,7 @@ export const seed: SeedFn = async (db, { userId }) => {
   );
 
   await db.insert(activityMember).values(
-    Array.from({ length: 12 }, (_, index) => ({
+    Array.from({ length: NAMES.length }, (_, index) => ({
       id: index + 1,
       activityId: DEMO.activityId,
       projectId: DEMO.projectId,

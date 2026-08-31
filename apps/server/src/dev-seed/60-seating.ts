@@ -8,13 +8,17 @@ import {
 } from "../modules/seating/schema";
 import { DEMO, type SeedFn } from "./context";
 
-const SEAT_COLUMNS = 5;
-const SEAT_COUNT = 10;
+const SEAT_COLUMNS = 10;
+const SEAT_COUNT = 50;
+const SEAT_X_GAP = 140;
+const SEAT_Y_GAP = 120;
+const CANVAS_PADDING = 100;
+const SEAT_ROWS = Math.ceil(SEAT_COUNT / SEAT_COLUMNS);
 
 const seats = Array.from({ length: SEAT_COUNT }, (_, index) => {
   const row = Math.floor(index / SEAT_COLUMNS);
   const column = index % SEAT_COLUMNS;
-  const rowLabel = row === 0 ? "A" : "B";
+  const rowLabel = String.fromCharCode("A".charCodeAt(0) + row);
 
   return {
     id: index + 1,
@@ -24,13 +28,13 @@ const seats = Array.from({ length: SEAT_COUNT }, (_, index) => {
     kind: "seat" as const,
     rank: index < 2 ? ("vip" as const) : ("normal" as const),
     ordinal: index,
-    x: 100 + column * 140,
-    y: 100 + row * 120,
+    x: CANVAS_PADDING + column * SEAT_X_GAP,
+    y: CANVAS_PADDING + row * SEAT_Y_GAP,
   };
 });
 
 /**
- * 专门给开发环境排位联调用的最小画布 fixture。
+ * 专门给开发环境排位联调用的批量画布 fixture。
  *
  * 场地种子仍然不伪造 venue_layout：场地编辑器需要覆盖「还没画平面图」的正常
  * 降级分支。但排位页若没有一份真实的方案画布，就无法调分配、解绑、换座和团体
@@ -39,7 +43,10 @@ const seats = Array.from({ length: SEAT_COUNT }, (_, index) => {
  */
 const layoutData = {
   schemaVersion: 1,
-  world: { width: 760, height: 320 },
+  world: {
+    width: CANVAS_PADDING * 2 + (SEAT_COLUMNS - 1) * SEAT_X_GAP,
+    height: CANVAS_PADDING * 2 + (SEAT_ROWS - 1) * SEAT_Y_GAP,
+  },
   zones: [
     {
       externalId: "zone-main",
@@ -52,8 +59,8 @@ const layoutData = {
         type: "rect",
         x: 0,
         y: 0,
-        width: 760,
-        height: 320,
+        width: CANVAS_PADDING * 2 + (SEAT_COLUMNS - 1) * SEAT_X_GAP,
+        height: CANVAS_PADDING * 2 + (SEAT_ROWS - 1) * SEAT_Y_GAP,
       },
     },
   ],

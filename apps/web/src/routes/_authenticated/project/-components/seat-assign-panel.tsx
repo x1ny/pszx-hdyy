@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
   Loader2Icon,
   SearchIcon,
   UserMinusIcon,
@@ -18,6 +20,8 @@ import {
   seatingCandidatesQueryOptions,
 } from "../-venue-queries";
 import type { OrganizationSeatInfo } from "../-venue-utils";
+
+const CANDIDATE_PAGE_SIZE = 8;
 
 /**
  * 排位画布右侧的人员面板。
@@ -49,12 +53,26 @@ export function SeatAssignPanel({
   onUnassign: () => void;
 }) {
   const [keyword, setKeyword] = useState("");
+  const [page, setPage] = useState(1);
 
   const candidatesQuery = useQuery({
     ...seatingCandidatesQueryOptions(planId, keyword || undefined),
     enabled: seat !== null && !readOnly,
   });
   const isOrganizationAssignment = assignment?.occupantType === "organization";
+  const candidates = candidatesQuery.data?.list ?? [];
+  const totalPages = Math.max(
+    1,
+    Math.ceil(candidates.length / CANDIDATE_PAGE_SIZE),
+  );
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * CANDIDATE_PAGE_SIZE;
+  const visibleCandidates = candidates.slice(
+    pageStart,
+    pageStart + CANDIDATE_PAGE_SIZE,
+  );
+  const rangeStart = candidates.length === 0 ? 0 : pageStart + 1;
+  const rangeEnd = Math.min(pageStart + CANDIDATE_PAGE_SIZE, candidates.length);
 
   if (!seat) {
     return (
@@ -146,7 +164,10 @@ export function SeatAssignPanel({
             <SearchIcon className="-translate-y-1/2 absolute top-1/2 left-3 size-4 text-muted-foreground" />
             <Input
               value={keyword}
-              onChange={(event) => setKeyword(event.target.value)}
+              onChange={(event) => {
+                setKeyword(event.target.value);
+                setPage(1);
+              }}
               placeholder="搜索姓名或手机号"
               className="pl-9"
             />
@@ -156,82 +177,117 @@ export function SeatAssignPanel({
             <div className="flex justify-center py-6 text-muted-foreground">
               <Loader2Icon className="size-4 animate-spin" />
             </div>
-          ) : candidatesQuery.data?.list.length ? (
-            <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
-              {candidatesQuery.data.list.map((person) => {
-                const taken = person.takenSeatLabel;
-                const organizationInfo =
-                  person.organizationId === null
-                    ? undefined
-                    : organizationSeatInfoById.get(person.organizationId);
-                const organizationColor =
-                  person.organizationId === null
-                    ? undefined
-                    : organizationSeatColor(person.organizationId);
-                const groupSeatStatus = organizationInfo?.seatLabels.length
-                  ? "团体座位"
-                  : null;
-                const seatStatus = taken ? `在 ${taken}` : groupSeatStatus;
-                const isHere =
-                  assignment?.segmentMemberId === person.segmentMemberId;
-                return (
-                  <button
-                    key={person.activityMemberId}
-                    type="button"
-                    disabled={pending || isHere}
-                    onClick={() => onAssign(person.segmentMemberId)}
-                    className={cn(
-                      "flex items-center justify-between gap-3 rounded-md px-2 py-2 text-left text-sm transition-colors",
-                      isHere
-                        ? "cursor-default bg-primary/10 text-primary"
-                        : "cursor-pointer hover:bg-muted",
-                      pending && "opacity-60",
-                    )}
-                  >
-                    <div className="min-w-0">
-                      <div className="flex min-w-0 items-baseline gap-2 leading-5">
-                        <div className="min-w-0 truncate font-medium">
-                          {person.name}
-                        </div>
-                        {organizationInfo?.name && organizationColor ? (
-                          <span
-                            className="max-w-32 shrink truncate font-medium text-xs"
-                            style={{ color: organizationColor.stroke }}
-                            title={organizationInfo.name}
-                          >
-                            {organizationInfo.name}
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className="mt-0.5 truncate text-muted-foreground text-xs leading-4">
-                        {person.companyPosition || person.mobile || "—"}
-                      </p>
-                    </div>
-                    {/* 已占座的人不藏起来：让人看见"他已经在 A3"比让他凭空
-                        消失有用，点一下就是换座。 */}
-                    {isHere ? (
-                      <span className="shrink-0 text-xs">当前</span>
-                    ) : seatStatus ? (
-                      <span
-                        className="max-w-44 shrink-0 truncate text-muted-foreground text-xs"
-                        title={seatStatus}
+          ) : candidates.length ? (
+            <div className="flex min-h-0 flex-1 flex-col gap-2">
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="flex flex-col gap-1">
+                  {visibleCandidates.map((person) => {
+                    const taken = person.takenSeatLabel;
+                    const organizationInfo =
+                      person.organizationId === null
+                        ? undefined
+                        : organizationSeatInfoById.get(person.organizationId);
+                    const organizationColor =
+                      person.organizationId === null
+                        ? undefined
+                        : organizationSeatColor(person.organizationId);
+                    const groupSeatStatus = organizationInfo?.seatLabels.length
+                      ? "团体座位"
+                      : null;
+                    const seatStatus = taken ? `在 ${taken}` : groupSeatStatus;
+                    const isHere =
+                      assignment?.segmentMemberId === person.segmentMemberId;
+                    return (
+                      <button
+                        key={person.activityMemberId}
+                        type="button"
+                        disabled={pending || isHere}
+                        onClick={() => onAssign(person.segmentMemberId)}
+                        className={cn(
+                          "flex items-center justify-between gap-3 rounded-md px-2 py-2 text-left text-sm transition-colors",
+                          isHere
+                            ? "cursor-default bg-primary/10 text-primary"
+                            : "cursor-pointer hover:bg-muted",
+                          pending && "opacity-60",
+                        )}
                       >
-                        {seatStatus}
-                      </span>
-                    ) : (
-                      <UserPlusIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                    )}
-                  </button>
-                );
-              })}
+                        <div className="min-w-0">
+                          <div className="flex min-w-0 items-baseline gap-2 leading-5">
+                            <div className="min-w-0 truncate font-medium">
+                              {person.name}
+                            </div>
+                            {organizationInfo?.name && organizationColor ? (
+                              <span
+                                className="max-w-32 shrink truncate font-medium text-xs"
+                                style={{ color: organizationColor.stroke }}
+                                title={organizationInfo.name}
+                              >
+                                {organizationInfo.name}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="mt-0.5 truncate text-muted-foreground text-xs leading-4">
+                            {person.companyPosition || person.mobile || "—"}
+                          </p>
+                        </div>
+                        {/* 已占座的人不藏起来：让人看见"他已经在 A3"比让他凭空
+                            消失有用，点一下就是换座。 */}
+                        {isHere ? (
+                          <span className="shrink-0 text-xs">当前</span>
+                        ) : seatStatus ? (
+                          <span
+                            className="max-w-44 shrink-0 truncate text-muted-foreground text-xs"
+                            title={seatStatus}
+                          >
+                            {seatStatus}
+                          </span>
+                        ) : (
+                          <UserPlusIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* 服务端 limit 200。到了上限就说出来——否则人数多的活动里，
                   排在后面的人"不搜就看不见"，而用户根本不知道列表被截断了
                   （评审 §3.14）。 */}
-              {candidatesQuery.data.list.length >= 200 && (
+              {candidates.length >= 200 && (
                 <p className="px-2 py-2 text-center text-muted-foreground text-xs">
                   仅显示前 200 人，用上面的搜索框找具体的人。
                 </p>
               )}
+
+              <div className="flex shrink-0 items-center justify-between gap-2">
+                <span className="text-muted-foreground text-xs tabular-nums">
+                  第 {rangeStart}-{rangeEnd} 条 / 共 {candidates.length} 条
+                </span>
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-sm"
+                    aria-label="上一页"
+                    title="上一页"
+                    disabled={currentPage <= 1}
+                    onClick={() => setPage(currentPage - 1)}
+                  >
+                    <ChevronLeftIcon data-icon="inline-start" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-sm"
+                    aria-label="下一页"
+                    title="下一页"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setPage(currentPage + 1)}
+                  >
+                    <ChevronRightIcon data-icon="inline-end" />
+                  </Button>
+                </div>
+              </div>
             </div>
           ) : (
             <p className="py-6 text-center text-muted-foreground text-xs">
@@ -247,7 +303,7 @@ export function SeatAssignPanel({
 /** 固定宽度，跟区域属性面板一致——切换选中时外框不跳。 */
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <aside className="flex w-72 shrink-0 flex-col gap-3 overflow-hidden rounded-lg border bg-card p-4 shadow-sm">
+    <aside className="flex min-h-0 w-72 flex-1 shrink-0 flex-col gap-3 overflow-hidden rounded-lg border bg-card p-4 shadow-sm">
       {children}
     </aside>
   );
