@@ -169,7 +169,7 @@ export function SeatAssignPanel({
                     ? undefined
                     : organizationSeatColor(person.organizationId);
                 const groupSeatStatus = organizationInfo?.seatLabels.length
-                  ? `团体座位 ${organizationInfo.seatLabels.join("、")}`
+                  ? "团体座位"
                   : null;
                 const seatStatus = taken ? `在 ${taken}` : groupSeatStatus;
                 const isHere =

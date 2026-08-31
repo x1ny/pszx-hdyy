@@ -84,6 +84,6 @@ describe("SeatAssignPanel", () => {
       expect(label).not.toHaveClass("border");
     }
     expect(screen.getByText("在 D1")).toBeInTheDocument();
-    expect(screen.getByText("团体座位 D2、D4")).toBeInTheDocument();
+    expect(screen.getByText("团体座位")).toBeInTheDocument();
   });
 });
