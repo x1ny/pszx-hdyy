@@ -128,7 +128,15 @@ const FORUM_MEMBER_INDEXES = NAMES.map((_, index) => index).filter(
 );
 
 const forumRoleAt = (index: number): SegmentMemberRole =>
-  index === 0 ? "演讲嘉宾" : index < 4 ? "嘉宾" : "参会人员";
+  index === 0
+    ? "领导嘉宾"
+    : index === 1
+      ? "企业家嘉宾"
+      : index === 3
+        ? "主流媒体代表"
+        : index === 4
+          ? "网络达人代表"
+          : "社会人士";
 
 export const seed: SeedFn = async (db, { userId }) => {
   const audit = { createdBy: userId, updatedBy: userId };
@@ -204,7 +212,7 @@ export const seed: SeedFn = async (db, { userId }) => {
       activityMemberId: 1,
       memberId: 1,
       organizationId: organizationIdAt(0),
-      segmentRole: "演讲嘉宾",
+      segmentRole: "领导嘉宾",
       ...audit,
     },
     ...FORUM_MEMBER_INDEXES.map((index) => ({
@@ -224,7 +232,7 @@ export const seed: SeedFn = async (db, { userId }) => {
       activityMemberId: 1,
       memberId: 1,
       organizationId: organizationIdAt(0),
-      segmentRole: "嘉宾",
+      segmentRole: "企业家嘉宾",
       ...audit,
     },
     {
@@ -233,7 +241,7 @@ export const seed: SeedFn = async (db, { userId }) => {
       activityMemberId: 3,
       memberId: 3,
       organizationId: organizationIdAt(2),
-      segmentRole: "参会人员",
+      segmentRole: "社会人士",
       ...audit,
     },
   ]);

@@ -463,8 +463,9 @@ export const RELATION_ORIGIN_LABELS = {
 } as const satisfies Record<ActivityMember["originType"], string>;
 
 export const SEGMENT_MEMBER_ROLE_VALUES = [
-  "演讲嘉宾",
-  "嘉宾",
-  "参会人员",
-  "工作人员",
+  "领导嘉宾",
+  "企业家嘉宾",
+  "主流媒体代表",
+  "网络达人代表",
+  "社会人士",
 ] as const;

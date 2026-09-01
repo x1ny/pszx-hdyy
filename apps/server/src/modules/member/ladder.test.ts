@@ -190,7 +190,7 @@ describe("member ladder organization snapshots", () => {
 
     await ensureSegmentMembers(fakeTx(state), {
       segmentId: 30,
-      entries: [{ memberId: 1, segmentRole: "嘉宾" }],
+      entries: [{ memberId: 1, segmentRole: "企业家嘉宾" }],
       originType: "manual",
       userId: "tester",
     });
@@ -299,11 +299,15 @@ describe("member ladder organization snapshots", () => {
       userId: "tester",
     };
 
-    await expect(ensureSegmentMemberFromActivityWithOutcome(tx, input)).resolves.toEqual({
+    await expect(
+      ensureSegmentMemberFromActivityWithOutcome(tx, input),
+    ).resolves.toEqual({
       id: 1,
       created: true,
     });
-    await expect(ensureSegmentMemberFromActivityWithOutcome(tx, input)).resolves.toEqual({
+    await expect(
+      ensureSegmentMemberFromActivityWithOutcome(tx, input),
+    ).resolves.toEqual({
       id: 1,
       created: false,
     });

@@ -65,12 +65,13 @@ export const MEMBER_RELATION_ORIGINS = [
 ] as const;
 export type MemberRelationOrigin = (typeof MEMBER_RELATION_ORIGINS)[number];
 
-/** 环节身份。取值照抄原型 agenda-timeline.html 环节人员弹窗的下拉，没有自己发明。 */
+/** 环节身份。由产品确认的环节人员分类。 */
 export const SEGMENT_MEMBER_ROLES = [
-  "演讲嘉宾",
-  "嘉宾",
-  "参会人员",
-  "工作人员",
+  "领导嘉宾",
+  "企业家嘉宾",
+  "主流媒体代表",
+  "网络达人代表",
+  "社会人士",
 ] as const;
 export type SegmentMemberRole = (typeof SEGMENT_MEMBER_ROLES)[number];
 
