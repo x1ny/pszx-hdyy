@@ -6,8 +6,13 @@ ARG BUN_IMAGE=oven/bun:1.3-alpine
 FROM ${BUN_IMAGE} AS builder
 WORKDIR /app
 
-# ARG NPM_REGISTRY=https://registry.npmmirror.com
-# ENV BUN_CONFIG_REGISTRY=${NPM_REGISTRY}
+# 依赖统一走这个源。不设的话，bun.lock 里没有显式 URL 的那些条目会去
+# registry.npmjs.org 拉 —— 国内网络下经常中途断流，拿到截断的 tarball，报成
+# `Integrity check failed for tarball: <包名>`，看着像锁文件坏了，其实是网络。
+# （npmjs 和 npmmirror 对同一个版本给的 integrity 是一致的，换源不影响校验。）
+# 换别的源：--build-arg NPM_REGISTRY=<url>，或给 build-push.ts 设 NPM_REGISTRY 环境变量。
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+ENV BUN_CONFIG_REGISTRY=${NPM_REGISTRY}
 
 # 先只拷 manifest 再装依赖，源码改动就不会让这一层的缓存失效。
 # --linker=hoisted 是刻意的：isolated 会在 node_modules/.bun 下铺一片符号链接，
