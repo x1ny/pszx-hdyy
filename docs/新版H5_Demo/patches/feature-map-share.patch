@@ -1,0 +1,817 @@
+From 5537289b5e1ecccde33a125c5f26488a0da66071 Mon Sep 17 00:00:00 2001
+From: agent <agent@example.com>
+Date: Fri, 21 Aug 2026 14:39:45 +0800
+Subject: [PATCH] map-share: refine venue overlay and sticky actions
+
+---
+ src/components/MapOverlay.tsx      | 536 ++++++++++++++++++++---------
+ src/components/StickyShareBar.tsx  |  50 ++-
+ src/components/VenueMapSection.tsx |  34 +-
+ 3 files changed, 430 insertions(+), 190 deletions(-)
+
+diff --git a/src/components/MapOverlay.tsx b/src/components/MapOverlay.tsx
+index 19656e4..fecb78f 100644
+--- a/src/components/MapOverlay.tsx
++++ b/src/components/MapOverlay.tsx
+@@ -1,5 +1,6 @@
+-import { useCallback, useRef, useState } from 'react'
+-import type { VenueMapInfo } from '@/types/itinerary'
++import { useEffect, useRef, useState } from 'react'
++import { useReducedMotion } from 'framer-motion'
++import type { VenueMapInfo, ZoneInfo } from '@/types/itinerary'
+ import { FullScreenOverlay, Icon, PillTag } from '@/components/shared'
+ import { cn } from '@/lib/utils'
+ 
+@@ -9,30 +10,29 @@ interface Transform {
+   y: number
+ }
+ 
++interface Point {
++  x: number
++  y: number
++}
++
+ const MIN_SCALE = 1
+ const MAX_SCALE = 4
+-
+-function clampTransform(t: Transform, viewport: { w: number; h: number }): Transform {
+-  const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, t.scale))
+-  // Map image fills the viewport width; allow panning within scaled bounds
+-  // plus a 24px tolerance so the base never peeks beyond that.
+-  const overX = (viewport.w * scale - viewport.w) / 2 + 24
+-  const overY = (viewport.h * scale - viewport.h) / 2 + 24
+-  return {
+-    scale,
+-    x: Math.min(overX, Math.max(-overX, t.x)),
+-    y: Math.min(overY, Math.max(-overY, t.y)),
+-  }
+-}
++const CENTER_SCALE = 1.8
++const DOUBLE_TAP_MS = 300
++const INERTIA_MS = 200
++const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)'
+ 
+ /**
+- * Full-screen venue map overlay: pinch zoom (1–4×), drag pan with boundary
+- * clamping, double-tap reset, user-zone red highlight, zone list with
+- * tap-to-center. Image loads only while the overlay is open.
++ * Full-screen venue map overlay: fixed layer (FullScreenOverlay supplies the
++ * scrim, spring entrance, close button, body scroll lock and back-key close),
++ * pinch zoom 1–4× around the pinch midpoint, boundary-clamped drag with
++ * release inertia, double-tap/double-click spring reset, red-frame user-zone
++ * highlight, and a zone list that centers the map on tap.
+  *
+- * All gesture state lives in <MapViewport/>, which FullScreenOverlay mounts
+- * only while open — so every open starts from a fresh transform with no
+- * reset effect.
++ * Gesture math runs on native pointer events and writes straight to the DOM
++ * (no per-frame React re-render). Native listeners also stop propagation of
++ * pointerdown so the overlay panel's own drag-to-close gesture never fights
++ * map panning / list scrolling.
+  */
+ export default function MapOverlay({
+   open,
+@@ -43,189 +43,377 @@ export default function MapOverlay({
+   onClose: () => void
+   venueMap: VenueMapInfo
+ }) {
++  // ESC closes the overlay (close button + scrim + back key come from
++  // FullScreenOverlay).
++  useEffect(() => {
++    if (!open) return
++    const onKey = (e: KeyboardEvent) => {
++      if (e.key === 'Escape') onClose()
++    }
++    window.addEventListener('keydown', onKey)
++    return () => window.removeEventListener('keydown', onKey)
++  }, [open, onClose])
++
+   return (
+     <FullScreenOverlay open={open} onClose={onClose} title="场地分区图">
++      {/* Mounted only while open → each open starts from a fresh transform
++          and the map image is requested only when the overlay opens. */}
+       <MapViewport venueMap={venueMap} />
+     </FullScreenOverlay>
+   )
+ }
+ 
++interface Box {
++  left: number
++  top: number
++  width: number
++  height: number
++}
++
++function zoneLetter(userZone: string): string {
++  return userZone.replace(/[^A-Za-z]/g, '').toUpperCase() || userZone
++}
++
+ function MapViewport({ venueMap }: { venueMap: VenueMapInfo }) {
+   const viewportRef = useRef<HTMLDivElement>(null)
+-  const [transform, setTransform] = useState<Transform>({ scale: 1, x: 0, y: 0 })
++  const layerRef = useRef<HTMLDivElement>(null)
++  const labelRef = useRef<HTMLSpanElement>(null)
++  const listRef = useRef<HTMLDivElement>(null)
++
+   const [imgLoaded, setImgLoaded] = useState(false)
+-  const [animated, setAnimated] = useState(false)
++  const [box, setBox] = useState<Box | null>(null)
++  const [activeZone, setActiveZone] = useState(() => zoneLetter(venueMap.userZone))
++
++  const reduceMotion = useReducedMotion()
++  const reduceRef = useRef(reduceMotion)
++  reduceRef.current = reduceMotion
+ 
+-  const pointers = useRef(new Map<number, { x: number; y: number }>())
+-  const gesture = useRef<{
++  const transformRef = useRef<Transform>({ scale: 1, x: 0, y: 0 })
++  const aspectRef = useRef(4 / 3) // venue-map.png is 1200×900 per asset manifest
++  const pointersRef = useRef(new Map<number, Point>())
++  const gestureRef = useRef<{
++    mode: 'pan' | 'pinch'
+     startDist: number
+-    startScale: number
+-    startX: number
+-    startY: number
+-    originX: number
+-    originY: number
+-    moved: boolean
++    startMid: Point
++    startPointer: Point
++    startTransform: Transform
+   } | null>(null)
+-  const lastTap = useRef(0)
+-
+-  const viewportSize = useCallback(() => {
+-    const el = viewportRef.current
+-    return { w: el?.clientWidth ?? 375, h: el?.clientHeight ?? 400 }
+-  }, [])
++  const samplesRef = useRef<{ t: number; x: number; y: number }[]>([])
++  const lastTapRef = useRef(0)
+ 
+-  const applyTransform = useCallback(
+-    (t: Transform, animate = false) => {
+-      setAnimated(animate)
+-      setTransform(clampTransform(t, viewportSize()))
+-    },
+-    [viewportSize],
+-  )
++  const userZoneKey = zoneLetter(venueMap.userZone)
++  const userRect = venueMap.zones.find((z) => z.key === userZoneKey)?.rect
+ 
+-  const onPointerDown = (e: React.PointerEvent) => {
+-    ;(e.target as HTMLElement).setPointerCapture?.(e.pointerId)
+-    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+-    setAnimated(false)
+-
+-    const now = Date.now()
+-    if (pointers.current.size === 1 && now - lastTap.current <= 300) {
+-      // double tap → reset
+-      lastTap.current = 0
+-      applyTransform({ scale: 1, x: 0, y: 0 }, true)
+-      pointers.current.clear()
+-      gesture.current = null
+-      return
+-    }
+-    if (pointers.current.size === 1) lastTap.current = now
+-
+-    const pts = [...pointers.current.values()]
+-    if (pts.length === 2) {
+-      gesture.current = {
+-        startDist: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y),
+-        startScale: transform.scale,
+-        startX: transform.x,
+-        startY: transform.y,
+-        originX: (pts[0].x + pts[1].x) / 2,
+-        originY: (pts[0].y + pts[1].y) / 2,
+-        moved: false,
+-      }
+-    } else {
+-      gesture.current = {
+-        startDist: 0,
+-        startScale: transform.scale,
+-        startX: transform.x,
+-        startY: transform.y,
+-        originX: pts[0].x,
+-        originY: pts[0].y,
+-        moved: false,
+-      }
++  /** Viewport size + the letterboxed image rect inside it (object-fit: contain math). */
++  const metrics = () => {
++    const el = viewportRef.current
++    const w = el?.clientWidth ?? 375
++    const h = el?.clientHeight ?? 400
++    const aspect = aspectRef.current
++    let width = w
++    let height = w / aspect
++    if (height > h) {
++      height = h
++      width = h * aspect
+     }
++    return { w, h, box: { left: (w - width) / 2, top: (h - height) / 2, width, height } }
+   }
+ 
+-  const onPointerMove = (e: React.PointerEvent) => {
+-    if (!pointers.current.has(e.pointerId) || !gesture.current) return
+-    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+-    const pts = [...pointers.current.values()]
+-    const g = gesture.current
+-
+-    if (pts.length === 2 && g.startDist > 0) {
+-      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
+-      const midX = (pts[0].x + pts[1].x) / 2
+-      const midY = (pts[0].y + pts[1].y) / 2
+-      const scale = g.startScale * (dist / g.startDist)
+-      applyTransform({
+-        scale,
+-        x: g.startX + (midX - g.originX),
+-        y: g.startY + (midY - g.originY),
+-      })
+-      g.moved = true
+-    } else if (pts.length === 1) {
+-      applyTransform({
+-        scale: g.startScale,
+-        x: g.startX + (pts[0].x - g.originX),
+-        y: g.startY + (pts[0].y - g.originY),
+-      })
+-      g.moved = true
++  /** Keep the scaled layer covering the viewport: background never shows. */
++  const clampTransform = (t: Transform): Transform => {
++    const { w, h } = metrics()
++    const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, t.scale))
++    const minX = Math.min(0, w - w * scale)
++    const minY = Math.min(0, h - h * scale)
++    return {
++      scale,
++      x: Math.min(0, Math.max(minX, t.x)),
++      y: Math.min(0, Math.max(minY, t.y)),
+     }
+   }
+ 
+-  const onPointerUp = (e: React.PointerEvent) => {
+-    pointers.current.delete(e.pointerId)
+-    if (pointers.current.size < 2 && gesture.current) {
+-      gesture.current = {
+-        ...gesture.current,
+-        startScale: transform.scale,
+-        startX: transform.x,
+-        startY: transform.y,
+-        startDist: 0,
+-        originX: [...pointers.current.values()][0]?.x ?? 0,
+-        originY: [...pointers.current.values()][0]?.y ?? 0,
+-      }
++  const apply = (next: Transform, animateMs = 0) => {
++    const t = clampTransform(next)
++    transformRef.current = t
++    const layer = layerRef.current
++    if (layer) {
++      layer.style.transition = animateMs > 0 ? `transform ${animateMs}ms ${EASE}` : 'none'
++      layer.style.transform = `translate3d(${t.x}px, ${t.y}px, 0) scale(${t.scale})`
++    }
++    // Counter-scale the flag label so it stays readable at any zoom level.
++    if (labelRef.current) {
++      labelRef.current.style.transform = `scale(${1 / t.scale})`
+     }
+   }
+ 
+-  const centerZone = (key: string) => {
+-    const zone = venueMap.zones.find((z) => z.key === key)
+-    if (!zone?.rect) return
+-    const { w, h } = viewportSize()
+-    const scale = 1.8
+-    const cx = ((zone.rect.x + zone.rect.w / 2) / 100) * w
+-    const cy = ((zone.rect.y + zone.rect.h / 2) / 100) * h
+-    applyTransform(
++  const resetView = () => apply({ scale: 1, x: 0, y: 0 }, reduceRef.current ? 0 : 300)
++
++  const centerZone = (zone: ZoneInfo) => {
++    setActiveZone(zone.key)
++    if (!zone.rect) return
++    const { w, h, box: b } = metrics()
++    const cx = b.left + ((zone.rect.x + zone.rect.w / 2) / 100) * b.width
++    const cy = b.top + ((zone.rect.y + zone.rect.h / 2) / 100) * b.height
++    apply(
+       {
+-        scale,
+-        x: w / 2 - cx * scale,
+-        y: h / 2 - cy * scale,
++        scale: CENTER_SCALE,
++        x: w / 2 - cx * CENTER_SCALE,
++        y: h / 2 - cy * CENTER_SCALE,
+       },
+-      true,
++      reduceRef.current ? 0 : 300,
+     )
+   }
+ 
+-  const userZoneKey = venueMap.userZone.replace(/[^A-D]/g, '') || venueMap.userZone
+-  const userRect = venueMap.zones.find((z) => z.key === userZoneKey)?.rect
++  // Compute the image box once mounted (viewport has real size by then) and
++  // keep it in sync on viewport resize / orientation change.
++  useEffect(() => {
++    const sync = () => {
++      setBox(metrics().box)
++      apply(transformRef.current) // re-clamp against the new viewport size
++    }
++    sync()
++    window.addEventListener('resize', sync)
++    window.addEventListener('orientationchange', sync)
++    return () => {
++      window.removeEventListener('resize', sync)
++      window.removeEventListener('orientationchange', sync)
++    }
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [])
++
++  // Native gesture handling (pan / pinch / double-tap / inertia). Native
++  // listeners are required so pointerdown stopPropagation reaches the overlay
++  // panel's drag listener before it can start.
++  useEffect(() => {
++    const el = viewportRef.current
++    if (!el) return
++
++    const toLocal = (e: PointerEvent): Point => {
++      const r = el.getBoundingClientRect()
++      return { x: e.clientX - r.left, y: e.clientY - r.top }
++    }
++    const midpoint = (a: Point, b: Point): Point => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
++
++    const onDown = (e: PointerEvent) => {
++      e.stopPropagation() // keep the overlay panel's drag-to-close out of map gestures
++      try {
++        el.setPointerCapture(e.pointerId)
++      } catch {
++        /* pointer already released */
++      }
++      const p = toLocal(e)
++      pointersRef.current.set(e.pointerId, p)
++
++      const now = performance.now()
++      if (pointersRef.current.size === 1) {
++        if (now - lastTapRef.current <= DOUBLE_TAP_MS) {
++          // Double-tap / double-click → spring back to the overview.
++          lastTapRef.current = 0
++          pointersRef.current.clear()
++          gestureRef.current = null
++          samplesRef.current = []
++          resetView()
++          return
++        }
++        lastTapRef.current = now
++        gestureRef.current = {
++          mode: 'pan',
++          startDist: 0,
++          startMid: p,
++          startPointer: p,
++          startTransform: { ...transformRef.current },
++        }
++        samplesRef.current = [{ t: now, x: p.x, y: p.y }]
++      } else if (pointersRef.current.size === 2) {
++        const [a, b] = [...pointersRef.current.values()]
++        gestureRef.current = {
++          mode: 'pinch',
++          startDist: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
++          startMid: midpoint(a, b),
++          startPointer: p,
++          startTransform: { ...transformRef.current },
++        }
++        samplesRef.current = []
++      }
++    }
++
++    const onMove = (e: PointerEvent) => {
++      if (!pointersRef.current.has(e.pointerId)) return
++      e.stopPropagation()
++      const p = toLocal(e)
++      pointersRef.current.set(e.pointerId, p)
++      const g = gestureRef.current
++      if (!g) return
++
++      if (g.mode === 'pinch' && pointersRef.current.size >= 2) {
++        const [a, b] = [...pointersRef.current.values()]
++        const dist = Math.hypot(a.x - b.x, a.y - b.y)
++        const mid = midpoint(a, b)
++        const scale = g.startTransform.scale * (dist / g.startDist)
++        // Zoom around the pinch midpoint: keep the content point that was
++        // under the starting midpoint pinned beneath the current midpoint.
++        const cx = (g.startMid.x - g.startTransform.x) / g.startTransform.scale
++        const cy = (g.startMid.y - g.startTransform.y) / g.startTransform.scale
++        apply({ scale, x: mid.x - cx * scale, y: mid.y - cy * scale })
++      } else if (g.mode === 'pan' && pointersRef.current.size === 1) {
++        apply({
++          scale: g.startTransform.scale,
++          x: g.startTransform.x + (p.x - g.startPointer.x),
++          y: g.startTransform.y + (p.y - g.startPointer.y),
++        })
++        const now = performance.now()
++        samplesRef.current.push({ t: now, x: p.x, y: p.y })
++        // keep only the last ~120ms of samples for velocity
++        while (samplesRef.current.length > 2 && now - samplesRef.current[0].t > 120) {
++          samplesRef.current.shift()
++        }
++      }
++    }
++
++    const onUp = (e: PointerEvent) => {
++      pointersRef.current.delete(e.pointerId)
++      const g = gestureRef.current
++      if (!g) return
++
++      if (pointersRef.current.size === 1) {
++        // Pinch → pan transition: re-anchor the remaining finger.
++        const rest = [...pointersRef.current.values()][0]
++        gestureRef.current = {
++          mode: 'pan',
++          startDist: 0,
++          startMid: rest,
++          startPointer: rest,
++          startTransform: { ...transformRef.current },
++        }
++        samplesRef.current = [{ t: performance.now(), x: rest.x, y: rest.y }]
++        return
++      }
++
++      if (pointersRef.current.size === 0) {
++        gestureRef.current = null
++        if (g.mode === 'pan') {
++          // A real drag must not count as the first half of a double-tap.
++          const up = toLocal(e)
++          if (Math.hypot(up.x - g.startPointer.x, up.y - g.startPointer.y) > 12) {
++            lastTapRef.current = 0
++          }
++          // Release inertia: fling velocity carries the pan ~180ms further.
++          const s = samplesRef.current
++          samplesRef.current = []
++          if (s.length >= 2) {
++            const first = s[0]
++            const last = s[s.length - 1]
++            const dt = last.t - first.t
++            if (dt > 0) {
++              const vx = (last.x - first.x) / dt
++              const vy = (last.y - first.y) / dt
++              if (Math.hypot(vx, vy) > 0.45 && !reduceRef.current) {
++                const t = transformRef.current
++                apply(
++                  { scale: t.scale, x: t.x + vx * 180, y: t.y + vy * 180 },
++                  INERTIA_MS,
++                )
++              }
++            }
++          }
++        }
++      }
++    }
++
++    const stopOnly = (e: Event) => e.stopPropagation()
++    const prevent = (e: Event) => e.preventDefault()
++
++    el.addEventListener('pointerdown', onDown)
++    el.addEventListener('pointermove', onMove)
++    el.addEventListener('pointerup', onUp)
++    el.addEventListener('pointercancel', onUp)
++    // iOS Safari pinch gesture events would zoom the whole page — suppress.
++    el.addEventListener('gesturestart', prevent)
++    el.addEventListener('gesturechange', prevent)
++    // Belt-and-braces alongside `touch-action: none` for older WebKit.
++    el.addEventListener('touchmove', prevent, { passive: false })
++
++    const list = listRef.current
++    // List taps/scrolls must not trigger the panel's drag-to-close either.
++    list?.addEventListener('pointerdown', stopOnly)
++
++    return () => {
++      el.removeEventListener('pointerdown', onDown)
++      el.removeEventListener('pointermove', onMove)
++      el.removeEventListener('pointerup', onUp)
++      el.removeEventListener('pointercancel', onUp)
++      el.removeEventListener('gesturestart', prevent)
++      el.removeEventListener('gesturechange', prevent)
++      el.removeEventListener('touchmove', prevent)
++      list?.removeEventListener('pointerdown', stopOnly)
++    }
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [])
++
++  const onImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
++    const img = e.currentTarget
++    if (img.naturalWidth > 0 && img.naturalHeight > 0) {
++      aspectRef.current = img.naturalWidth / img.naturalHeight
++      setBox(metrics().box)
++      apply(transformRef.current)
++    }
++    setImgLoaded(true)
++  }
+ 
+   return (
+     <>
+       {/* map viewport ~62% */}
+       <div
+         ref={viewportRef}
+-        className="relative flex-[62] touch-none select-none overflow-hidden bg-[#FAFAF8]"
+-        onPointerDown={onPointerDown}
+-        onPointerMove={onPointerMove}
+-        onPointerUp={onPointerUp}
+-        onPointerCancel={onPointerUp}
++        className="relative min-h-0 flex-[62] touch-none select-none overflow-hidden bg-[#FAFAF8]"
++        role="application"
++        aria-label="场地分区图，双指缩放，双击复位"
+       >
+         {!imgLoaded && (
+           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-[var(--ink-3)]">
+             <Icon name="zoom-in" size={24} />
+             <span className="skeleton h-4 w-32 rounded" />
++            <span className="text-caption">地图加载中…</span>
+           </div>
+         )}
+         <div
+-          className={cn('absolute inset-0', animated && 'transition-transform duration-300 ease-out')}
+-          style={{
+-            transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`,
+-          }}
++          ref={layerRef}
++          className="absolute inset-0 will-change-transform"
++          style={{ transformOrigin: '0 0' }}
+         >
+-          <img
+-            src={venueMap.image}
+-            alt="场地分区图"
+-            onLoad={() => setImgLoaded(true)}
+-            className="h-full w-full object-contain"
+-            draggable={false}
+-          />
+-          {userRect && (
++          {box && (
+             <div
+-              className="map-zone-pulse pointer-events-none absolute rounded-md border-[2.5px] border-[var(--danger)]"
+-              style={{
+-                left: `${userRect.x}%`,
+-                top: `${userRect.y}%`,
+-                width: `${userRect.w}%`,
+-                height: `${userRect.h}%`,
+-              }}
++              className="absolute"
++              style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
+             >
+-              <span className="absolute -top-6 left-0 rounded bg-[var(--danger)] px-1.5 py-0.5 text-[10px] font-bold leading-4 text-white">
+-                您在这里 · {venueMap.userZone}
+-              </span>
++              <img
++                src={venueMap.image}
++                alt="场地分区平面图"
++                onLoad={onImageLoad}
++                onError={() => setImgLoaded(true)}
++                className="h-full w-full select-none"
++                style={{ WebkitTouchCallout: 'none' }}
++                draggable={false}
++              />
++              {userRect && (
++                <div
++                  className="map-zone-pulse pointer-events-none absolute rounded-md border-[2.5px] border-[var(--danger)]"
++                  style={{
++                    left: `${userRect.x}%`,
++                    top: `${userRect.y}%`,
++                    width: `${userRect.w}%`,
++                    height: `${userRect.h}%`,
++                  }}
++                >
++                  <span
++                    ref={labelRef}
++                    className="absolute -top-6 left-0 whitespace-nowrap rounded bg-[var(--danger)] px-1.5 py-0.5 text-[10px] font-bold leading-4 text-white"
++                    style={{ transformOrigin: 'left bottom' }}
++                  >
++                    您在这里 · {venueMap.userZone}
++                  </span>
++                </div>
++              )}
+             </div>
+           )}
+         </div>
+@@ -235,17 +423,27 @@ function MapViewport({ venueMap }: { venueMap: VenueMapInfo }) {
+       </div>
+ 
+       {/* zone list ~38% */}
+-      <div className="flex-[38] overflow-y-auto border-t border-[var(--line)] px-4 py-2">
++      <div
++        ref={listRef}
++        className="min-h-0 flex-[38] overflow-y-auto overscroll-contain border-t border-[var(--line)] px-4 py-2"
++        role="list"
++        aria-label="分区列表"
++      >
+         {venueMap.zones.map((z) => {
+           const isUser = z.key === userZoneKey
++          const isActive = z.key === activeZone
+           return (
+             <button
+               key={z.key}
+               type="button"
+-              onClick={() => centerZone(z.key)}
++              role="listitem"
++              aria-pressed={isActive}
++              aria-label={`定位到${z.name}`}
++              onClick={() => centerZone(z)}
+               className={cn(
+-                'relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left',
++                'relative flex min-h-[52px] w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors',
+                 isUser && 'bg-[var(--theme-soft)]',
++                !isUser && isActive && 'bg-[var(--bg-page)]',
+               )}
+             >
+               {isUser && (
+@@ -253,11 +451,7 @@ function MapViewport({ venueMap }: { venueMap: VenueMapInfo }) {
+               )}
+               <PillTag
+                 variant={isUser ? 'solid' : 'soft'}
+-                style={
+-                  isUser
+-                    ? undefined
+-                    : { background: '#F1F2F5', color: 'var(--ink-2)' }
+-                }
++                style={isUser ? undefined : { background: '#F1F2F5', color: 'var(--ink-2)' }}
+               >
+                 {z.key}
+               </PillTag>
+@@ -272,6 +466,16 @@ function MapViewport({ venueMap }: { venueMap: VenueMapInfo }) {
+                 </div>
+                 <div className="truncate text-caption text-[var(--ink-3)]">{z.desc}</div>
+               </div>
++              {isActive && z.rect && (
++                <Icon
++                  name="map-pin"
++                  size={14}
++                  className={cn(
++                    'shrink-0',
++                    isUser ? 'text-[var(--theme-primary)]' : 'text-[var(--ink-3)]',
++                  )}
++                />
++              )}
+             </button>
+           )
+         })}
+diff --git a/src/components/StickyShareBar.tsx b/src/components/StickyShareBar.tsx
+index 30c9e5d..bc06580 100644
+--- a/src/components/StickyShareBar.tsx
++++ b/src/components/StickyShareBar.tsx
+@@ -1,5 +1,5 @@
+-import { useState } from 'react'
+-import { AnimatePresence, motion } from 'framer-motion'
++import { useEffect, useState } from 'react'
++import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+ import type { EventInfo } from '@/types/itinerary'
+ import { addToCalendar, shareItinerary } from '@/lib/actions'
+ import { Icon } from '@/components/shared'
+@@ -8,11 +8,15 @@ import { useToast } from '@/lib/toast-context'
+ const EASE = [0.22, 1, 0.36, 1] as [number, number, number, number]
+ 
+ /**
+- * Bottom fixed share bar: 添加到日历 (secondary) + 转发给同行人 (primary).
++ * Bottom fixed share bar (safe-area aware, never in document flow):
++ * 添加到日历 (secondary) + 转发给同行人 (primary, theme gradient).
++ * Wired through the existing actions.ts helpers — WeChat falls back to an
++ * in-page guide mask, unsupported browsers fall back to clipboard + toast.
+  */
+ export default function StickyShareBar({ event }: { event: EventInfo }) {
+   const { show } = useToast()
+   const [wechatGuide, setWechatGuide] = useState(false)
++  const reduceMotion = useReducedMotion()
+ 
+   const handleCalendar = async () => {
+     const result = await addToCalendar(event)
+@@ -30,14 +34,27 @@ export default function StickyShareBar({ event }: { event: EventInfo }) {
+     else if (result === 'failed') show('分享失败，请稍后重试')
+   }
+ 
++  // ESC closes the WeChat guide mask.
++  useEffect(() => {
++    if (!wechatGuide) return
++    const onKey = (e: KeyboardEvent) => {
++      if (e.key === 'Escape') setWechatGuide(false)
++    }
++    window.addEventListener('keydown', onKey)
++    return () => window.removeEventListener('keydown', onKey)
++  }, [wechatGuide])
++
+   return (
+     <>
+       <motion.div
+-        initial={{ y: 72, opacity: 0 }}
++        initial={reduceMotion ? { opacity: 0 } : { y: 72, opacity: 0 }}
+         animate={{ y: 0, opacity: 1 }}
+-        transition={{ duration: 0.4, delay: 0.5, ease: EASE }}
+-        className="fixed bottom-0 left-1/2 z-40 w-full max-w-[480px] -translate-x-1/2 border-t border-[var(--line)] bg-white/85 backdrop-blur-md"
+-        style={{ // WeChat lacks backdrop-filter: solid fallback handles contrast.
++        transition={reduceMotion ? { duration: 0.15 } : { duration: 0.4, delay: 0.5, ease: EASE }}
++        role="region"
++        aria-label="分享与日历操作"
++        className="fixed bottom-0 left-1/2 z-40 w-full max-w-[480px] -translate-x-1/2 border-t border-[var(--line)] backdrop-blur-md"
++        style={{
++          // WeChat lacks backdrop-filter: near-solid fallback keeps contrast.
+           background: 'rgba(255,255,255,0.92)',
+         }}
+       >
+@@ -46,6 +63,7 @@ export default function StickyShareBar({ event }: { event: EventInfo }) {
+             type="button"
+             whileTap={{ scale: 0.96 }}
+             onClick={handleCalendar}
++            aria-label="添加到日历"
+             className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-[var(--line)] bg-white text-body font-bold text-[var(--ink-1)]"
+           >
+             <Icon name="calendar-plus" size={16} className="text-[var(--theme-primary)]" />
+@@ -55,6 +73,7 @@ export default function StickyShareBar({ event }: { event: EventInfo }) {
+             type="button"
+             whileTap={{ scale: 0.96 }}
+             onClick={handleShare}
++            aria-label="转发给同行人"
+             className="shadow-share bg-theme-gradient flex h-11 flex-[1.4] items-center justify-center gap-1.5 rounded-xl text-body font-bold text-white"
+           >
+             <Icon name="share-2" size={16} />
+@@ -71,12 +90,23 @@ export default function StickyShareBar({ event }: { event: EventInfo }) {
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             exit={{ opacity: 0 }}
+-            transition={{ duration: 0.2 }}
++            transition={{ duration: reduceMotion ? 0.1 : 0.2 }}
+             onClick={() => setWechatGuide(false)}
++            role="dialog"
++            aria-modal="true"
++            aria-label="微信转发引导"
+             className="fixed inset-0 z-[70] bg-black/70"
+           >
+-            <div className="mx-auto flex max-w-[480px] flex-col items-end px-6 pt-4">
+-              <svg width="56" height="56" viewBox="0 0 56 56" fill="none" aria-hidden>
++            <div className="relative mx-auto flex h-full max-w-[480px] flex-col items-end px-6 pt-4">
++              <button
++                type="button"
++                aria-label="关闭引导"
++                onClick={() => setWechatGuide(false)}
++                className="absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-full text-white"
++              >
++                <Icon name="x" size={20} />
++              </button>
++              <svg width="56" height="56" viewBox="0 0 56 56" fill="none" aria-hidden className="mt-11">
+                 <path
+                   d="M10 48 C 26 40, 40 26, 46 8"
+                   stroke="#fff"
+diff --git a/src/components/VenueMapSection.tsx b/src/components/VenueMapSection.tsx
+index 60ed928..d0ded7e 100644
+--- a/src/components/VenueMapSection.tsx
++++ b/src/components/VenueMapSection.tsx
+@@ -1,36 +1,42 @@
+ import { useState } from 'react'
+-import { motion } from 'framer-motion'
++import { motion, useReducedMotion } from 'framer-motion'
+ import type { VenueMapInfo } from '@/types/itinerary'
+ import { Icon } from '@/components/shared'
+ import MapOverlay from '@/components/MapOverlay'
+ 
+ /**
+- * Module 4 — 场地分区地图入口 (collapsed 48px button). Expanding opens the
+- * full-screen MapOverlay (fixed overlay, does not add document height).
++ * Module 4 — 场地分区地图入口. Default state is exactly one compact 48px row
++ * (查看场地分区地图 ▼); it never expands in-flow — tapping opens the
++ * full-screen MapOverlay (position: fixed, no document-height impact).
+  */
+ export default function VenueMapSection({ venueMap }: { venueMap: VenueMapInfo }) {
+   const [open, setOpen] = useState(false)
++  const reduceMotion = useReducedMotion()
+ 
+   return (
+-    <section className="px-4">
++    <section className="px-4" aria-label="场地分区地图">
+       <motion.button
+         type="button"
+         whileTap={{ scale: 0.98 }}
+         onClick={() => setOpen(true)}
+-        className="flex h-12 w-full items-center gap-2 rounded-xl bg-[var(--bg-card)] px-3 shadow-card"
++        aria-haspopup="dialog"
++        aria-expanded={open}
++        className="flex h-12 w-full items-center gap-2.5 rounded-xl bg-[var(--bg-card)] px-3 shadow-card"
+       >
+         <Icon name="map" size={18} className="shrink-0 text-[var(--theme-primary)]" />
+-        <span className="min-w-0 flex-1 text-left text-body font-bold text-[var(--ink-1)]">
+-          查看场地分区地图
+-        </span>
+-        <span className="text-caption text-[var(--ink-3)]">
+-          您所在分区：
+-          <span className="font-bold text-[var(--theme-primary)]">{venueMap.userZone}</span>
++        <span className="flex min-w-0 flex-1 flex-col items-start justify-center text-left leading-none">
++          <span className="truncate text-body font-bold text-[var(--ink-1)]">
++            查看场地分区地图
++          </span>
++          <span className="mt-[3px] text-caption leading-[14px] text-[var(--ink-3)]">
++            您所在分区：
++            <span className="font-bold text-[var(--theme-primary)]">{venueMap.userZone}</span>
++          </span>
+         </span>
+         <motion.span
+-          animate={{ y: [0, 3, 0] }}
+-          transition={{ duration: 0.6, repeat: 3, repeatDelay: 3.4, ease: 'easeInOut' }}
+-          className="shrink-0 text-[var(--ink-3)]"
++          animate={reduceMotion ? undefined : { y: [0, 3, 0] }}
++          transition={{ duration: 0.2, repeat: 2, repeatDelay: 3.8, ease: 'easeInOut' }}
++          className="flex h-11 w-6 shrink-0 items-center justify-center text-[var(--ink-3)]"
+         >
+           <Icon name="chevron-down" size={16} />
+         </motion.span>
+-- 
+2.39.5
+

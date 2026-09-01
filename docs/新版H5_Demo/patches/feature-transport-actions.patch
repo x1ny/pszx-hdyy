@@ -1,0 +1,678 @@
+From 54f41203917b8493def35b83837cf9912b94d844 Mon Sep 17 00:00:00 2001
+From: agent <agent@example.com>
+Date: Fri, 21 Aug 2026 14:38:09 +0800
+Subject: [PATCH] transport-actions: refine transfer cards and native actions
+
+---
+ src/components/TransfersSection.tsx | 267 ++++++++++++++++++++++++----
+ src/lib/actions.ts                  | 190 +++++++++++++++-----
+ 2 files changed, 375 insertions(+), 82 deletions(-)
+
+diff --git a/src/components/TransfersSection.tsx b/src/components/TransfersSection.tsx
+index 5841040..127f789 100644
+--- a/src/components/TransfersSection.tsx
++++ b/src/components/TransfersSection.tsx
+@@ -1,8 +1,10 @@
++import { useCallback, useEffect, useMemo, useRef } from 'react'
+ import { motion } from 'framer-motion'
+ import type { AirTransfer, CarTransfer, RailTransfer, Transfer } from '@/types/itinerary'
+-import { copyText, openNavigation } from '@/lib/actions'
+-import { Icon, IconBadge, NavChip, PillTag, SectionHeader, TelChip } from '@/components/shared'
++import { buildTelHref, copyText, openNavigation } from '@/lib/actions'
++import { Icon, IconBadge, PillTag, SectionHeader } from '@/components/shared'
+ import { useToast } from '@/lib/toast-context'
++import { cn } from '@/lib/utils'
+ import type { IconName } from '@/components/shared'
+ 
+ const EASE = [0.22, 1, 0.36, 1] as [number, number, number, number]
+@@ -13,13 +15,182 @@ const TYPE_META: Record<Transfer['type'], { color: string; soft: string; icon: I
+   car: { color: 'var(--car)', soft: 'var(--car-soft)', icon: 'car-front' },
+ }
+ 
+-/** middle route line: time + station ─ ─ → time + station */
++/* ------------------------------------------------------------------ */
++/* Copy-on-tap / long-press with a >=44px hit area                     */
++/* ------------------------------------------------------------------ */
++
++/**
++ * Tap or long-press copies `text` and fires the toast. The element keeps
++ * native text selection enabled (select-text) so iOS/WeChat users can also
++ * long-press → select → copy manually. Hit area is extended with padding
++ * compensated by a negative margin, so the visual layout stays compact.
++ */
++function Copyable({
++  text,
++  ariaLabel,
++  className,
++  style,
++  children,
++}: {
++  text: string
++  ariaLabel?: string
++  className?: string
++  style?: React.CSSProperties
++  children: React.ReactNode
++}) {
++  const { show } = useToast()
++  const timerRef = useRef<number | undefined>(undefined)
++  const longPressFiredRef = useRef(false)
++
++  const doCopy = useCallback(async () => {
++    if (await copyText(text)) show('已复制')
++  }, [text, show])
++
++  useEffect(() => () => window.clearTimeout(timerRef.current), [])
++
++  const startLongPress = () => {
++    window.clearTimeout(timerRef.current)
++    timerRef.current = window.setTimeout(() => {
++      longPressFiredRef.current = true
++      void doCopy()
++    }, 500)
++  }
++  const cancelLongPress = () => window.clearTimeout(timerRef.current)
++
++  return (
++    <span
++      role="button"
++      tabIndex={0}
++      aria-label={ariaLabel ?? `复制 ${text}`}
++      className={cn('-m-2 inline-flex select-text items-center p-2', className)}
++      style={style}
++      onClick={() => {
++        // Suppress the synthetic click that follows a completed long-press.
++        if (longPressFiredRef.current) {
++          longPressFiredRef.current = false
++          return
++        }
++        void doCopy()
++      }}
++      onKeyDown={(e) => {
++        if (e.key === 'Enter' || e.key === ' ') {
++          e.preventDefault()
++          void doCopy()
++        }
++      }}
++      onTouchStart={startLongPress}
++      onTouchEnd={cancelLongPress}
++      onTouchMove={cancelLongPress}
++      onTouchCancel={cancelLongPress}
++    >
++      {children}
++    </span>
++  )
++}
++
++/* ------------------------------------------------------------------ */
++/* Car-card action chips (local: 44px hit areas, car-green semantics)  */
++/* ------------------------------------------------------------------ */
++
++/** Tap-to-call chip. Visual pill is compact; anchor hit area is 44px tall. */
++function PhoneChip({ phone }: { phone: string }) {
++  return (
++    <motion.a
++      href={buildTelHref(phone)}
++      aria-label={`拨打司机电话 ${phone}`}
++      whileTap={{ scale: 0.94 }}
++      className="-my-2 inline-flex min-h-[44px] shrink-0 items-center"
++    >
++      <span
++        className="inline-flex h-7 items-center gap-1 rounded-lg px-2 font-num text-[13px] font-bold"
++        style={{ background: 'var(--car-soft)', color: 'var(--car)' }}
++      >
++        <Icon name="phone" size={12} />
++        {phone}
++      </span>
++    </motion.a>
++  )
++}
++
++/** Meeting-point navigation chip with a 44px hit area. */
++function CarNavChip({ onClick }: { onClick: () => void }) {
++  return (
++    <motion.button
++      type="button"
++      aria-label="导航到集合点"
++      whileTap={{ scale: 0.94 }}
++      onClick={onClick}
++      className="-my-2 flex min-h-[44px] shrink-0 items-center"
++    >
++      <span
++        className="flex h-9 items-center gap-1 rounded-[10px] px-2.5 text-body font-bold"
++        style={{ background: 'var(--car-soft)', color: 'var(--car)' }}
++      >
++        <Icon name="navigation" size={14} />
++        导航
++      </span>
++    </motion.button>
++  )
++}
++
++/* ------------------------------------------------------------------ */
++/* Helpers                                                             */
++/* ------------------------------------------------------------------ */
++
++/** Split a trailing terminal token ("北京首都 T2" → ["北京首都", "T2"]). */
++function splitTerminal(station: string): { name: string; terminal?: string } {
++  const m = /^(.*?)\s*(T\d+)$/.exec(station.trim())
++  if (m && m[1]) return { name: m[1], terminal: m[2] }
++  return { name: station }
++}
++
++/** Small boxed terminal tag rendered after an airport name. */
++function TerminalTag({ terminal, color }: { terminal: string; color: string }) {
++  return (
++    <span
++      className="ml-1 inline-flex -translate-y-px items-center rounded border px-1 font-num text-[10px] font-bold leading-4"
++      style={{ borderColor: color, color }}
++    >
++      {terminal}
++    </span>
++  )
++}
++
++/**
++ * Snapshot of "now" at page load. This H5 is short-lived and re-mounted on
++ * each visit, so a module-level timestamp keeps renders pure (react-hooks
++ * lint) while staying accurate enough for the in-progress dash animation.
++ */
++const PAGE_LOADED_AT = Date.now()
++
++/**
++ * Departure → arrival window derived from sortTime (day) + HH:mm fields.
++ * Handles overnight arrivals. Returns null when parsing fails.
++ */
++function transferWindow(t: RailTransfer | AirTransfer): { start: number; end: number } | null {
++  const day = /^(\d{4})(\d{2})(\d{2})T/.exec(t.sortTime)
++  const hm = (s: string) => /^(\d{1,2}):(\d{2})/.exec(s)
++  const dep = hm(t.depTime)
++  const arr = hm(t.arrTime)
++  if (!day || !dep || !arr) return null
++  const base = [Number(day[1]), Number(day[2]) - 1, Number(day[3])] as const
++  const start = new Date(base[0], base[1], base[2], Number(dep[1]), Number(dep[2])).getTime()
++  let end = new Date(base[0], base[1], base[2], Number(arr[1]), Number(arr[2])).getTime()
++  if (end < start) end += 86_400_000 // overnight arrival
++  return { start, end }
++}
++
++/* ------------------------------------------------------------------ */
++/* Middle route row: time + station ─ ─ → time + station               */
++/* ------------------------------------------------------------------ */
++
+ function RouteRow({
+   depTime,
+   depStation,
+   arrTime,
+   arrStation,
+   color,
++  showTerminal,
+   active,
+ }: {
+   depTime: string
+@@ -27,15 +198,21 @@ function RouteRow({
+   arrTime: string
+   arrStation: string
+   color: string
++  showTerminal?: boolean
+   active?: boolean
+ }) {
++  const dep = showTerminal ? splitTerminal(depStation) : { name: depStation }
++  const arr = showTerminal ? splitTerminal(arrStation) : { name: arrStation }
+   return (
+     <div className="mt-1.5 flex items-center gap-2">
+       <div className="min-w-0">
+         <div className="font-num text-[18px] font-extrabold leading-6 text-[var(--ink-1)]">
+           {depTime}
+         </div>
+-        <div className="truncate text-body text-[var(--ink-3)]">{depStation}</div>
++        <div className="truncate text-body text-[var(--ink-3)]">
++          {dep.name}
++          {dep.terminal && <TerminalTag terminal={dep.terminal} color={color} />}
++        </div>
+       </div>
+       <svg className="h-4 min-w-8 flex-1" viewBox="0 0 80 12" preserveAspectRatio="none" aria-hidden>
+         <line
+@@ -63,24 +240,31 @@ function RouteRow({
+         <div className="font-num text-[18px] font-extrabold leading-6 text-[var(--ink-1)]">
+           {arrTime}
+         </div>
+-        <div className="truncate text-body text-[var(--ink-3)]">{arrStation}</div>
++        <div className="truncate text-body text-[var(--ink-3)]">
++          {arr.name}
++          {arr.terminal && <TerminalTag terminal={arr.terminal} color={color} />}
++        </div>
+       </div>
+     </div>
+   )
+ }
+ 
++/* ------------------------------------------------------------------ */
++/* Per-type card bodies                                                */
++/* ------------------------------------------------------------------ */
++
+ function RailCard({ t, color }: { t: RailTransfer; color: string }) {
+-  const { show } = useToast()
++  const win = transferWindow(t)
++  const active = win !== null && PAGE_LOADED_AT >= win.start && PAGE_LOADED_AT <= win.end
+   return (
+     <>
+       <div className="flex items-center justify-between gap-2">
+-        <button
+-          type="button"
++        <Copyable
++          text={t.no}
+           className="font-num text-card-title font-extrabold text-[var(--ink-1)]"
+-          onClick={async () => (await copyText(t.no)) && show('已复制')}
+         >
+           {t.no}
+-        </button>
++        </Copyable>
+         {t.seat && (
+           <PillTag variant="soft" style={{ background: 'var(--rail-soft)', color: 'var(--rail)' }}>
+             <span className="font-num">{t.seat}</span>
+@@ -93,6 +277,7 @@ function RailCard({ t, color }: { t: RailTransfer; color: string }) {
+         arrTime={t.arrTime}
+         arrStation={t.arrStation}
+         color={color}
++        active={active}
+       />
+       {t.gate && (
+         <div className="mt-1 text-caption text-[var(--ink-3)]">
+@@ -107,17 +292,17 @@ function RailCard({ t, color }: { t: RailTransfer; color: string }) {
+ }
+ 
+ function AirCard({ t, color }: { t: AirTransfer; color: string }) {
+-  const { show } = useToast()
++  const win = transferWindow(t)
++  const active = win !== null && PAGE_LOADED_AT >= win.start && PAGE_LOADED_AT <= win.end
+   return (
+     <>
+       <div className="flex items-center justify-between gap-2">
+-        <button
+-          type="button"
++        <Copyable
++          text={t.no}
+           className="font-num text-card-title font-extrabold text-[var(--ink-1)]"
+-          onClick={async () => (await copyText(t.no)) && show('已复制')}
+         >
+           {t.no}
+-        </button>
++        </Copyable>
+         {t.seat && (
+           <PillTag variant="soft" style={{ background: 'var(--air-soft)', color: 'var(--air)' }}>
+             <span className="font-num">{t.seat}</span>
+@@ -130,6 +315,8 @@ function AirCard({ t, color }: { t: AirTransfer; color: string }) {
+         arrTime={t.arrTime}
+         arrStation={t.arrStation}
+         color={color}
++        showTerminal
++        active={active}
+       />
+       {t.gate && (
+         <div className="mt-1 text-caption text-[var(--ink-3)]">
+@@ -149,23 +336,23 @@ function CarCard({ t }: { t: CarTransfer }) {
+     <>
+       <div className="flex items-center justify-between gap-2">
+         <h3 className="text-card-title text-[var(--ink-1)]">{t.title}</h3>
+-        <button
+-          type="button"
+-          onClick={async () => (await copyText(t.plate)) && show('已复制')}
+-          className="shrink-0 rounded-md border px-2 py-0.5 font-num text-[13px] font-extrabold"
+-          style={{
+-            borderColor: 'var(--car)',
+-            background: 'var(--car-soft)',
+-            color: 'var(--car)',
+-          }}
+-        >
+-          {t.plate}
+-        </button>
++        <Copyable text={t.plate} ariaLabel={`复制车牌 ${t.plate}`} className="shrink-0">
++          <span
++            className="rounded-md border px-2 py-0.5 font-num text-[13px] font-extrabold"
++            style={{
++              borderColor: 'var(--car)',
++              background: 'var(--car-soft)',
++              color: 'var(--car)',
++            }}
++          >
++            {t.plate}
++          </span>
++        </Copyable>
+       </div>
+       <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-body text-[var(--ink-2)]">
+         <span className="font-num font-bold text-[var(--ink-1)]">{t.useTime}</span>
+         <span>· 司机 {t.driver}</span>
+-        <TelChip phone={t.phone} />
++        <PhoneChip phone={t.phone} />
+       </div>
+       <div className="mt-1.5 flex items-center justify-between gap-2">
+         <div className="flex min-w-0 items-center gap-1">
+@@ -173,9 +360,7 @@ function CarCard({ t }: { t: CarTransfer }) {
+           <span className="truncate text-body text-[var(--ink-3)]">集合：{t.meetPoint}</span>
+         </div>
+         {t.geo && (
+-          <NavChip
+-            color="var(--car)"
+-            softColor="var(--car-soft)"
++          <CarNavChip
+             onClick={() => {
+               if (t.geo) {
+                 openNavigation(t.geo)
+@@ -189,10 +374,25 @@ function CarCard({ t }: { t: CarTransfer }) {
+   )
+ }
+ 
++/* ------------------------------------------------------------------ */
++/* Section                                                             */
++/* ------------------------------------------------------------------ */
++
+ /**
+- * Module 3 — 行程信息: transport card group sorted by departure time.
++ * Module 3 — 行程信息: transport card group (rail / flight / car),
++ * sorted ascending by departure sort time.
+  */
+ export default function TransfersSection({ transfers }: { transfers: Transfer[] }) {
++  const sorted = useMemo(
++    () =>
++      transfers
++        .slice()
++        .sort((a, b) => (a.sortTime < b.sortTime ? -1 : a.sortTime > b.sortTime ? 1 : 0)),
++    [transfers],
++  )
++
++  if (sorted.length === 0) return null
++
+   return (
+     <section className="px-4">
+       <SectionHeader
+@@ -200,7 +400,7 @@ export default function TransfersSection({ transfers }: { transfers: Transfer[]
+         action={<span className="text-caption text-[var(--ink-3)]">按出发时间排序</span>}
+       />
+       <div className="flex flex-col gap-2.5">
+-        {transfers.map((t, i) => {
++        {sorted.map((t, i) => {
+           const meta = TYPE_META[t.type]
+           return (
+             <motion.div
+@@ -211,6 +411,7 @@ export default function TransfersSection({ transfers }: { transfers: Transfer[]
+               whileTap={{ scale: 0.98 }}
+               className="relative overflow-hidden rounded-[14px] bg-[var(--bg-card)] p-3 pl-[16px] shadow-card"
+             >
++              {/* Left semantic color bar: rail blue / flight purple / car green */}
+               <motion.span
+                 initial={{ scaleY: 0 }}
+                 animate={{ scaleY: 1 }}
+diff --git a/src/lib/actions.ts b/src/lib/actions.ts
+index a8323ca..0af13c8 100644
+--- a/src/lib/actions.ts
++++ b/src/lib/actions.ts
+@@ -1,48 +1,115 @@
+ import type { EventInfo, GeoPoint } from '@/types/itinerary'
+ 
+ /**
+- * Platform action helpers: map navigation, tel, .ics calendar export,
++ * Platform action helpers: map navigation, tel dialing, .ics calendar export,
+  * native share + clipboard fallback, WeChat detection.
++ * Targets: iOS Safari 14+, WeChat webview, Chrome Android.
+  */
+ 
++/* ------------------------------------------------------------------ */
++/* Environment detection                                               */
++/* ------------------------------------------------------------------ */
++
+ export function isWeChat(): boolean {
+   if (typeof navigator === 'undefined') return false
+   return /MicroMessenger/i.test(navigator.userAgent)
+ }
+ 
+-/** Amap universal link — falls back to web version when the app is absent. */
++/* ------------------------------------------------------------------ */
++/* Map navigation                                                      */
++/* ------------------------------------------------------------------ */
++
++/**
++ * Amap universal link. With `callnative=1` the link auto-launches the Amap
++ * app when installed and gracefully falls back to the Amap web page (which
++ * itself offers Baidu/Tencent jumps) when it is not. WeChat's webview blocks
++ * app-launch schemes, so inside WeChat we go straight to the web version
++ * (`callnative=0`) to avoid a broken intermediate page.
++ */
+ export function buildNavUrl(geo: GeoPoint): string {
+   const name = encodeURIComponent(geo.name)
+-  return `https://uri.amap.com/marker?position=${geo.lng},${geo.lat}&name=${name}&src=itinerary-h5&callnative=1`
++  const callnative = isWeChat() ? 0 : 1
++  return `https://uri.amap.com/marker?position=${geo.lng},${geo.lat}&name=${name}&src=itinerary-h5&callnative=${callnative}`
+ }
+ 
+-/** Open the map app (or web fallback) for a location. */
++/**
++ * Open the map for a location. Primary path: Amap universal link in a new
++ * tab. If the popup is blocked (returns null) or window.open throws, fall
++ * back to in-place navigation so the user never hits a dead end.
++ */
+ export function openNavigation(geo: GeoPoint): void {
+-  window.open(buildNavUrl(geo), '_blank', 'noopener')
++  const url = buildNavUrl(geo)
++  try {
++    const win = window.open(url, '_blank', 'noopener')
++    if (!win) window.location.assign(url)
++  } catch {
++    window.location.assign(url)
++  }
+ }
+ 
+-/** Escape a value for RFC 5545 text fields. */
++/* ------------------------------------------------------------------ */
++/* Phone dialing                                                       */
++/* ------------------------------------------------------------------ */
++
++/** Normalize a phone number into a tel: href (strips spaces and dashes). */
++export function buildTelHref(phone: string): string {
++  return `tel:${phone.replace(/[\s-]/g, '')}`
++}
++
++/* ------------------------------------------------------------------ */
++/* Calendar (.ics) export                                              */
++/* ------------------------------------------------------------------ */
++
++/** Escape a value for RFC 5545 TEXT fields. */
+ function icsEscape(text: string): string {
+-  return text.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n')
++  return text
++    .replace(/\\/g, '\\\\')
++    .replace(/;/g, '\\;')
++    .replace(/,/g, '\\,')
++    .replace(/\r\n|\r|\n/g, '\\n')
++}
++
++/** Fold a content line at 75 octets per RFC 5545 §3.1 (CRLF + space). */
++function icsFold(line: string): string {
++  const encoder = new TextEncoder()
++  if (encoder.encode(line).length <= 75) return line
++  const parts: string[] = []
++  let current = ''
++  let octets = 0
++  for (const ch of line) {
++    const len = encoder.encode(ch).length
++    if (octets + len > 75) {
++      parts.push(current)
++      current = ` ${ch}` // continuation lines begin with a single space
++      octets = 1 + len
++    } else {
++      current += ch
++      octets += len
++    }
++  }
++  parts.push(current)
++  return parts.join('\r\n')
+ }
+ 
+-/** Build a .ics file payload with VALARM reminder. */
++/** Current UTC time as an RFC 5545 DATE-TIME stamp (yyyyMMddTHHmmssZ). */
++function icsUtcStamp(d: Date): string {
++  const p = (n: number) => String(n).padStart(2, '0')
++  return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}T${p(d.getUTCHours())}${p(
++    d.getUTCMinutes(),
++  )}${p(d.getUTCSeconds())}Z`
++}
++
++/** Build a standards-compliant .ics payload with a VALARM reminder. */
+ export function buildIcs(event: EventInfo): string {
+   const { title, venue, city, intro, ics } = event
+-  const now = new Date()
+-  const stamp = `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}${String(
+-    now.getUTCDate(),
+-  ).padStart(2, '0')}T${String(now.getUTCHours()).padStart(2, '0')}${String(
+-    now.getUTCMinutes(),
+-  ).padStart(2, '0')}${String(now.getUTCSeconds()).padStart(2, '0')}Z`
+-  return [
++  const lines = [
+     'BEGIN:VCALENDAR',
+     'VERSION:2.0',
+     'PRODID:-//itinerary-h5//CN',
+     'CALSCALE:GREGORIAN',
+     'BEGIN:VEVENT',
+     `UID:${ics.start}-${Date.now()}@itinerary-h5`,
+-    `DTSTAMP:${stamp}`,
++    `DTSTAMP:${icsUtcStamp(new Date())}`,
+     `DTSTART:${ics.start}`,
+     `DTEND:${ics.end}`,
+     `SUMMARY:${icsEscape(title)}`,
+@@ -55,76 +122,101 @@ export function buildIcs(event: EventInfo): string {
+     'END:VALARM',
+     'END:VEVENT',
+     'END:VCALENDAR',
+-  ].join('\r\n')
++  ]
++  return lines.map(icsFold).join('\r\n')
+ }
+ 
+ export type CalendarResult = 'downloaded' | 'copied'
+ 
++/** Plain-text schedule used when a real .ics download is not possible. */
++function calendarFallbackText(event: EventInfo): string {
++  return `${event.title}\n${event.dateText} ${event.timeRange}\n${event.city} · ${event.venue}`
++}
++
+ /**
+- * Export the event as an .ics download. In environments that block Blob
+- * downloads (e.g. some WeChat versions), falls back to copying a text
+- * summary to the clipboard.
++ * Export the event as an .ics download (iOS Safari opens it straight into
++ * Calendar import). In environments that block Blob downloads — WeChat's
++ * webview, or any browser where URL.createObjectURL / the click dispatch
++ * fails — falls back to copying a text summary to the clipboard.
+  */
+ export async function addToCalendar(event: EventInfo): Promise<CalendarResult> {
+-  const ics = buildIcs(event)
+   if (isWeChat()) {
+-    await copyText(`${event.title}\n${event.dateText} ${event.timeRange}\n${event.city} · ${event.venue}`)
++    await copyText(calendarFallbackText(event))
++    return 'copied'
++  }
++  try {
++    const ics = buildIcs(event)
++    const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' })
++    const url = URL.createObjectURL(blob)
++    const a = document.createElement('a')
++    a.href = url
++    a.download = 'itinerary.ics'
++    document.body.appendChild(a)
++    a.click()
++    a.remove()
++    // Delay revocation so slower browsers still complete the download.
++    setTimeout(() => URL.revokeObjectURL(url), 4000)
++    return 'downloaded'
++  } catch {
++    await copyText(calendarFallbackText(event))
+     return 'copied'
+   }
+-  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' })
+-  const url = URL.createObjectURL(blob)
+-  const a = document.createElement('a')
+-  a.href = url
+-  a.download = 'event.ics'
+-  document.body.appendChild(a)
+-  a.click()
+-  a.remove()
+-  setTimeout(() => URL.revokeObjectURL(url), 4000)
+-  return 'downloaded'
+ }
+ 
++/* ------------------------------------------------------------------ */
++/* Clipboard                                                           */
++/* ------------------------------------------------------------------ */
++
++/** Copy text; Clipboard API first, execCommand fallback for old webviews. */
+ export async function copyText(text: string): Promise<boolean> {
+   try {
+     await navigator.clipboard.writeText(text)
+     return true
+   } catch {
+-    // Legacy fallback for non-secure contexts.
++    // Legacy fallback for non-secure contexts / older webviews.
+     try {
+       const ta = document.createElement('textarea')
+       ta.value = text
++      ta.setAttribute('readonly', '')
+       ta.style.position = 'fixed'
+       ta.style.opacity = '0'
+       document.body.appendChild(ta)
+       ta.select()
+-      document.execCommand('copy')
++      const ok = document.execCommand('copy')
+       ta.remove()
+-      return true
++      return ok
+     } catch {
+       return false
+     }
+   }
+ }
+ 
++/* ------------------------------------------------------------------ */
++/* Share                                                               */
++/* ------------------------------------------------------------------ */
++
+ export type ShareResult = 'shared' | 'copied' | 'wechat-guide' | 'failed'
+ 
+-/** Share via Web Share API; copy link or surface WeChat guide as fallback. */
++/**
++ * Share via the Web Share API. Fallback chain:
++ * WeChat → 'wechat-guide' (caller shows the "tap ··· to forward" mask);
++ * no Web Share API / share error → copy the link; copy failed → 'failed'.
++ */
+ export async function shareItinerary(payload: {
+   title: string
+   text: string
+   url: string
+ }): Promise<ShareResult> {
+-  if (isWeChat() || typeof navigator.share !== 'function') {
+-    if (isWeChat()) return 'wechat-guide'
+-    const ok = await copyText(payload.url)
+-    return ok ? 'copied' : 'failed'
+-  }
+-  try {
+-    await navigator.share(payload)
+-    return 'shared'
+-  } catch (err) {
+-    // User cancelled the share sheet — treat as a no-op success path.
+-    if (err instanceof DOMException && err.name === 'AbortError') return 'shared'
+-    const ok = await copyText(payload.url)
+-    return ok ? 'copied' : 'failed'
++  if (isWeChat()) return 'wechat-guide'
++  if (typeof navigator.share === 'function') {
++    try {
++      await navigator.share(payload)
++      return 'shared'
++    } catch (err) {
++      // User cancelled the share sheet — treat as a no-op success path.
++      if (err instanceof DOMException && err.name === 'AbortError') return 'shared'
++    }
+   }
++  const ok = await copyText(payload.url)
++  return ok ? 'copied' : 'failed'
+ }
+-- 
+2.39.5
+

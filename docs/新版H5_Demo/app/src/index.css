@@ -1,0 +1,238 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* —— 主题（换活动只改这里 + 头图）—— */
+    --theme-primary: #e8442e;
+    --theme-primary-deep: #c22a18;
+    --theme-accent: #ff7a45;
+    --theme-ink-on-primary: #ffffff;
+    --theme-soft: #fdecea;
+    --theme-gradient: linear-gradient(135deg, #ff6b3d 0%, #e8442e 48%, #b91c3c 100%);
+
+    /* —— 中性色（所有活动通用）—— */
+    --ink-1: #141a26;
+    --ink-2: #3d4757;
+    --ink-3: #7a8494;
+    --ink-4: #a8b0be;
+    --bg-page: #f5f6f8;
+    --bg-card: #ffffff;
+    --line: #ebedf1;
+
+    /* —— 交通类型色 —— */
+    --rail: #2e6bff;
+    --rail-soft: #eaf0ff;
+    --air: #8b5cf6;
+    --air-soft: #f1ecfe;
+    --car: #12b76a;
+    --car-soft: #e7f8f0;
+
+    /* —— 状态 —— */
+    --success: #12b76a;
+    --danger: #e8442e;
+
+    /* shadcn tokens (kept for template components) */
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 240 5.9% 10%;
+    --radius: 0.625rem;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  * {
+    @apply border-border;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body {
+    /* Surroundings stay black so the centered 480px app surface
+       (--bg-page, set on the Layout container) reads as a distinct panel
+       on desktop instead of blending into the page. */
+    background: #000000;
+    color: var(--ink-1);
+    font-family: 'Noto Sans SC', 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', sans-serif;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* iOS Safari 14 fallback: 100vh first, 100dvh overrides where supported */
+  .app-viewport {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+}
+
+@layer utilities {
+  .font-num {
+    font-family: 'Manrope', 'Noto Sans SC', sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .text-display {
+    font-size: 24px;
+    line-height: 32px;
+    font-weight: 900;
+    letter-spacing: -0.01em;
+  }
+  .text-h-section {
+    font-size: 15px;
+    line-height: 22px;
+    font-weight: 700;
+  }
+  .text-card-title {
+    font-size: 15px;
+    line-height: 22px;
+    font-weight: 700;
+  }
+  .text-time-num {
+    font-size: 18px;
+    line-height: 24px;
+    font-weight: 800;
+  }
+  .text-body {
+    font-size: 13px;
+    line-height: 20px;
+    font-weight: 400;
+  }
+  .text-caption {
+    font-size: 11px;
+    line-height: 16px;
+    font-weight: 500;
+  }
+  .text-tag {
+    font-size: 11px;
+    line-height: 18px;
+    font-weight: 700;
+  }
+
+  .clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .bg-theme-gradient {
+    background-image: var(--theme-gradient);
+  }
+
+  /* Editorial micro-label: English small caps next to section titles */
+  .text-eyebrow {
+    font-family: 'Manrope', 'Noto Sans SC', sans-serif;
+    font-size: 10px;
+    line-height: 14px;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+  }
+
+  .shadow-card {
+    box-shadow:
+      0 1px 2px rgba(20, 26, 38, 0.03),
+      0 8px 24px rgba(20, 26, 38, 0.05);
+  }
+  .shadow-share {
+    box-shadow:
+      0 2px 6px rgba(232, 68, 46, 0.24),
+      0 10px 28px rgba(232, 68, 46, 0.32);
+  }
+
+  .ease-out-expo {
+    transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @keyframes skeleton-shimmer {
+    0% {
+      background-position: 100% 0;
+    }
+    100% {
+      background-position: -100% 0;
+    }
+  }
+  .skeleton {
+    background: linear-gradient(90deg, #eef0f3 25%, #f7f8fa 50%, #eef0f3 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.2s linear infinite;
+  }
+
+  @keyframes pulse-ring {
+    0% {
+      box-shadow: 0 0 0 0 rgba(232, 68, 46, 0.45);
+    }
+    100% {
+      box-shadow: 0 0 0 8px rgba(232, 68, 46, 0);
+    }
+  }
+  .pulse-dot {
+    animation: pulse-ring 1.8s ease-out infinite;
+  }
+
+  @keyframes dash-flow {
+    to {
+      stroke-dashoffset: -12;
+    }
+  }
+  .dash-flow {
+    animation: dash-flow 1.2s linear infinite;
+  }
+
+  @keyframes map-pulse {
+    0% {
+      box-shadow: 0 0 0 0 rgba(232, 68, 46, 0.45);
+    }
+    100% {
+      box-shadow: 0 0 0 14px rgba(232, 68, 46, 0);
+    }
+  }
+  .map-zone-pulse {
+    animation: map-pulse 1.8s ease-out infinite;
+  }
+
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton,
+  .pulse-dot,
+  .dash-flow,
+  .map-zone-pulse {
+    animation: none !important;
+  }
+}

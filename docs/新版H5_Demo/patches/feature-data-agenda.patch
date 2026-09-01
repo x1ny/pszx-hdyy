@@ -1,0 +1,832 @@
+From c8f5a498d32953e474f400fba53fa8b023d5cbb9 Mon Sep 17 00:00:00 2001
+From: agent <agent@example.com>
+Date: Fri, 21 Aug 2026 14:37:23 +0800
+Subject: [PATCH] data-agenda: refine async contract, hero, timeline
+
+---
+ src/components/AgendaTimeline.tsx | 107 +++++++---
+ src/components/EventHero.tsx      |  67 +++++-
+ src/lib/itinerary-api.ts          | 344 ++++++++++++++++++++++++------
+ src/types/itinerary.ts            |  38 +++-
+ 4 files changed, 446 insertions(+), 110 deletions(-)
+
+diff --git a/src/components/AgendaTimeline.tsx b/src/components/AgendaTimeline.tsx
+index e59c6be..0e97191 100644
+--- a/src/components/AgendaTimeline.tsx
++++ b/src/components/AgendaTimeline.tsx
+@@ -1,5 +1,5 @@
+-import { useState } from 'react'
+-import { AnimatePresence, motion } from 'framer-motion'
++import { useMemo, useState } from 'react'
++import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+ import type { AgendaItem } from '@/types/itinerary'
+ import { openNavigation } from '@/lib/actions'
+ import { Icon, PillTag, SectionHeader } from '@/components/shared'
+@@ -9,8 +9,18 @@ import { cn } from '@/lib/utils'
+ const EASE = [0.22, 1, 0.36, 1] as [number, number, number, number]
+ const COLLAPSED_COUNT = 2
+ 
+-function AgendaCard({ item, index }: { item: AgendaItem; index: number }) {
++function AgendaCard({
++  item,
++  stagger,
++  isLast,
++}: {
++  item: AgendaItem
++  /** stagger index used for the entrance delay */
++  stagger: number
++  isLast: boolean
++}) {
+   const { show } = useToast()
++  const reduceMotion = useReducedMotion()
+   const ongoing = item.status === 'ongoing'
+   const finished = item.status === 'finished'
+ 
+@@ -24,7 +34,7 @@ function AgendaCard({ item, index }: { item: AgendaItem; index: number }) {
+     <motion.div
+       initial={{ x: -12, opacity: 0 }}
+       animate={{ x: 0, opacity: 1 }}
+-      transition={{ duration: 0.4, delay: index * 0.07, ease: EASE }}
++      transition={{ duration: 0.4, delay: stagger * 0.05, ease: EASE }}
+       className={cn('relative flex gap-2.5', finished && 'opacity-50')}
+     >
+       {/* left time column + rail */}
+@@ -37,10 +47,17 @@ function AgendaCard({ item, index }: { item: AgendaItem; index: number }) {
+         >
+           {item.start}
+         </span>
+-        <span className="font-num text-xs font-bold leading-4 text-[var(--ink-3)]">{item.end}</span>
+-        {/* rail line */}
+-        <span className="absolute right-0 top-2 h-[calc(100%+10px)] w-px bg-[var(--line)]" />
+-        {/* node dot */}
++        <span className="font-num text-xs font-bold leading-4 text-[var(--ink-3)]">
++          {item.end}
++        </span>
++        {/* rail line — continues into the next card, stops at the last one */}
++        <span
++          className={cn(
++            'absolute right-0 top-2 w-px bg-[var(--line)]',
++            isLast ? 'h-[calc(100%-8px)]' : 'h-[calc(100%+10px)]',
++          )}
++        />
++        {/* node dot: ongoing = pulsing theme dot, upcoming = hollow ring, finished = grey solid */}
+         <span
+           className={cn(
+             'absolute right-[-3.5px] top-[9px] h-[8px] w-[8px] rounded-full',
+@@ -60,6 +77,15 @@ function AgendaCard({ item, index }: { item: AgendaItem; index: number }) {
+           ongoing && 'border-[1.5px] border-[var(--theme-primary)] bg-[var(--theme-soft)]',
+         )}
+       >
++        {/* ongoing edge: theme border breathes (reduced-motion → static) */}
++        {ongoing && !reduceMotion && (
++          <motion.span
++            aria-hidden
++            className="pointer-events-none absolute -inset-[1.5px] rounded-[14px] border-[1.5px] border-[var(--theme-primary)]"
++            animate={{ opacity: [1, 0.3, 1] }}
++            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
++          />
++        )}
+         {ongoing && (
+           <span className="bg-theme-gradient absolute right-3 top-3 rounded-full px-2 py-0.5 text-[10px] font-bold leading-4 text-white">
+             进行中
+@@ -67,32 +93,40 @@ function AgendaCard({ item, index }: { item: AgendaItem; index: number }) {
+         )}
+         <h3
+           className={cn(
+-            'pr-14 text-card-title',
++            'text-card-title',
++            ongoing && 'pr-14',
+             finished ? 'text-[var(--ink-4)]' : 'text-[var(--ink-1)]',
+           )}
+         >
+           {item.title}
+         </h3>
+ 
++        {/* venue row — whole row is the map action; ::before expands the hit area to ≥44px */}
+         <button
+           type="button"
+           onClick={handleVenueNav}
+-          className="mt-1 flex w-full items-center gap-1 text-left"
++          disabled={!item.geo}
++          aria-label={item.geo ? `导航到 ${item.venue}` : undefined}
++          className={cn(
++            'relative mt-1 flex w-full items-center gap-1 text-left',
++            'before:absolute before:-inset-x-1 before:-inset-y-3 before:content-[""]',
++            !item.geo && 'cursor-default',
++          )}
+         >
+           <Icon name="map-pin" size={12} className="shrink-0 text-[var(--ink-3)]" />
+           <span className="min-w-0 flex-1 truncate text-body text-[var(--ink-3)]">
+             {item.venue}
+           </span>
+-          <Icon name="navigation" size={12} className="shrink-0 text-[var(--ink-3)]" />
++          {item.geo && (
++            <Icon name="navigation" size={12} className="shrink-0 text-[var(--ink-3)]" />
++          )}
+         </button>
+ 
++        {/* zone + seat — visual focus of the card */}
+         {(item.zone || item.seat) && (
+           <div className="mt-1.5">
+             {finished ? (
+-              <PillTag
+-                variant="soft"
+-                style={{ background: '#F1F2F5', color: 'var(--ink-4)' }}
+-              >
++              <PillTag variant="soft" style={{ background: '#F1F2F5', color: 'var(--ink-4)' }}>
+                 {item.zone && <span>{item.zone}</span>}
+                 {item.seat && <span className="font-num">{item.seat}</span>}
+               </PillTag>
+@@ -110,26 +144,35 @@ function AgendaCard({ item, index }: { item: AgendaItem; index: number }) {
+ }
+ 
+ /**
+- * Module 2 — 我的议程: vertical timeline, first 2 items visible by default,
+- * the rest expand in place.
++ * Module 2 — 我的议程: compact vertical timeline sorted by start. Left time
++ * range, right card (bold title / venue with map action / highlighted
++ * zone+seat). Ongoing = high emphasis, finished = greyed, upcoming = clear.
++ * Default renders the first 2; the rest expand/collapse in place.
+  */
+ export default function AgendaTimeline({ agenda }: { agenda: AgendaItem[] }) {
+   const [expanded, setExpanded] = useState(false)
+-  const visible = expanded ? agenda : agenda.slice(0, COLLAPSED_COUNT)
+-  const hidden = agenda.slice(COLLAPSED_COUNT)
++
++  // Defensive re-sort — the API layer already guarantees order (§10).
++  const items = useMemo(
++    () => agenda.slice().sort((a, b) => a.start.localeCompare(b.start)),
++    [agenda],
++  )
++  const first = items.slice(0, COLLAPSED_COUNT)
++  const rest = items.slice(COLLAPSED_COUNT)
+ 
+   return (
+     <section className="px-4">
+       <SectionHeader
+         title="我的议程"
+         action={
+-          agenda.length > COLLAPSED_COUNT ? (
++          items.length > COLLAPSED_COUNT ? (
+             <button
+               type="button"
+               onClick={() => setExpanded((v) => !v)}
+-              className="flex items-center gap-0.5 text-caption font-bold text-[var(--theme-primary)]"
++              aria-expanded={expanded}
++              className="-my-[11px] flex min-h-[44px] items-center gap-0.5 text-caption font-bold text-[var(--theme-primary)]"
+             >
+-              {expanded ? '收起' : `展开全部（${agenda.length}）`}
++              {expanded ? '收起' : `展开全部（${items.length}）`}
+               <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size={12} />
+             </button>
+           ) : undefined
+@@ -137,9 +180,14 @@ export default function AgendaTimeline({ agenda }: { agenda: AgendaItem[] }) {
+       />
+ 
+       <div>
+-        {visible
+-          .slice(0, COLLAPSED_COUNT)
+-          .map((item, i) => <AgendaCard key={item.id} item={item} index={i} />)}
++        {first.map((item, i) => (
++          <AgendaCard
++            key={item.id}
++            item={item}
++            stagger={i}
++            isLast={!expanded && i === first.length - 1 && rest.length === 0}
++          />
++        ))}
+ 
+         <AnimatePresence initial={false}>
+           {expanded && (
+@@ -151,8 +199,13 @@ export default function AgendaTimeline({ agenda }: { agenda: AgendaItem[] }) {
+               transition={{ duration: 0.3, ease: EASE }}
+               className="overflow-hidden"
+             >
+-              {hidden.map((item, i) => (
+-                <AgendaCard key={item.id} item={item} index={i + COLLAPSED_COUNT} />
++              {rest.map((item, i) => (
++                <AgendaCard
++                  key={item.id}
++                  item={item}
++                  stagger={i}
++                  isLast={i === rest.length - 1}
++                />
+               ))}
+             </motion.div>
+           )}
+diff --git a/src/components/EventHero.tsx b/src/components/EventHero.tsx
+index 70e9556..5205e65 100644
+--- a/src/components/EventHero.tsx
++++ b/src/components/EventHero.tsx
+@@ -1,15 +1,48 @@
+ import { useState } from 'react'
+ import { motion } from 'framer-motion'
+ import type { EventInfo } from '@/types/itinerary'
+-import { openNavigation } from '@/lib/actions'
+-import { Icon, NavChip } from '@/components/shared'
++import { addToCalendar, openNavigation } from '@/lib/actions'
++import { Icon } from '@/components/shared'
++import type { IconName } from '@/components/shared'
+ import { useToast } from '@/lib/toast-context'
+ 
+ const EASE = [0.22, 1, 0.36, 1] as [number, number, number, number]
+ 
++/**
++ * Compact hero action chip: 36px visual height (design.md §1 NavChip spec)
++ * with the hit area expanded to ≥44px via a ::before overlay (no layout cost).
++ */
++function HeroActionChip({
++  icon,
++  label,
++  onClick,
++  ariaLabel,
++}: {
++  icon: IconName
++  label: string
++  onClick: () => void
++  ariaLabel?: string
++}) {
++  return (
++    <motion.button
++      type="button"
++      whileTap={{ scale: 0.94 }}
++      onClick={onClick}
++      aria-label={ariaLabel ?? label}
++      className="relative flex h-9 shrink-0 items-center gap-1 rounded-[10px] bg-[var(--theme-soft)] px-2.5 text-body font-bold text-[var(--theme-primary)] before:absolute before:-inset-x-1 before:-inset-y-2 before:content-['']"
++    >
++      <Icon name={icon} size={14} />
++      {label}
++    </motion.button>
++  )
++}
++
+ /**
+  * Module 1 — 活动概况: 200px hero (gradient + image + texture) with the white
+- * content card cutting in from the bottom (24px top radius).
++ * content card cutting in from the bottom (24px top radius, rounded
++ * transition into the content below). Rows: title (2-line clamp) / date+time
++ * / city+venue with nav action / collapsible intro. Add-to-calendar lives in
++ * the time row so the overview carries the calendar affordance too.
+  */
+ export default function EventHero({
+   userName,
+@@ -28,6 +61,11 @@ export default function EventHero({
+     show('已为你打开地图')
+   }
+ 
++  const handleCalendar = async () => {
++    const result = await addToCalendar(event)
++    show(result === 'downloaded' ? '已保存日历文件' : '已复制时间信息，请粘贴到日历')
++  }
++
+   return (
+     <section className="relative">
+       {/* Hero image area */}
+@@ -58,7 +96,7 @@ export default function EventHero({
+         </div>
+       </div>
+ 
+-      {/* White card cutting into the hero */}
++      {/* White card cutting into the hero (rounded bottom transition) */}
+       <motion.div
+         initial={{ y: 24, opacity: 0 }}
+         animate={{ y: 0, opacity: 1 }}
+@@ -81,6 +119,7 @@ export default function EventHero({
+             {event.title}
+           </motion.h1>
+ 
++          {/* date + exact time range + add-to-calendar affordance */}
+           <motion.div
+             variants={{ hidden: { y: 10, opacity: 0 }, show: { y: 0, opacity: 1 } }}
+             transition={{ duration: 0.4, ease: EASE }}
+@@ -91,8 +130,16 @@ export default function EventHero({
+             <span className="font-num text-body font-extrabold text-[var(--ink-1)]">
+               {event.timeRange}
+             </span>
++            <span className="flex-1" />
++            <HeroActionChip
++              icon="calendar-plus"
++              label="日历"
++              ariaLabel="添加到日历"
++              onClick={() => void handleCalendar()}
++            />
+           </motion.div>
+ 
++          {/* city + venue + navigation action */}
+           <motion.div
+             variants={{ hidden: { y: 10, opacity: 0 }, show: { y: 0, opacity: 1 } }}
+             transition={{ duration: 0.4, ease: EASE }}
+@@ -101,29 +148,33 @@ export default function EventHero({
+             <button
+               type="button"
+               onClick={handleNav}
+-              className="flex min-w-0 items-center gap-1.5 text-left"
++              aria-label={`导航到 ${event.city}${event.venue}`}
++              className="relative flex min-w-0 items-center gap-1.5 text-left before:absolute before:-inset-x-1 before:-inset-y-2 before:content-['']"
+             >
+               <Icon name="map-pin" size={14} className="shrink-0 text-[var(--ink-3)]" />
+               <span className="truncate text-body text-[var(--ink-2)]">
+                 {event.city} · {event.venue}
+               </span>
+             </button>
+-            <NavChip onClick={handleNav} />
++            <HeroActionChip icon="navigation" label="导航" onClick={handleNav} />
+           </motion.div>
+ 
++          {/* collapsible intro: 2 lines collapsed, max 3 expanded */}
+           <motion.div
+             variants={{ hidden: { y: 10, opacity: 0 }, show: { y: 0, opacity: 1 } }}
+             transition={{ duration: 0.4, ease: EASE }}
+             className="mt-1.5"
+           >
+             <p
+-              className={`select-text text-body text-[var(--ink-3)] ${expanded ? 'clamp-3' : 'clamp-2'}`}
++              className={`select-text text-body text-[var(--ink-3)] transition-all duration-200 ${
++                expanded ? 'clamp-3' : 'clamp-2'
++              }`}
+             >
+               {event.intro}
+               <button
+                 type="button"
+                 onClick={() => setExpanded((v) => !v)}
+-                className="ml-1 inline font-bold text-[var(--theme-primary)]"
++                className="ml-1 inline px-1 py-2 font-bold text-[var(--theme-primary)]"
+               >
+                 {expanded ? '收起' : '展开'}
+               </button>
+diff --git a/src/lib/itinerary-api.ts b/src/lib/itinerary-api.ts
+index 750bf8c..721b668 100644
+--- a/src/lib/itinerary-api.ts
++++ b/src/lib/itinerary-api.ts
+@@ -1,13 +1,282 @@
+-import type { ItineraryData, ItineraryResponse } from '@/types/itinerary'
++import type {
++  AgendaItem,
++  AgendaStatus,
++  ItineraryData,
++  ItineraryResponse,
++  Transfer,
++} from '@/types/itinerary'
+ 
+ /**
+  * Async data seam for the itinerary page.
+  *
+- * Production: `GET /api/itinerary?k={token}` returning `{ code, data }`.
+- * Demo: returns built-in mock data after a short simulated latency so the
+- * skeleton screen is exercised. Invalid tokens (`k=invalid`) surface the
+- * empty state.
++ * Contract: `GET /api/itinerary?k={token}` → `{ code, data, message? }`
++ * (see design.md §10). The raw payload is untrusted: `normalizeItinerary`
++ * validates the envelope, drops malformed entries, guarantees sort order
++ * (agenda by `start`, transfers by `sortTime`) and derives agenda status
++ * from the current clock as a front-end fallback.
++ *
++ * Runtime modes:
++ * - `VITE_ITINERARY_API` set  → real fetch against that endpoint.
++ * - unset (default demo)      → built-in mock payload after realistic
++ *   latency so the skeleton state is exercised. `?k=invalid` (or the HTTP
++ *   404 equivalent) surfaces the full-screen invalid-link state.
++ *
++ * `Home` consumes: `fetchItinerary`, `getToken`, `ItineraryError`
++ * (`err.code === 404` → invalid phase; anything else → error phase).
++ */
++
++const MOCK_LATENCY_MIN = 450
++const MOCK_LATENCY_RANGE = 450
++
++/** Endpoint override; unset → mock mode. e.g. VITE_ITINERARY_API=/api/itinerary */
++const API_ENDPOINT: string | undefined =
++  typeof import.meta.env.VITE_ITINERARY_API === 'string' &&
++  import.meta.env.VITE_ITINERARY_API.length > 0
++    ? import.meta.env.VITE_ITINERARY_API
++    : undefined
++
++/** Business error: `code` mirrors the API envelope (`404` = invalid token). */
++export class ItineraryError extends Error {
++  code: number
++  constructor(code: number, message: string) {
++    super(message)
++    this.name = 'ItineraryError'
++    this.code = code
++  }
++}
++
++/** Token from `?k=` query param ('' when absent / non-browser). */
++export function getToken(): string {
++  if (typeof window === 'undefined') return ''
++  return new URLSearchParams(window.location.search).get('k') ?? ''
++}
++
++export async function fetchItinerary(token: string): Promise<ItineraryData> {
++  const raw = API_ENDPOINT ? await requestRemote(API_ENDPOINT, token) : await requestMock(token)
++  return normalizeItinerary(raw)
++}
++
++/* ------------------------------------------------------------------ */
++/* Transport                                                           */
++/* ------------------------------------------------------------------ */
++
++async function requestRemote(endpoint: string, token: string): Promise<unknown> {
++  let res: Response
++  try {
++    res = await fetch(`${endpoint}?k=${encodeURIComponent(token)}`, {
++      headers: { Accept: 'application/json' },
++    })
++  } catch {
++    throw new ItineraryError(-1, '网络开小差了')
++  }
++  if (res.status === 404) throw new ItineraryError(404, '链接无效或已过期')
++  if (!res.ok) throw new ItineraryError(res.status, '网络开小差了')
++  try {
++    return (await res.json()) as unknown
++  } catch {
++    throw new ItineraryError(-2, '网络开小差了')
++  }
++}
++
++async function requestMock(token: string): Promise<ItineraryResponse> {
++  // Realistic jittered latency so the skeleton shimmer is exercised.
++  await new Promise((r) =>
++    setTimeout(r, MOCK_LATENCY_MIN + Math.random() * MOCK_LATENCY_RANGE),
++  )
++  // Demo token handling: `?k=invalid` → full-screen invalid-link state.
++  if (token === 'invalid') {
++    return { code: 404, message: '链接无效或已过期' }
++  }
++  // Deep copy so callers can mutate safely (structuredClone is baseline
++  // for our iOS 14+ / modern WebView targets).
++  return { code: 0, data: structuredClone(MOCK_DATA) }
++}
++
++/* ------------------------------------------------------------------ */
++/* Parsing / normalization (robust against partial or dirty payloads)  */
++/* ------------------------------------------------------------------ */
++
++type Record_ = Record<string, unknown>
++
++const isRecord = (v: unknown): v is Record_ => typeof v === 'object' && v !== null
++const asString = (v: unknown, fallback = ''): string =>
++  typeof v === 'string' && v.length > 0 ? v : fallback
++const asNumber = (v: unknown, fallback = 0): number =>
++  typeof v === 'number' && Number.isFinite(v) ? v : fallback
++
++const TIME_RE = /^\d{2}:\d{2}$/
++const isTime = (v: unknown): v is string => typeof v === 'string' && TIME_RE.test(v)
++
++const VALID_STATUS: readonly AgendaStatus[] = ['upcoming', 'ongoing', 'finished']
++
++function normalizeItinerary(raw: unknown): ItineraryData {
++  if (!isRecord(raw)) throw new ItineraryError(-2, '网络开小差了')
++  if (raw.code !== 0) {
++    const code = typeof raw.code === 'number' ? raw.code : -2
++    throw new ItineraryError(code, asString(raw.message, '链接无效或已过期'))
++  }
++
++  const data = raw.data
++  if (!isRecord(data) || !isRecord(data.user) || !isRecord(data.event)) {
++    throw new ItineraryError(-2, '网络开小差了')
++  }
++  const eventRaw = data.event
++  if (asString(eventRaw.title) === '' || asString(eventRaw.dateText) === '') {
++    throw new ItineraryError(-2, '网络开小差了')
++  }
++
++  // Event day (yyyyMMdd) anchors the front-end status fallback.
++  const icsRaw = isRecord(eventRaw.ics) ? eventRaw.ics : {}
++  const icsStart = asString(icsRaw.start)
++  const eventDay = /^\d{8}/.test(icsStart) ? icsStart.slice(0, 8) : ''
++
++  const agenda: AgendaItem[] = (Array.isArray(data.agenda) ? data.agenda : [])
++    .map((item, i): AgendaItem | null => {
++      if (!isRecord(item) || !isTime(item.start) || !isTime(item.end)) return null
++      const title = asString(item.title)
++      if (!title) return null
++      return {
++        id: asString(item.id, `agenda-${i}`),
++        start: item.start,
++        end: item.end,
++        title,
++        venue: asString(item.venue),
++        ...(isRecord(item.geo) ? { geo: normalizeGeo(item.geo) } : {}),
++        ...(asString(item.zone) ? { zone: asString(item.zone) } : {}),
++        ...(asString(item.seat) ? { seat: asString(item.seat) } : {}),
++        status: deriveStatus(eventDay, item.start, item.end, item.status),
++      }
++    })
++    .filter((x): x is AgendaItem => x !== null)
++    .sort((a, b) => a.start.localeCompare(b.start))
++
++  const transfers: Transfer[] = (Array.isArray(data.transfers) ? data.transfers : [])
++    .map((item): Transfer | null => {
++      if (!isRecord(item)) return null
++      const base = { sortTime: asString(item.sortTime) }
++      if (item.type === 'rail' || item.type === 'air') {
++        return {
++          type: item.type,
++          no: asString(item.no),
++          depTime: asString(item.depTime),
++          arrTime: asString(item.arrTime),
++          depStation: asString(item.depStation),
++          arrStation: asString(item.arrStation),
++          ...(asString(item.seat) ? { seat: asString(item.seat) } : {}),
++          ...(asString(item.gate) ? { gate: asString(item.gate) } : {}),
++          ...base,
++        }
++      }
++      if (item.type === 'car') {
++        return {
++          type: 'car',
++          title: asString(item.title, '活动用车'),
++          useTime: asString(item.useTime),
++          plate: asString(item.plate),
++          driver: asString(item.driver),
++          phone: asString(item.phone),
++          meetPoint: asString(item.meetPoint),
++          ...(isRecord(item.geo) ? { geo: normalizeGeo(item.geo) } : {}),
++          ...base,
++        }
++      }
++      return null // unknown transfer type → skip (forwards-compatible)
++    })
++    .filter((x): x is Transfer => x !== null)
++    .sort((a, b) => a.sortTime.localeCompare(b.sortTime))
++
++  const mapRaw = isRecord(data.venueMap) ? data.venueMap : {}
++  const venueMap = {
++    image: asString(mapRaw.image, '/venue-map.png'),
++    userZone: asString(mapRaw.userZone),
++    zones: (Array.isArray(mapRaw.zones) ? mapRaw.zones : [])
++      .map((z) => {
++        if (!isRecord(z)) return null
++        const rect = isRecord(z.rect)
++          ? {
++              x: asNumber(z.rect.x),
++              y: asNumber(z.rect.y),
++              w: asNumber(z.rect.w),
++              h: asNumber(z.rect.h),
++            }
++          : undefined
++        return {
++          key: asString(z.key),
++          name: asString(z.name),
++          desc: asString(z.desc),
++          ...(rect ? { rect } : {}),
++        }
++      })
++      .filter((z): z is NonNullable<typeof z> => z !== null && z.key !== ''),
++  }
++
++  return {
++    user: {
++      name: asString(data.user.name, '嘉宾'),
++      greeting: asString(data.user.greeting, '专属行程'),
++    },
++    event: {
++      title: asString(eventRaw.title),
++      dateText: asString(eventRaw.dateText),
++      timeRange: asString(eventRaw.timeRange),
++      city: asString(eventRaw.city),
++      venue: asString(eventRaw.venue),
++      venueGeo: normalizeGeo(isRecord(eventRaw.venueGeo) ? eventRaw.venueGeo : {}),
++      intro: asString(eventRaw.intro),
++      heroImage: asString(eventRaw.heroImage, '/hero-quanzhou.png'),
++      ics: {
++        start: icsStart,
++        end: asString(icsRaw.end),
++        alarm: asNumber(icsRaw.alarm, 30),
++      },
++    },
++    agenda,
++    transfers,
++    venueMap,
++  }
++}
++
++function normalizeGeo(raw: Record_) {
++  return {
++    lat: asNumber(raw.lat),
++    lng: asNumber(raw.lng),
++    name: asString(raw.name),
++  }
++}
++
++const toMinutes = (t: string): number => {
++  const [h, m] = t.split(':').map(Number)
++  return h * 60 + m
++}
++
++const yyyymmdd = (d: Date): string =>
++  `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
++
++/**
++ * Front-end status fallback (design.md §10: 前端也按当前时间兜底计算).
++ * - When today IS the event day, the clock wins over the server value.
++ * - Otherwise (previewing before/after the event) trust the server status,
++ *   defaulting invalid/missing values to 'upcoming'.
+  */
++function deriveStatus(
++  eventDay: string,
++  start: string,
++  end: string,
++  server: unknown,
++): AgendaStatus {
++  const fallback = VALID_STATUS.includes(server as AgendaStatus)
++    ? (server as AgendaStatus)
++    : 'upcoming'
++  if (!eventDay || yyyymmdd(new Date()) !== eventDay) return fallback
++  const cur = new Date().getHours() * 60 + new Date().getMinutes()
++  if (cur < toMinutes(start)) return 'upcoming'
++  if (cur >= toMinutes(end)) return 'finished'
++  return 'ongoing'
++}
++
++/* ------------------------------------------------------------------ */
++/* Demo payload (mirrors design.md §10 contract; replace via endpoint) */
++/* ------------------------------------------------------------------ */
+ 
+ const MOCK_DATA: ItineraryData = {
+   user: { name: '陈默', greeting: '专属行程' },
+@@ -144,68 +413,3 @@ const MOCK_DATA: ItineraryData = {
+     ],
+   },
+ }
+-
+-export function getToken(): string {
+-  if (typeof window === 'undefined') return ''
+-  return new URLSearchParams(window.location.search).get('k') ?? ''
+-}
+-
+-export async function fetchItinerary(token: string): Promise<ItineraryData> {
+-  // Simulate network latency so the skeleton state is visible.
+-  await new Promise((r) => setTimeout(r, 600))
+-
+-  // Demo token handling: `?k=invalid` (or empty) → empty state.
+-  if (token === 'invalid') {
+-    const res: ItineraryResponse = { code: 404, message: '链接无效或已过期' }
+-    throw new ItineraryError(res.code, res.message ?? '链接无效或已过期')
+-  }
+-
+-  // Real backend hook point:
+-  // const res = await fetch(`/api/itinerary?k=${encodeURIComponent(token)}`)
+-  // const json: ItineraryResponse = await res.json()
+-  // if (json.code !== 0 || !json.data) throw new ItineraryError(json.code, json.message)
+-  // return json.data
+-
+-  const data = structuredClone(MOCK_DATA)
+-  // Front-end fallback: derive agenda status from the current time when the
+-  // demo date happens to be "today" in the same time window is not expected;
+-  // keep the contract statuses but recompute as a safety net.
+-  data.agenda = data.agenda
+-    .slice()
+-    .sort((a, b) => a.start.localeCompare(b.start))
+-    .map((item) => ({ ...item, status: deriveStatus(item.start, item.end, item.status) }))
+-  data.transfers = data.transfers.slice().sort((a, b) => a.sortTime.localeCompare(b.sortTime))
+-  return data
+-}
+-
+-function deriveStatus(
+-  start: string,
+-  end: string,
+-  server: ItineraryData['agenda'][number]['status'],
+-): ItineraryData['agenda'][number]['status'] {
+-  // Only override the server value when "now" clearly falls outside the demo
+-  // day; otherwise trust the server-provided status (demo always shows one
+-  // ongoing item as designed).
+-  const now = new Date()
+-  const demoDay = '2025-06-18'
+-  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+-    now.getDate(),
+-  ).padStart(2, '0')}`
+-  if (today !== demoDay) return server
+-  const toMinutes = (t: string) => {
+-    const [h, m] = t.split(':').map(Number)
+-    return h * 60 + m
+-  }
+-  const cur = now.getHours() * 60 + now.getMinutes()
+-  if (cur < toMinutes(start)) return 'upcoming'
+-  if (cur >= toMinutes(end)) return 'finished'
+-  return 'ongoing'
+-}
+-
+-export class ItineraryError extends Error {
+-  code: number
+-  constructor(code: number, message: string) {
+-    super(message)
+-    this.code = code
+-  }
+-}
+diff --git a/src/types/itinerary.ts b/src/types/itinerary.ts
+index 6066cf2..af76966 100644
+--- a/src/types/itinerary.ts
++++ b/src/types/itinerary.ts
+@@ -1,25 +1,46 @@
++/**
++ * JSON contract for `GET /api/itinerary?k={token}` (design.md §10).
++ *
++ * Envelope: `{ code: number, data?: ItineraryData, message?: string }`
++ * - `code === 0`   → `data` present.
++ * - `code === 404` → token invalid/expired → full-screen empty state.
++ *
++ * Front-end guarantees (applied in `src/lib/itinerary-api.ts`, so
++ * components can trust what they receive):
++ * - `agenda` sorted by `start`, `transfers` sorted by `sortTime`.
++ * - malformed entries are dropped, missing optional fields omitted.
++ * - `AgendaItem.status` is recomputed from the local clock when "today" is
++ *   the event day (front-end fallback), otherwise the server value wins.
++ */
++
+ export interface GeoPoint {
+   lat: number
+   lng: number
++  /** Display name passed to the map app (高德 universal link). */
+   name: string
+ }
+ 
+ export interface EventIcs {
+-  /** format: yyyyMMddTHHmmss (local time) */
++  /** Local time, format `yyyyMMddTHHmmss`. */
+   start: string
+   end: string
+-  /** minutes before start */
++  /** VALARM reminder, minutes before start. */
+   alarm: number
+ }
+ 
+ export interface EventInfo {
++  /** Max 2 lines in the hero (`line-clamp: 2`). */
+   title: string
++  /** e.g. "2025年6月18日 周三" */
+   dateText: string
++  /** e.g. "09:00–17:30" (rendered in Manrope 800). */
+   timeRange: string
+   city: string
+   venue: string
+   venueGeo: GeoPoint
++  /** 1–2 lines clamped, expandable to 3. */
+   intro: string
++  /** Hero image URL (theme-swap point, alongside CSS theme vars). */
+   heroImage: string
+   ics: EventIcs
+ }
+@@ -28,13 +49,16 @@ export type AgendaStatus = 'upcoming' | 'ongoing' | 'finished'
+ 
+ export interface AgendaItem {
+   id: string
+-  /** "HH:mm" */
++  /** "HH:mm" — primary sort key. */
+   start: string
++  /** "HH:mm" */
+   end: string
+   title: string
+   venue: string
++  /** When present, the venue row becomes a map-navigation action. */
+   geo?: GeoPoint
+   zone?: string
++  /** Seat/admission note, e.g. "12排08座" / "凭胸卡入场". */
+   seat?: string
+   status: AgendaStatus
+ }
+@@ -43,7 +67,7 @@ export type TransferType = 'rail' | 'air' | 'car'
+ 
+ export interface TransferBase {
+   type: TransferType
+-  /** sort key, format yyyyMMddTHHmmss */
++  /** Sort key, format `yyyyMMddTHHmmss`. */
+   sortTime: string
+ }
+ 
+@@ -75,6 +99,7 @@ export interface CarTransfer extends TransferBase {
+   useTime: string
+   plate: string
+   driver: string
++  /** Rendered as a `tel:` chip. */
+   phone: string
+   meetPoint: string
+   geo?: GeoPoint
+@@ -86,12 +111,14 @@ export interface ZoneInfo {
+   key: string
+   name: string
+   desc: string
+-  /** optional highlight rect in percent of map image */
++  /** Highlight rect in percent of the map image (`userZoneRect`). */
+   rect?: { x: number; y: number; w: number; h: number }
+ }
+ 
+ export interface VenueMapInfo {
++  /** Loaded lazily — only when the map overlay opens. */
+   image: string
++  /** Matches a `ZoneInfo.key` suffix, e.g. "A区". */
+   userZone: string
+   zones: ZoneInfo[]
+ }
+@@ -100,6 +127,7 @@ export interface ItineraryData {
+   user: { name: string; greeting: string }
+   event: EventInfo
+   agenda: AgendaItem[]
++  /** Missing transfer types are simply not rendered (backwards compatible). */
+   transfers: Transfer[]
+   venueMap: VenueMapInfo
+ }
+-- 
+2.39.5
+
