@@ -1,0 +1,32 @@
+@import 'tailwindcss';
+
+/*
+ * 深色模式和 apps/web 一样是**有意禁用**的：Tailwind v4 的 `dark:` 变体默认
+ * 跟随 prefers-color-scheme，把它绑到一个永远不会被添加的 .dark class 上，
+ * 这些工具类就永久失效。要开深色模式先问，见 AGENTS.md「样式」。
+ */
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  /*
+   * 移动端不加载 Web 字体。首屏是大图 + 中文，一套变量字体几百 KB 换不来
+   * 任何东西，而中文字重本来就得靠系统字体。顺序照顾 iOS / Android / Windows。
+   */
+  --font-sans:
+    system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", sans-serif;
+}
+
+@layer base {
+  html {
+    /* iOS Safari 横屏会自动放大字号，按 rem 排的移动端布局会整体错位。 */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    /* dvh 而不是 vh：移动端浏览器地址栏收起时 vh 不跟着变，页面底部会被裁掉。 */
+    min-height: 100dvh;
+    background-color: var(--color-neutral-50);
+    color: var(--color-neutral-900);
+  }
+}

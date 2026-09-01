@@ -17,8 +17,13 @@ require() {
 require DATABASE_URL
 require BETTER_AUTH_SECRET
 
-# 前后端同源，浏览器只看得到一个 origin，所以 Better Auth 要的两个变量其实
-# 永远相等。给一个 APP_URL 让它们派生出来，少两个能配错的地方。
+# APP_URL 是**管理端**的地址。管理端和它的 API 在同一个端口上，浏览器只看得到
+# 一个 origin，所以 Better Auth 要的两个变量其实永远相等 —— 给一个 APP_URL 让
+# 它们派生出来，少两个能配错的地方。
+#
+# h5 不在这里配：它跑在另一个端口、另一个域名下，同样和自己的 API 同源，前端直接
+# 用 window.location.origin。等 h5 那套手机号身份接进来、需要签 Cookie 的域时，
+# 再在这里加 H5_URL。
 if [ -n "${APP_URL:-}" ]; then
   export BETTER_AUTH_URL="${BETTER_AUTH_URL:-$APP_URL}"
   export WEB_ORIGIN="${WEB_ORIGIN:-$APP_URL}"
@@ -44,6 +49,8 @@ echo "  WEB_ORIGIN:       $WEB_ORIGIN"
 echo "  SESSION_EXPIRES:  ${BETTER_AUTH_SESSION_EXPIRES_IN_SECONDS:-604800}s"
 echo "  SERVER_PORT:      ${SERVER_PORT:-80}"
 echo "  WEB_DIST_DIR:     ${WEB_DIST_DIR:-(unset, 不托管前端)}"
+echo "  H5_PORT:          ${H5_PORT:-8788}"
+echo "  H5_DIST_DIR:      ${H5_DIST_DIR:-(unset, 不起 h5 端口)}"
 echo "  FILE_STORAGE_DIR: $FILE_STORAGE_DIR"
 echo "  DATABASE_URL:     $safe_database_url"
 

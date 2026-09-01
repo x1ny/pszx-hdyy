@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <!-- viewport-fit=cover 让页面延伸到刘海屏的安全区之外，配合 CSS 里的
+         env(safe-area-inset-*) 使用；不加的话 iOS 会自己留白边，底部小白条
+         位置的按钮会被顶上去。刻意不写 user-scalable=no：iOS 10 起 Safari
+         直接忽略它，而在 Android 上它会真的禁掉缩放，是无障碍倒退。 -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="format-detection" content="telephone=no" />
+    <title>活动服务</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

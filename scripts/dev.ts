@@ -14,6 +14,7 @@ import { findAvailablePort, readPort } from "./ports";
 
 const DEFAULT_SERVER_PORT = 8787;
 const DEFAULT_WEB_PORT = 3000;
+const DEFAULT_H5_PORT = 3001;
 
 // 后端只绑回环。Bun 不指定 hostname 时会绑到所有接口（实测局域网 IP 可达），
 // 而开发环境挂着 /api/dev/login 这个免密入口 —— 不限制的话，同网段任何人
@@ -110,10 +111,15 @@ async function bootstrapEphemeralDb(envPath: string, databaseUrl: string) {
 async function startAppProcesses(envPath: string, databaseUrl?: string) {
   const requestedServerPort = readPort("SERVER_PORT", DEFAULT_SERVER_PORT);
   const requestedWebPort = readPort("WEB_PORT", DEFAULT_WEB_PORT);
+  const requestedH5Port = readPort("H5_PORT", DEFAULT_H5_PORT);
   const serverPort = await findAvailablePort(requestedServerPort);
   const webPort = await findAvailablePort(
     requestedWebPort,
     new Set([serverPort]),
+  );
+  const h5Port = await findAvailablePort(
+    requestedH5Port,
+    new Set([serverPort, webPort]),
   );
   const webOrigin = `http://localhost:${webPort}`;
 
@@ -129,11 +135,20 @@ async function startAppProcesses(envPath: string, databaseUrl?: string) {
     );
   }
 
+  if (h5Port !== requestedH5Port) {
+    console.log(
+      `[dev] H5_PORT ${requestedH5Port} is occupied; using ${h5Port}`,
+    );
+  }
+
   const childEnv = {
     ...process.env,
     SERVER_PORT: String(serverPort),
     SERVER_HOST: DEV_SERVER_HOST,
     WEB_PORT: String(webPort),
+    H5_PORT: String(h5Port),
+    // WEB_ORIGIN / BETTER_AUTH_URL 只跟**管理端**走：Better Auth 服务的是管理端
+    // 那套邮箱密码登录，h5 是另一套身份体系，不进 trustedOrigins。
     WEB_ORIGIN: webOrigin,
     BETTER_AUTH_URL: webOrigin,
     // 免密登录入口的两道闸（modules/auth/routes.dev.ts）：APP_ENV 是白名单，
@@ -158,33 +173,42 @@ async function startAppProcesses(envPath: string, databaseUrl?: string) {
   // Do not add `--bun` here. On Windows, Bun may bind IPv4 localhost even when
   // the same port is already listening on IPv6 localhost. Respecting Vite's Node
   // shebang keeps its own automatic port fallback consistent with this probe.
-  const webProcess = Bun.spawn(
-    [
-      process.execPath,
-      "vite",
-      "dev",
-      "--host",
-      "localhost",
-      "--port",
-      String(webPort),
-      "--strictPort",
-    ],
-    {
-      cwd: resolve(repoRoot, "apps/web"),
-      env: childEnv,
-      stdin: "inherit",
-      stdout: "inherit",
-      stderr: "inherit",
-    },
-  );
+  //
+  // stdin 给 "ignore" 而不是 "inherit"：两个 Vite 同时读同一个 TTY 的话，按下的
+  // 每个键会被随机分给其中一个，Vite 的 r/o/q 快捷键谁都用不成。代价只是没有那
+  // 几个快捷键——退出由这个编排进程自己的 SIGINT 处理接管。
+  const spawnVite = (workspace: string, port: number) =>
+    Bun.spawn(
+      [
+        process.execPath,
+        "vite",
+        "dev",
+        "--host",
+        "localhost",
+        "--port",
+        String(port),
+        "--strictPort",
+      ],
+      {
+        cwd: resolve(repoRoot, workspace),
+        env: childEnv,
+        stdin: "ignore",
+        stdout: "inherit",
+        stderr: "inherit",
+      },
+    );
+
+  const webProcess = spawnVite("apps/web", webPort);
+  const h5Process = spawnVite("apps/h5", h5Port);
 
   // 两条路径都挂着免密入口，所以两条都要提示。持久库里未必有种子账号，
   // 那种情况下这个入口会返回一段说明为什么失败的文案，而不是静默 404。
   console.log(
-    `[dev] 前端 ${webOrigin}，免密登录 ${webOrigin}/api/dev/login`,
+    `[dev] 管理端 ${webOrigin}，免密登录 ${webOrigin}/api/dev/login`,
   );
+  console.log(`[dev] h5 http://localhost:${h5Port}`);
 
-  return [serverProcess, webProcess];
+  return [serverProcess, webProcess, h5Process];
 }
 
 const envPath = await ensureDotEnv();

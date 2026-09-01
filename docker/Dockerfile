@@ -15,6 +15,7 @@ WORKDIR /app
 COPY package.json bun.lock ./
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
+COPY apps/h5/package.json apps/h5/
 # 根 package.json 的 postinstall 会跑这个脚本，而这一层还没到 `COPY . .`，
 # 不单独拷进来的话 bun install 直接报 "Module not found"。它在镜像里是空操作：
 # 容器里既没有 .git 也没有 git 二进制，脚本会自行短路退出。
@@ -24,8 +25,8 @@ RUN bun install --frozen-lockfile --linker=hoisted
 
 COPY . .
 
-# 产出两样东西：apps/web/dist（静态资源）和 apps/server/dist/server.js
-# （bun build 打的单文件，依赖全部内联）。
+# 产出三样东西：apps/web/dist 和 apps/h5/dist（两份静态资源）+
+# apps/server/dist/server.js（bun build 打的单文件，依赖全部内联）。
 #
 # 后者是运行阶段能完全不带 node_modules 的原因。别想着用
 # `bun install --production` 代替 —— 在 workspace 根它只跳过根 package.json 的
@@ -45,18 +46,23 @@ RUN apk add --no-cache tzdata \
     && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
     && echo "Asia/Shanghai" > /etc/timezone
 
-# WEB_DIST_DIR 一设上，apps/server 就会在同一个 Hono 里托管 web 的静态产物
-# （见 apps/server/src/index.ts）。开发环境不设这个变量，静态资源仍归 Vite。
+# 两个 *_DIST_DIR 一设上，apps/server 就在同一个 Hono 里托管这两份静态产物，
+# 各占一个端口：80 是管理端，81 是 h5（见 apps/server/src/index.ts）。两个端口
+# 都提供完整的 /api，所以两端各自同源，不需要 CORS。
+# 开发环境两个都不设，静态资源仍归 Vite。
 ENV NODE_ENV=production \
     TZ=Asia/Shanghai \
     SERVER_PORT=80 \
     WEB_DIST_DIR=/app/web \
+    H5_PORT=81 \
+    H5_DIST_DIR=/app/h5 \
     FILE_STORAGE_DIR=/app/data/files
 
 COPY --from=builder /app/apps/server/dist/server.js ./server.js
 COPY --from=builder /app/apps/web/dist ./web
+COPY --from=builder /app/apps/h5/dist ./h5
 COPY docker/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh && mkdir -p "$FILE_STORAGE_DIR"
 
-EXPOSE 80
+EXPOSE 80 81
 ENTRYPOINT ["/docker-entrypoint.sh"]

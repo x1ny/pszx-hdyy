@@ -11,6 +11,7 @@
 			"**/src/**/*",
 			"**/.vscode/**/*",
 			"apps/web/index.html",
+			"apps/h5/index.html",
 			"**/vite.config.ts",
 			"**/vitest.config.ts",
 			"**/vitest.setup.ts",

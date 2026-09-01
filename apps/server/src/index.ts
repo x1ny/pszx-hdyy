@@ -1,3 +1,4 @@
+import type { Server } from "bun";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { activityConfigRoutes } from "./modules/activity-config/routes";
@@ -33,15 +34,15 @@ import { venueRoutes } from "./modules/venue/routes";
 import { activityVenueRoutes } from "./modules/venue/routes.activity";
 import { err } from "./shared/result";
 
-const app = new Hono<{ Variables: Variables }>();
-
-// 生产镜像把 web 的构建产物和 server 跑在同一个 Hono 里（见 docker/README.md）。
-// 只有设了 WEB_DIST_DIR 才挂载 —— 开发环境不设，静态资源仍归 Vite，这里等于不存在。
-const webDistDir = process.env.WEB_DIST_DIR?.trim();
-
-if (webDistDir) {
-  const staticFiles = serveStatic({
-    root: webDistDir,
+// 生产镜像把前端的构建产物和 server 跑在同一个 Hono 里（见 docker/README.md）。
+// 管理端和 h5 各占一个端口，**两个端口共用下面这一整套路由**（/api 也在内），
+// 所以两边各自同源，不需要 CORS。端口之间唯一的差别就是静态资源目录，它通过
+// Hono 的 bindings 由每个 server 各自传进来（见文件末尾）。
+//
+// 只有设了对应的 *_DIST_DIR 才有静态托管 —— 开发环境两个都不设，静态资源仍归 Vite。
+function createStaticApp(distDir: string) {
+  const files = serveStatic({
+    root: distDir,
     onFound: (path, c) => {
       // Vite 的产物文件名带内容哈希，可以永久缓存；index.html 不带，缓存了就
       // 再也发不出新版本。
@@ -54,7 +55,7 @@ if (webDistDir) {
     },
   });
   const indexHtml = serveStatic({
-    root: webDistDir,
+    root: distDir,
     path: "index.html",
     // 回落这条路径也必须显式 no-cache。不给头的话浏览器会启发式缓存 HTML，
     // 发版后深链拿到旧 index.html 去引用已经删掉的哈希资源，白屏。
@@ -63,24 +64,47 @@ if (webDistDir) {
     },
   });
 
+  return { files, indexHtml };
+}
+
+type StaticApp = ReturnType<typeof createStaticApp>;
+
+// `server` 这一项不是可选的装饰：`hono/bun` 的 getConnInfo 要从 c.env 里取 Bun
+// 的 Server 才能调 requestIP()，免密登录入口的回环地址检查就靠它
+// （modules/auth/routes.dev.ts）。Hono 的 Bun 适配器认两种形状——c.env 本身就是
+// Server，或者 c.env.server 是 Server——我们要在同一个 env 里塞第二样东西，所以
+// 只能用后者。漏掉它的话那条路由会直接抛 TypeError。
+type Bindings = { server: Server<unknown>; staticApp?: StaticApp };
+
+const webDistDir = process.env.WEB_DIST_DIR?.trim();
+const h5DistDir = process.env.H5_DIST_DIR?.trim();
+const webStaticApp = webDistDir ? createStaticApp(webDistDir) : undefined;
+const h5StaticApp = h5DistDir ? createStaticApp(h5DistDir) : undefined;
+
+const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+if (webStaticApp || h5StaticApp) {
   // 挂在 sessionMiddleware **之前**。挂在后面的话，每个 js/css/字体请求都会
   // 触发一次 auth.api.getSession() 查库 —— 一次首屏加载几十个静态请求，
   // 就是几十次没有任何意义的数据库往返。
   app.use("*", async (c, next) => {
+    // 取的是**当前这个端口**的静态目录；没有就说明这个端口只提供 API。
+    const staticApp = c.env.staticApp;
+
     // /api 一律不碰。少了这个判断，打错的接口路径会返回 200 的 index.html，
     // 前端把 "<!doctype html>" 塞进 JSON.parse，报错信息会完全指错方向。
-    if (c.req.path.startsWith("/api")) {
+    if (!staticApp || c.req.path.startsWith("/api")) {
       return next();
     }
 
     // 找得到文件就直接返回；找不到（/projects/123 这类前端路由被直接刷新）
     // 回落到 index.html 交给 TanStack Router。
-    const fileResponse = await staticFiles(c, async () => {});
+    const fileResponse = await staticApp.files(c, async () => {});
     if (fileResponse) {
       return fileResponse;
     }
 
-    return indexHtml(c, next);
+    return staticApp.indexHtml(c, next);
   });
 }
 
@@ -170,8 +194,30 @@ export type AppType = typeof routes;
 // 同网段任何人都能签出一个真实 session。
 const serverHost = process.env.SERVER_HOST?.trim();
 
+// h5 的端口。跑的是同一个 `app`，只是绑了另一个静态目录 —— /api 在这个端口上
+// 一样存在，所以 h5 和它调的接口天然同源。
+//
+// 只有设了 H5_DIST_DIR 才起，这一点有两个作用：开发环境（前端归 Vite）不会白占
+// 一个端口；`scripts/gen-api-docs.ts` import 这个模块去读路由表时，也不会因为
+// 副作用意外 listen。
+//
+// 这里必须显式 Bun.serve —— 一个模块只能有一个 default export。而显式 listen
+// 和 `--hot` 是冲突的（热重载重新执行模块会重复绑定端口），两个条件正好互斥：
+// 需要第二个端口的生产形态没有 --hot，有 --hot 的开发形态不设 H5_DIST_DIR。
+if (h5StaticApp) {
+  Bun.serve({
+    port: Number(process.env.H5_PORT ?? 8788),
+    ...(serverHost ? { hostname: serverHost } : {}),
+    fetch: (request, server) =>
+      app.fetch(request, { server, staticApp: h5StaticApp }),
+  });
+}
+
 export default {
   port: Number(process.env.SERVER_PORT ?? 8787),
   ...(serverHost ? { hostname: serverHost } : {}),
-  fetch: app.fetch,
+  // 不能简写成 `fetch: app.fetch`：那样 c.env 就只是 Bun 的 Server，静态中间件
+  // 读不到 staticApp。但 Server 本身也不能丢——见上面 Bindings 的注释。
+  fetch: (request: Request, server: Server<unknown>) =>
+    app.fetch(request, { server, staticApp: webStaticApp }),
 };
