@@ -15,10 +15,132 @@
   --font-sans:
     system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB",
     "Microsoft YaHei", sans-serif;
+
+  /* —— 主题色：换一场活动只改这一段 + 头图 —— */
+  --color-brand: #e8442e;
+  --color-brand-deep: #c22a18;
+  --color-brand-soft: #fdecea;
+
+  /* —— 中性色：所有活动通用 —— */
+  --color-ink-1: #141a26;
+  --color-ink-2: #3d4757;
+  --color-ink-3: #7a8494;
+  --color-ink-4: #a8b0be;
+  --color-page: #f5f6f8;
+  --color-surface: #ffffff;
+  --color-sunken: #fafbfc;
+  --color-line: #ebedf1;
+
+  /* —— 交通方式语义色：铁路蓝 / 航空紫 / 用车绿 —— */
+  --color-rail: #2e6bff;
+  --color-rail-soft: #eaf0ff;
+  --color-air: #8b5cf6;
+  --color-air-soft: #f1ecfe;
+  --color-car: #12b76a;
+  --color-car-soft: #e7f8f0;
+
+  /* —— 提示块（需要嘉宾配合的事项）—— */
+  --color-note-bg: #fff7e8;
+  --color-note-icon: #d97706;
+  --color-note-ink: #8a5a0b;
+
+  /* —— 字阶：移动端信息密度高，字号档位刻意少而固定 —— */
+  /*
+   * 字阶一律用 rem（注释里的 px 是 375 基准屏上的实际值）。用 px 写会让它
+   * 脱离下面那套等比缩放，出现"间距缩了字号没缩"的半吊子效果。
+   */
+  --text-display: 1.5rem; /* 24px */
+  --text-display--line-height: 2rem; /* 32px */
+  --text-display--font-weight: 900;
+  --text-display--letter-spacing: -0.01em;
+
+  --text-title: 0.9375rem; /* 15px */
+  --text-title--line-height: 1.375rem; /* 22px */
+  --text-title--font-weight: 700;
+
+  --text-time: 1.125rem; /* 18px */
+  --text-time--line-height: 1.5rem; /* 24px */
+  --text-time--font-weight: 800;
+
+  --text-body: 0.8125rem; /* 13px */
+  --text-body--line-height: 1.25rem; /* 20px */
+
+  --text-caption: 0.6875rem; /* 11px */
+  --text-caption--line-height: 1rem; /* 16px */
+  --text-caption--font-weight: 500;
+
+  --text-tag: 0.6875rem; /* 11px */
+  --text-tag--line-height: 1.125rem; /* 18px */
+  --text-tag--font-weight: 700;
+
+  --text-eyebrow: 0.625rem; /* 10px */
+  --text-eyebrow--line-height: 0.875rem; /* 14px */
+  --text-eyebrow--font-weight: 700;
+  --text-eyebrow--letter-spacing: 0.22em;
+
+  /* 卡片浮起用双层阴影：近距离一层描边感 + 远距离一层扩散。 */
+  --shadow-card: 0 1px 2px rgb(20 26 38 / 0.03), 0 8px 24px rgb(20 26 38 / 0.05);
+  --shadow-brand: 0 2px 6px rgb(232 68 46 / 0.24), 0 10px 28px rgb(232 68 46 / 0.32);
+
+  --ease-out-expo: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --animate-pulse-ring: pulse-ring 1.8s ease-out infinite;
+  --animate-breathe: breathe 2s ease-in-out infinite;
+  --animate-rise: rise 0.45s var(--ease-out-expo) both;
+  --animate-slide-in: slide-in 0.4s var(--ease-out-expo) both;
+
+  @keyframes pulse-ring {
+    0% {
+      box-shadow: 0 0 0 0 rgb(232 68 46 / 0.45);
+    }
+    100% {
+      box-shadow: 0 0 0 8px rgb(232 68 46 / 0);
+    }
+  }
+  @keyframes breathe {
+    50% {
+      opacity: 0.3;
+    }
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+  }
+  @keyframes slide-in {
+    from {
+      opacity: 0;
+      transform: translateX(-12px);
+    }
+  }
 }
 
 @layer base {
   html {
+    /*
+     * —— 等比缩放的总开关，全站唯一一处 ——
+     *
+     * Tailwind v4 的 spacing 和字阶**全是 rem**（`p-3` 编译成 0.75rem 而不是
+     * 12px），所以只要改根字号，内边距、间距、圆角、图标尺寸、字号会一起等比
+     * 缩放。不需要 postcss-px-to-viewport 那类插件——它在 v4 上配不好，而且
+     * 处理不了 `w-[50px]` 这种任意值，只会做出"一半缩放一半不缩放"的效果。
+     *
+     * 4.2667vw = 16 / 375 * 100：设计基准 375px 宽、根字号 16px。
+     *
+     * clamp 两端各挡一个问题：
+     * - 下界 0.925rem(14.8px)：低于 347px 宽的屏（320px 老机型）停止缩小，
+     *   保证正文不低于 12px——中文在 11px 已经糊了。**代价是 320px 上不再
+     *   严格等比**，长文案可能截断，这是有意的取舍。
+     * - 上界 1.28rem(20.48px)：正好在视口 480px 处达到，和画布的
+     *   `max-w-[480px]` 同时封顶，两者一起冻结、不会出现跳变。改其中一个
+     *   记得改另一个（1.28 = 480 / 375）。
+     *
+     * 根元素上 font-size 里的 rem 按浏览器默认字号解析（不是自引用），所以
+     * 上下界仍然跟随用户的字号设置——纯 vw 会把它彻底覆盖掉。
+     */
+    font-size: clamp(0.925rem, 4.2667vw, 1.28rem);
+
     /* iOS Safari 横屏会自动放大字号，按 rem 排的移动端布局会整体错位。 */
     -webkit-text-size-adjust: 100%;
   }
@@ -26,7 +148,36 @@
   body {
     /* dvh 而不是 vh：移动端浏览器地址栏收起时 vh 不跟着变，页面底部会被裁掉。 */
     min-height: 100dvh;
-    background-color: var(--color-neutral-50);
-    color: var(--color-neutral-900);
+    /* 桌面上把 480px 的手机画布衬成一块面板；手机上这层永远看不见。 */
+    background-color: #e9ebf0;
+    color: var(--color-ink-1);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+  }
+
+  /* 移动端点击不要那层灰色高亮块，按压反馈由 active: 变体自己给。 */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* 主题渐变：solid 色标 + 按钮 + 时间轴刻度共用一条，换主题只改这里。 */
+@utility bg-brand-gradient {
+  background-image: linear-gradient(135deg, #ff6b3d 0%, #e8442e 48%, #b91c3c 100%);
+}
+
+/* iOS 刘海屏底部安全区。配合 index.html 的 viewport-fit=cover 使用。 */
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* 进场动画统一在这里关掉，省得每个组件各写一遍媒体查询。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

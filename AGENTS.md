@@ -24,7 +24,9 @@ Before editing files for a substantial task:
 
 `prototype/admin/` 是 `apps/web` 的需求来源，`prototype/h5/` 是 `apps/h5` 的。
 
-> 这里原先写着「H5 相关的功能目前都不做」，**该结论 2026-09-01 作废**——`apps/h5` 已建好并接通构建部署。但**页面一个都还没做**（只有占位首页），业务功能仍按需求排期，不要看到目录存在就顺手开工；身份体系没定案、`/api/h5` 守卫也没有，涉及登录态的页面现在做不了。
+> 这里原先写着「H5 相关的功能目前都不做」，**该结论 2026-09-01 作废**——`apps/h5` 已建好并接通构建部署。业务功能仍按需求排期，不要看到目录存在就顺手开工；身份体系没定案、`/api/h5` 守卫也没有，**涉及登录态的页面现在做不了**。
+
+> **已有页面：`/itinerary`（嘉宾专属行程，2026-09-01）——静态页，数据是 `routes/itinerary/-data.ts` 里的常量。** 需求来源是 `docs/新版H5_Demo/`（原型的 React 源码 + 截图）。接后端时把那个常量换成请求即可，类型就是接口约定的草稿。它同时是 h5 端的**视觉与结构范式**：Base UI 原语（Drawer / Tabs / Collapsible / Toast / Dialog）+ 自己写皮、内联 SVG 图标不装图标库、动画走 `styles.css` 的 `--animate-*`（不引 framer-motion）。
 
 ## 旧项目代码参考
 当用户要求参考旧代码时 再从这两个目录中读取代码研究
@@ -219,3 +221,5 @@ Bun 传给 `fetch` 的第二个参数是它自己的 Server 对象，默认会�
 深色模式在**两个前端上都是有意禁用**的。`apps/web/src/styles.css` 和 `apps/h5/src/styles.css` 都只定义亮色 token，并把 Tailwind 的 `dark:` 变体绑定到一个永远不会被添加的 `.dark` class 上 —— 在 `apps/web` 上，正是这一点挡住了 shadcn 组件内置的 `dark:` 工具类跟随操作系统 `prefers-color-scheme` 生效；`apps/h5` 没有 shadcn，那行是为了保持两边行为一致，别让某天从 web 拷过去的一段 class 突然在深色系统下变样。**不要擅自**添加 `.dark` token 块、主题切换开关，或 `prefers-color-scheme` 媒体查询，先问过再说。
 
 两份 `styles.css` 的 token **刻意不共享**（理由见「仓库结构」）。改配色时只改对应那一份，不要为了"统一"把它们抽成一份。
+
+**`apps/h5` 走等比缩放**：`styles.css` 里一条 `html { font-size: clamp(...) }` 是总开关，Tailwind v4 的 spacing 和字阶都是 rem，跟着一起缩。所以 **h5 的新字阶一律写 rem**（写 px 会脱离缩放，做出"间距缩了字号没缩"的半吊子效果），**新写 `[Npx]` 任意值前先判断**：跟着别的元素对齐的写 rem，描边/安全区这类物理量留 px。判据、clamp 上下界的算法、以及为什么不用 `postcss-px-to-viewport` / `lib-flexible`，见 [docs/architecture-decisions.md](docs/architecture-decisions.md#appsh5-的移动端适配根字号等比缩放)。`apps/web` 不受影响。
