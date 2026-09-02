@@ -4,8 +4,9 @@ import { cn } from "#/shared/lib/utils";
 /**
  * 座位号、席别这类小标签。
  *
- * `solid` 用主题渐变填充，是「这是你的座位」的强指示；`soft` 是浅底彩字，
- * 给交通类型色和已结束的灰态用（后者由调用方传 style 覆盖）。
+ * `outline` 是座位标签的默认长相：白底 + 主题色描边和字。上一版用实心渐变
+ * 填充，一屏里五六个座位标签一起亮着，主题色就不再是「重点」的信号了。
+ * `solid` 留给真正唯一的强指示（座位图上「您在这里」），`soft` 给浅底彩字。
  */
 export function PillTag({
   children,
@@ -14,7 +15,7 @@ export function PillTag({
   style,
 }: {
   children: ReactNode;
-  variant?: "solid" | "soft";
+  variant?: "solid" | "soft" | "outline";
   className?: string;
   style?: CSSProperties;
 }) {
@@ -22,9 +23,9 @@ export function PillTag({
     <span
       className={cn(
         "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-tag",
-        variant === "solid"
-          ? "bg-brand-gradient text-white"
-          : "bg-brand-soft text-brand",
+        variant === "solid" && "bg-brand-gradient text-white",
+        variant === "outline" && "border border-brand bg-surface text-brand",
+        variant === "soft" && "bg-brand-soft text-brand",
         className,
       )}
       style={style}

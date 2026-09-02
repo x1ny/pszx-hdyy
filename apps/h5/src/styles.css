@@ -31,18 +31,16 @@
   --color-sunken: #fafbfc;
   --color-line: #ebedf1;
 
-  /* —— 交通方式语义色：铁路蓝 / 航空紫 / 用车绿 —— */
-  --color-rail: #2e6bff;
-  --color-rail-soft: #eaf0ff;
-  --color-air: #8b5cf6;
-  --color-air-soft: #f1ecfe;
-  --color-car: #12b76a;
-  --color-car-soft: #e7f8f0;
-
-  /* —— 提示块（需要嘉宾配合的事项）—— */
-  --color-note-bg: #fff7e8;
-  --color-note-icon: #d97706;
-  --color-note-ink: #8a5a0b;
+  /*
+   * —— 交通信息色：一种中性灰，不分车/机/铁 ——
+   *
+   * 上一版给三类交通各配了一个色相（铁路蓝 / 航空紫 / 用车绿），在一个纯靠
+   * 扫读的页面上显得花哨，而且和主题红抢注意力。现在**颜色只留给主题红承担
+   * 「重点 / 待办 / 可操作」**，交通方式靠图标区分就够了。
+   * 要恢复分色的话改这两个值不够，得回到 day-timeline 里按 type 分支。
+   */
+  --color-transit: #4a515c;
+  --color-transit-soft: #f1f2f5;
 
   /* —— 字阶：移动端信息密度高，字号档位刻意少而固定 —— */
   /*
@@ -73,6 +71,12 @@
   --text-tag--line-height: 1.125rem; /* 18px */
   --text-tag--font-weight: 700;
 
+  /* 行内动作药丸（导航 / 电话 / 车牌）。融合后的时间轴里内容列被时间列和
+     图标占掉一截，13px 的正文在 375px 上放不下「车牌 + 司机 + 电话」一行。 */
+  --text-chip: 0.75rem; /* 12px */
+  --text-chip--line-height: 1rem; /* 16px */
+  --text-chip--font-weight: 700;
+
   --text-eyebrow: 0.625rem; /* 10px */
   --text-eyebrow--line-height: 0.875rem; /* 14px */
   --text-eyebrow--font-weight: 700;
@@ -85,9 +89,9 @@
   --ease-out-expo: cubic-bezier(0.22, 1, 0.36, 1);
 
   --animate-pulse-ring: pulse-ring 1.8s ease-out infinite;
-  --animate-breathe: breathe 2s ease-in-out infinite;
   --animate-rise: rise 0.45s var(--ease-out-expo) both;
   --animate-slide-in: slide-in 0.4s var(--ease-out-expo) both;
+  --animate-shake: shake 0.4s ease-in-out;
 
   @keyframes pulse-ring {
     0% {
@@ -95,11 +99,6 @@
     }
     100% {
       box-shadow: 0 0 0 8px rgb(232 68 46 / 0);
-    }
-  }
-  @keyframes breathe {
-    50% {
-      opacity: 0.3;
     }
   }
   @keyframes rise {
@@ -112,6 +111,26 @@
     from {
       opacity: 0;
       transform: translateX(-12px);
+    }
+  }
+  /* 输错手机号时输入框左右晃一下。位移用 px：这是「抖一下」的物理量，跟着
+     根字号缩放没有意义。 */
+  @keyframes shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    20% {
+      transform: translateX(-8px);
+    }
+    40% {
+      transform: translateX(8px);
+    }
+    60% {
+      transform: translateX(-5px);
+    }
+    80% {
+      transform: translateX(5px);
     }
   }
 }
@@ -164,11 +183,6 @@
 /* 主题渐变：solid 色标 + 按钮 + 时间轴刻度共用一条，换主题只改这里。 */
 @utility bg-brand-gradient {
   background-image: linear-gradient(135deg, #ff6b3d 0%, #e8442e 48%, #b91c3c 100%);
-}
-
-/* iOS 刘海屏底部安全区。配合 index.html 的 viewport-fit=cover 使用。 */
-@utility pb-safe {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* 进场动画统一在这里关掉，省得每个组件各写一遍媒体查询。 */

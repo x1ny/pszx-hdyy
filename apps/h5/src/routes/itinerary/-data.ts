@@ -5,8 +5,9 @@
  * 形状取回来（身份体系还没定案，见 AGENTS.md「认证」），所以这里的类型就是
  * 将来那份接口约定的草稿，字段含义写在注释里。
  *
- * 演示数据刻意覆盖全部视觉状态：已结束 / 进行中 / 未开始三种议程状态、
- * 火车 / 飞机 / 用车三类行程、有座位和无座位、带提示和不带提示的议程。
+ * 演示数据刻意覆盖各种形状：已结束 / 未结束的日子、火车 / 飞机 / 用车三类
+ * 行程、精确到座和一段区间的座位、有同行人座位说明的、带提示的、以及一整
+ * 天只有交通没有议程的「出发日」。
  */
 
 export interface GeoPoint {
@@ -40,8 +41,6 @@ export interface EventInfo {
   details: EventDetails;
   contact: StaffContact;
   heroImage: string;
-  /** 生成 .ics 用，本地时间 `yyyyMMddTHHmmss`。 */
-  ics: { start: string; end: string; alarm: number };
 }
 
 /** 已结束 / 进行中 / 未开始——决定时间轴节点和卡片的三套配色。 */
@@ -61,11 +60,20 @@ export interface AgendaItem {
    */
   geo?: GeoPoint;
   zone?: string;
+  /** 座位号，也可以是一段区间（`6排11-15座`）或「凭胸卡入场」这类说明。 */
   seat?: string;
-  /** 关联的用车安排 id，会折叠显示在该议程下方。 */
+  /**
+   * 关联的用车安排 id。用车本身是时间轴上一个独立的行（按发车时间排在这一
+   * 场前面），这个字段只是一条说明性的关联，不再决定渲染位置。
+   */
   carId?: string;
-  /** 需要嘉宾配合的事项（上台发言、着装要求），渲染成琥珀色提示块。 */
+  /** 需要嘉宾配合的事项（上台发言、着装要求），渲染成提示块。 */
   note?: string;
+  /**
+   * 同行人的座位说明（`您的团体成员座位安排在 5排03-05座`）。同行人多半没有
+   * 自己的分享链接，座位只能挂在拿到链接的这位嘉宾身上。空 / 无 → 不渲染。
+   */
+  groupSeatNote?: string;
   status: AgendaStatus;
 }
 
@@ -122,11 +130,25 @@ export interface ItineraryData {
   venueMap: VenueMapInfo;
 }
 
+/**
+ * 演示用的准入手机号。
+ *
+ * 真实版本里这个判断整个在服务端：手机号连同链接 token 一起发过去，换回一份
+ * 只能看这一份行程的凭证。前端不留任何可比对的常量，见 key-gate.tsx。
+ */
+export const DEMO_ACCESS_KEY = "13860681818";
+
+/** 手机号校验的假实现。故意留个延时，把真实网络往返的等待态也演出来。 */
+export async function verifyAccessKey(key: string): Promise<boolean> {
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  return key.replace(/\D/g, "") === DEMO_ACCESS_KEY;
+}
+
 export const ITINERARY: ItineraryData = {
   user: { name: "陈默", greeting: "专属行程" },
   event: {
-    title: "2025 海丝国际时尚周 · 开幕式暨品牌发布盛典",
-    dateText: "2025年6月18日 周三",
+    title: "2025 海丝国际时尚周",
+    dateText: "2025年6月18日–20日 · 共3天",
     timeRange: "09:00–17:30",
     city: "泉州",
     venue: "海峡体育中心 · 体育馆",
@@ -147,7 +169,6 @@ export const ITINERARY: ItineraryData = {
     },
     contact: { name: "林晓彤", phone: "13605950011" },
     heroImage: "/hero-quanzhou.jpg",
-    ics: { start: "20250618T090000", end: "20250620T130000", alarm: 30 },
   },
   agenda: [
     // ---- 第一天 · 6.18 周三（已结束）----
@@ -192,7 +213,8 @@ export const ITINERARY: ItineraryData = {
       title: "海丝时尚趋势工作坊",
       venue: "二层论坛厅 2",
       zone: "C区",
-      seat: "6排11座",
+      // 座位是一段区间——不是每场入场都精确到一个座位号
+      seat: "6排11-15座",
       note: "含面料体验环节，建议穿着轻便运动服装",
       status: "finished",
     },
@@ -215,6 +237,8 @@ export const ITINERARY: ItineraryData = {
       venue: "主体育馆 · 副舞台",
       zone: "A区",
       seat: "5排02座",
+      // 这位嘉宾有分享链接，同行的人没有——把他们的座位一起带在这条上
+      groupSeatNote: "您的团体成员座位安排在 5排03-05座、6排01-03座",
       note: "开场前 20 分钟请入座完毕，秀间谢绝走动",
       status: "upcoming",
     },
@@ -265,30 +289,33 @@ export const ITINERARY: ItineraryData = {
     },
   ],
   transfers: [
+    // ---- 出发日 · 6.17 周二：晚班机抵达，当晚住酒店 ----
+    // 这一天没有任何议程，靠它验证「只有交通的日子也要有自己的一张日卡」
     {
       id: "air-mf8501",
       type: "air",
       no: "MF8501",
-      depTime: "06:10",
-      arrTime: "08:55",
+      depTime: "19:30",
+      arrTime: "22:05",
       depStation: "北京首都 T2",
       arrStation: "泉州晋江国际机场",
       seat: "经济舱 32C",
       gate: "登机口 B12",
-      sortTime: "20250618T061000",
+      sortTime: "20250617T193000",
     },
+    // ---- 第一天 · 6.18：早上从酒店接去场馆 ----
     {
       id: "car-shuttle",
       type: "car",
       title: "活动接驳专车 · 往体育馆",
-      useTime: "09:10 发车",
+      useTime: "08:10 发车",
       plate: "闽C·D8866",
       driver: "王师傅",
       phone: "13806051234",
-      meetPoint: "晋江机场 T1 到达层 · 6号门",
-      durationMin: 40,
-      geo: { lat: 24.8008, lng: 118.5896, name: "泉州晋江国际机场" },
-      sortTime: "20250618T091000",
+      meetPoint: "泉州悦华酒店大堂",
+      durationMin: 20,
+      geo: { lat: 24.907, lng: 118.585, name: "泉州悦华酒店" },
+      sortTime: "20250618T081000",
     },
     {
       id: "car-night",

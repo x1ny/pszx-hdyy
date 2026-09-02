@@ -26,7 +26,9 @@ Before editing files for a substantial task:
 
 > 这里原先写着「H5 相关的功能目前都不做」，**该结论 2026-09-01 作废**——`apps/h5` 已建好并接通构建部署。业务功能仍按需求排期，不要看到目录存在就顺手开工；身份体系没定案、`/api/h5` 守卫也没有，**涉及登录态的页面现在做不了**。
 
-> **已有页面：`/itinerary`（嘉宾专属行程，2026-09-01）——静态页，数据是 `routes/itinerary/-data.ts` 里的常量。** 需求来源是 `docs/新版H5_Demo/`（原型的 React 源码 + 截图）。接后端时把那个常量换成请求即可，类型就是接口约定的草稿。它同时是 h5 端的**视觉与结构范式**：Base UI 原语（Drawer / Tabs / Collapsible / Toast / Dialog）+ 自己写皮、内联 SVG 图标不装图标库、动画走 `styles.css` 的 `--animate-*`（不引 framer-motion）。
+> **已有页面：`/itinerary`（嘉宾专属行程，2026-09-02）——静态页，数据是 `routes/itinerary/-data.ts` 里的常量。** 需求来源是 `docs/新版H5_Demo/`（原型的 React 源码 + 截图）。接后端时把那个常量换成请求即可，类型就是接口约定的草稿。它同时是 h5 端的**视觉与结构范式**：Base UI 原语（Drawer / Collapsible / Toast）+ 自己写皮、内联 SVG 图标不装图标库、动画走 `styles.css` 的 `--animate-*`（不引 framer-motion）。视觉上**只有主题红一种强调色**——交通方式不再分色（`--color-transit`），提示块也是中性灰底 + 红图标，别再往里加第二套语义色。
+>
+> 进页面那道手机号校验（`key-gate.tsx`）**是界面不是安全边界**：判断在前端比一个常量，devtools 一开就绕过去了。接后端前不要把它当成"已经有权限控制了"，见文件顶部注释。
 
 ## 旧项目代码参考
 当用户要求参考旧代码时 再从这两个目录中读取代码研究

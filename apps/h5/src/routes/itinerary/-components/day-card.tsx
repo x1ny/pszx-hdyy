@@ -1,24 +1,27 @@
 import { Collapsible } from "@base-ui/react/collapsible";
 import type { ReactNode } from "react";
 import { cn } from "#/shared/lib/utils";
-import { dayOrdinal, parseDay } from "../-utils";
+import { parseDay } from "../-utils";
 import { Icon } from "./icon";
 
 /**
- * 多天活动里的「第 N 天」大卡：日期磁贴 + 天数 + 条目数 + 折叠箭头。
+ * 多天活动里的「一天」大卡：日期磁贴 + 标题 + 条目数 + 折叠箭头。
+ *
+ * 标题由调用方给（`第一天` / `出发日` / `返程日`），因为只有交通没有议程的
+ * 日子不该占用「第 N 天」的编号，见 -utils 的 `dayLabelOf`。
  *
  * 已经过去的那天默认折叠并整体降调（灰磁贴 + 「已结束」），当天和往后默认
  * 展开——嘉宾打开页面十有八九是想看今天和明天。
  */
 export function DayCard({
-  index,
+  label,
   day,
   count,
   isCurrent,
   isPast,
   children,
 }: {
-  index: number;
+  label: string;
   day: string;
   count: number;
   isCurrent: boolean;
@@ -31,7 +34,7 @@ export function DayCard({
     <Collapsible.Root
       defaultOpen={!isPast}
       className="mb-3 overflow-hidden rounded-2xl border border-line bg-surface shadow-card"
-      render={<section aria-label={`第${dayOrdinal(index)}天 ${day}`} />}
+      render={<section aria-label={`${label} ${day}`} />}
     >
       <Collapsible.Trigger className="group flex w-full items-center gap-2.5 px-3 py-2.5 text-left">
         <span
@@ -56,7 +59,7 @@ export function DayCard({
                 isPast ? "text-ink-3" : "text-ink-1",
               )}
             >
-              第{dayOrdinal(index)}天
+              {label}
             </span>
             {isCurrent && (
               <span className="rounded-full bg-brand-gradient px-1.5 py-px font-bold text-[0.625rem] text-white leading-4">

@@ -79,9 +79,14 @@ export function zoneLetterOf(zone?: string): string {
   return (zone ?? "").replace(/[^A-Za-z]/g, "").toUpperCase();
 }
 
-/** 「12排08座」→ `{ row: 12, seat: 8 }`；「凭胸卡入场」这类返回 null。 */
+/**
+ * 「12排08座」→ `{ row: 12, seat: 8 }`；「凭胸卡入场」这类返回 null。
+ *
+ * 区间（`6排11-15座`）取头一个座位——图上只落一个标记，标在区间起点比整个
+ * 不标要有用，嘉宾找到 11 座自然就找到了后面几个。
+ */
 function parseSeat(seat?: string): { row: number; seat: number } | null {
-  const m = /(\d+)\s*排\s*(\d+)\s*座/.exec(seat ?? "");
+  const m = /(\d+)\s*排\s*(\d+)/.exec(seat ?? "");
   return m ? { row: Number(m[1]), seat: Number(m[2]) } : null;
 }
 

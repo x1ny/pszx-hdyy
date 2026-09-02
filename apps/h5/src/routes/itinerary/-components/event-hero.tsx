@@ -1,9 +1,7 @@
 import { useState } from "react";
 import type { EventInfo } from "../-data";
-import { isNavigable } from "../-utils";
 import { EventDetailOverlay } from "./event-detail-overlay";
 import { Icon } from "./icon";
-import { NavChip } from "./nav-chip";
 import { PhoneChip } from "./phone-chip";
 
 /**
@@ -11,6 +9,10 @@ import { PhoneChip } from "./phone-chip";
  *
  * 白卡从这里一路白到页面底部，中间不再换底色——上一版在头图下面接了灰底，
  * 卡片和页面之间那道白→灰的接缝在真机上很脏。卡片之间靠描边和阴影分隔。
+ *
+ * 头图只回答「是什么活动、什么时候」。城市和场馆挪进了「活动详情」面板：
+ * 下面每一场议程都自带更精确的地点和导航，这里再放一个总的场馆导航属于
+ * 重复，还把首屏最值钱的位置占掉了。
  *
  * 现场联系人放在首屏、不用滚：嘉宾在门口找不到人时第一反应是找电话。
  */
@@ -57,16 +59,6 @@ export function EventHero({
           <span className="font-extrabold text-body text-ink-1 tabular-nums">
             {event.timeRange}
           </span>
-        </div>
-
-        <div className="mt-1.5 flex items-center justify-between gap-2">
-          <span className="flex min-w-0 items-center gap-1.5">
-            <Icon name="map-pin" size={14} className="shrink-0 text-ink-3" />
-            <span className="truncate text-body text-ink-2">
-              {event.city} · {event.venue}
-            </span>
-          </span>
-          {isNavigable(event.venueGeo) && <NavChip geo={event.venueGeo} />}
         </div>
 
         <div className="mt-1.5">

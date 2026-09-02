@@ -1,7 +1,7 @@
-import type { AgendaItem, EventInfo, GeoPoint, Transfer } from "./-data";
+import type { AgendaItem, GeoPoint, Transfer } from "./-data";
 
 /* ------------------------------------------------------------------ */
-/* 平台动作：地图 / 电话 / 剪贴板 / 日历 / 分享                          */
+/* 平台动作：地图 / 电话 / 剪贴板                                        */
 /* ------------------------------------------------------------------ */
 
 /** 微信内置浏览器会拦掉唤起 App 的 scheme，导航链接要按它降级。 */
@@ -73,78 +73,8 @@ export async function copyText(text: string): Promise<boolean> {
   }
 }
 
-/** .ics 里逗号、分号、反斜杠和换行都是分隔符，必须转义。 */
-function escapeIcs(text: string): string {
-  return text.replace(/([\\;,])/g, "\\$1").replace(/\n/g, "\\n");
-}
-
-/**
- * 直接在前端拼一份 .ics 下载——这一步不需要后端，日历文件本来就是纯文本。
- * 浏览器不给下载（微信内置浏览器就不给）时退回复制时间文案。
- */
-export async function addToCalendar(
-  event: EventInfo,
-): Promise<"downloaded" | "copied"> {
-  const lines = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//h5-itinerary//ZH",
-    "BEGIN:VEVENT",
-    `UID:${event.ics.start}-${Math.random().toString(36).slice(2)}@itinerary`,
-    `DTSTART:${event.ics.start}`,
-    `DTEND:${event.ics.end}`,
-    `SUMMARY:${escapeIcs(event.title)}`,
-    `LOCATION:${escapeIcs(`${event.city} ${event.venue}`)}`,
-    `DESCRIPTION:${escapeIcs(event.intro)}`,
-    "BEGIN:VALARM",
-    `TRIGGER:-PT${event.ics.alarm}M`,
-    "ACTION:DISPLAY",
-    "DESCRIPTION:活动提醒",
-    "END:VALARM",
-    "END:VEVENT",
-    "END:VCALENDAR",
-  ];
-  try {
-    const url = URL.createObjectURL(
-      new Blob([lines.join("\r\n")], { type: "text/calendar;charset=utf-8" }),
-    );
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "itinerary.ics";
-    a.click();
-    URL.revokeObjectURL(url);
-    return "downloaded";
-  } catch {
-    await copyText(
-      `${event.title}\n${event.dateText} ${event.timeRange}\n${event.city} ${event.venue}`,
-    );
-    return "copied";
-  }
-}
-
-/**
- * 系统分享面板优先；微信里没有 Web Share API，退回复制链接，由用户自己点
- * 右上角转发（真机上还会额外弹一层引导蒙层，见 sticky-share-bar.tsx）。
- */
-export async function shareItinerary(payload: {
-  title: string;
-  text: string;
-  url: string;
-}): Promise<"shared" | "copied" | "wechat-guide" | "failed"> {
-  if (isWeChat()) return "wechat-guide";
-  if (typeof navigator.share === "function") {
-    try {
-      await navigator.share(payload);
-      return "shared";
-    } catch {
-      // 用户主动取消也走这里，继续退回复制即可，不该报错。
-    }
-  }
-  return (await copyText(payload.url)) ? "copied" : "failed";
-}
-
 /* ------------------------------------------------------------------ */
-/* 日期 / 分组                                                          */
+/* 日期                                                                */
 /* ------------------------------------------------------------------ */
 
 const WEEKDAYS = "日一二三四五六";
@@ -168,7 +98,7 @@ export function parseDay(iso: string): DayParts | null {
 }
 
 /** 第 1 天 → 「一」，超过十天就退回阿拉伯数字，不硬凑「十一」。 */
-export function dayOrdinal(index: number): string {
+function dayOrdinal(index: number): string {
   return CN_NUM[index] ?? String(index + 1);
 }
 
@@ -176,6 +106,29 @@ export function dayOrdinal(index: number): string {
 export function transferDay(t: Transfer): string {
   const m = /^(\d{4})(\d{2})(\d{2})T/.exec(t.sortTime);
   return m ? `${m[1]}-${m[2]}-${m[3]}` : "";
+}
+
+/** 行程在当天内的排序键：`20250618T061000` → `06:10`。 */
+export function transferTime(t: Transfer): string {
+  const m = /^\d{8}T(\d{2})(\d{2})/.exec(t.sortTime);
+  return m ? `${m[1]}:${m[2]}` : "";
+}
+
+/**
+ * 一天在列表里的标题。
+ *
+ * 有议程的那几天顺序编号「第 N 天」；只有交通没有议程的那天不占编号——前一
+ * 晚飞过来叫「出发日」、活动结束后返程叫「返程日」、夹在中间的空档叫「自由
+ * 活动」。把它们也编成「第 N 天」会让嘉宾以为那天有安排。
+ */
+export function dayLabelOf(day: string, agendaDays: string[]): string {
+  const i = agendaDays.indexOf(day);
+  if (i >= 0) return `第${dayOrdinal(i)}天`;
+  const first = agendaDays[0];
+  const last = agendaDays[agendaDays.length - 1];
+  if (first && day < first) return "出发日";
+  if (last && day > last) return "返程日";
+  return "自由活动";
 }
 
 export function uniqueDays(days: string[]): string[] {
@@ -192,20 +145,4 @@ export function currentDayOf(days: string[], agenda: AgendaItem[]): string {
   const today = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
   if (days.includes(today)) return today;
   return agenda.find((a) => a.status === "ongoing")?.date ?? days[0] ?? "";
-}
-
-/** 按天分组，保持传入顺序。 */
-export function groupByDay<T>(
-  items: T[],
-  keyOf: (item: T) => string,
-): Map<string, T[]> {
-  const map = new Map<string, T[]>();
-  for (const item of items) {
-    const key = keyOf(item);
-    if (!key) continue;
-    const list = map.get(key) ?? [];
-    list.push(item);
-    map.set(key, list);
-  }
-  return map;
 }

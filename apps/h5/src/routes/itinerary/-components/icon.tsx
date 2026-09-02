@@ -7,31 +7,22 @@ import type { ReactNode } from "react";
  * tree-shaking 的运气。要加图标就往下面这张表里贴 path。
  */
 export type IconName =
-  | "calendar-plus"
   | "car-front"
   | "chevron-down"
   | "clock"
+  | "lock-keyhole"
   | "map"
   | "map-pin"
   | "megaphone"
   | "navigation"
   | "phone"
   | "plane"
-  | "share-2"
   | "train-front"
   | "user-round"
+  | "users-round"
   | "x";
 
 const ICON_PATHS: Record<IconName, ReactNode> = {
-  "calendar-plus": (
-    <>
-      <path d="M16 2v4" />
-      <path d="M21 13V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8" />
-      <path d="M3 10h18" />
-      <path d="M16 19h6" />
-      <path d="M19 16v6" />
-    </>
-  ),
   "car-front": (
     <>
       <path d="m21 8-2 2-1.5-3.7A2 2 0 0 0 15.646 5H8.4a2 2 0 0 0-1.903 1.257L5 10 3 8" />
@@ -47,6 +38,13 @@ const ICON_PATHS: Record<IconName, ReactNode> = {
     <>
       <circle cx="12" cy="12" r="10" />
       <polyline points="12 6 12 12 16 14" />
+    </>
+  ),
+  "lock-keyhole": (
+    <>
+      <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+      <circle cx="12" cy="16" r="1" />
     </>
   ),
   map: (
@@ -75,15 +73,6 @@ const ICON_PATHS: Record<IconName, ReactNode> = {
   plane: (
     <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" />
   ),
-  "share-2": (
-    <>
-      <circle cx="18" cy="5" r="3" />
-      <circle cx="6" cy="12" r="3" />
-      <circle cx="18" cy="19" r="3" />
-      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-    </>
-  ),
   "train-front": (
     <>
       <path d="M8 3.1V7a4 4 0 0 0 8 0V3.1" />
@@ -98,6 +87,13 @@ const ICON_PATHS: Record<IconName, ReactNode> = {
     <>
       <circle cx="12" cy="8" r="5" />
       <path d="M20 21a8 8 0 0 0-16 0" />
+    </>
+  ),
+  "users-round": (
+    <>
+      <path d="M18 21a8 8 0 0 0-16 0" />
+      <circle cx="10" cy="8" r="5" />
+      <path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3" />
     </>
   ),
   x: (
