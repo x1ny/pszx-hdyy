@@ -369,7 +369,7 @@ export function MemberPickerDialog({
           onValueChange={(value) => setMode(value as PickerMode)}
         >
           {organization ? (
-            <TabsList className="mx-4 grid w-[calc(100%-2rem)] grid-cols-2 sm:mx-6 sm:w-[calc(100%-3rem)]">
+            <TabsList className="mx-4 grid w-[calc(100%-2rem)] grid-cols-2 mt-2 sm:mx-6 sm:w-[calc(100%-3rem)]">
               <TabsTrigger value="members">按人员选择</TabsTrigger>
               <TabsTrigger value="organization">按团体添加</TabsTrigger>
             </TabsList>
