@@ -64,7 +64,9 @@ export const ListInvitationTemplatesInput = PageInput.extend({
  * 预览吃的是 fileId 而不是 templateId：模板页保存前就要能看，不然用户必须先
  * 保存一个自己都没看过的模板。
  */
-export const InspectInvitationTemplateInput = z.object({ templateFileId: fileId });
+export const InspectInvitationTemplateInput = z.object({
+  templateFileId: fileId,
+});
 
 /**
  * 预览。不传 `variables` 就用样例值（模板页的场景：还没人填过任何东西）；
@@ -92,24 +94,39 @@ const VariableValues = z
   .record(z.string(), z.string().trim().max(500, "变量取值过长"))
   .default({});
 
-export const CreateInvitationBatchInput = z.object({
+/**
+ * 上限 200：个人模式限制 200 人，团体模式限制 200 个团体。两种模式最终都
+ * 生成不超过 200 份文件，下载和生成保持同一口径。
+ */
+const recipientIds = z
+  .array(id)
+  .min(1, "请选择邀请对象")
+  .max(200, "单次最多 200 个邀请对象，请分批生成")
+  .transform((value) => [...new Set(value)]);
+
+const InvitationBatchCommonFields = {
   activityId: id,
   templateId: id,
   issueDate: z.iso.date({ error: "请选择正确的发函日期" }),
   variables: VariableValues,
-  /**
-   * 上限 200：对齐文档 §8.4.1 的批量口径。
-   *
-   * ⚠️ 这个限制的真实约束在**下载**（200 人 / 500 MB），不在生成——生成只是
-   * 写几百行数据库。这里跟着卡同一个数，是为了不出现「能生成 500 份但一次下
-   * 不完」的割裂状态，不是因为生成扛不住。
-   */
-  memberIds: z
-    .array(id)
-    .min(1, "请选择邀请对象")
-    .max(200, "单次最多 200 人，请分批生成")
-    .transform((value) => [...new Set(value)]),
-});
+};
+
+/** 个人/团体是互斥入参，请求只携带当前模式对应的编号字段。 */
+export const CreateInvitationBatchInput = z.discriminatedUnion(
+  "recipientType",
+  [
+    z.object({
+      ...InvitationBatchCommonFields,
+      recipientType: z.literal("member"),
+      memberIds: recipientIds,
+    }),
+    z.object({
+      ...InvitationBatchCommonFields,
+      recipientType: z.literal("organization"),
+      organizationIds: recipientIds,
+    }),
+  ],
+);
 
 /** 生成页带出该模板上一次填的值做默认。 */
 export const LastVariableValuesInput = z.object({ templateId: id });
@@ -134,6 +151,11 @@ export const DownloadInvitationBatchInput = z.object({
   batchId: id,
   /** 不传表示整批。传了就是批次内的子集（列表页勾选下载）。 */
   memberIds: z
+    .array(id)
+    .max(200, "单次最多下载 200 份，请分批下载")
+    .optional()
+    .transform((value) => (value?.length ? [...new Set(value)] : undefined)),
+  organizationIds: z
     .array(id)
     .max(200, "单次最多下载 200 份，请分批下载")
     .optional()

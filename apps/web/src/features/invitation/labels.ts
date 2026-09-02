@@ -42,7 +42,7 @@ export const maskMobile = (mobile?: string | null) => {
 };
 
 /**
- * 单批生成/下载的人数上限（文档 §8.4.1、BR-DEV-014D）。
+ * 单批生成/下载的收件对象上限（文档 §8.4.1、BR-DEV-014D）。
  *
  * 服务端 `CreateInvitationBatchInput` 卡的是同一个数，这里只是**提前告诉用户**，
  * 不是校验——真正的拦截仍然在服务端。改的时候两边一起改。

@@ -48,9 +48,14 @@ export function BatchDetailDialog({
 
   const batch = detailQuery.data;
   const records = batch?.records ?? [];
+  const recipientType = batch?.recipientType ?? "member";
+  const tableColumnCount = recipientType === "organization" ? 7 : 6;
+  const getRecipientId = (row: (typeof records)[number]) =>
+    row.recipientType === "organization" ? row.organizationId : row.memberId;
 
   useEffect(() => {
     setSelected(new Set());
+    if (batchId === undefined) return;
   }, [batchId]);
 
   const singleMutation = useMutation({
@@ -64,6 +69,7 @@ export function BatchDetailDialog({
       downloadInvitationBatch(
         batchId as number,
         selected.size > 0 ? [...selected] : undefined,
+        recipientType,
       ),
     onSuccess: ({ blob, fileName }) => {
       saveBlob(blob, fileName);
@@ -73,7 +79,11 @@ export function BatchDetailDialog({
   });
 
   const allSelected =
-    records.length > 0 && records.every((row) => selected.has(row.memberId));
+    records.length > 0 &&
+    records.every((row) => {
+      const recipientId = getRecipientId(row);
+      return recipientId !== null && selected.has(recipientId);
+    });
 
   const customVariables = Object.entries(batch?.variables ?? {});
 
@@ -81,10 +91,12 @@ export function BatchDetailDialog({
     <Dialog open={batchId !== undefined} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>邀请人员名单</DialogTitle>
+          <DialogTitle>
+            {recipientType === "organization" ? "邀请团体名单" : "邀请人员名单"}
+          </DialogTitle>
           <DialogDescription>
             {batch
-              ? `${batch.batchNo} · ${batch.templateName} · 发函日期 ${batch.issueDate}`
+              ? `${batch.batchNo} · ${batch.templateName} · ${recipientType === "organization" ? "按团体生成" : "按人员生成"} · 发函日期 ${batch.issueDate}`
               : "加载中…"}
           </DialogDescription>
         </DialogHeader>
@@ -115,15 +127,34 @@ export function BatchDetailDialog({
                       onCheckedChange={(checked) =>
                         setSelected(
                           checked === true
-                            ? new Set(records.map((row) => row.memberId))
+                            ? new Set(
+                                records
+                                  .map(getRecipientId)
+                                  .filter(
+                                    (recipientId): recipientId is number =>
+                                      recipientId !== null,
+                                  ),
+                              )
                             : new Set(),
                         )
                       }
                     />
                   </TableHead>
-                  <TableHead>姓名</TableHead>
-                  <TableHead>单位职务</TableHead>
-                  <TableHead>手机号</TableHead>
+                  <TableHead>
+                    {recipientType === "organization" ? "团体名称" : "姓名"}
+                  </TableHead>
+                  {recipientType === "organization" ? (
+                    <>
+                      <TableHead>成员人数</TableHead>
+                      <TableHead>团体负责人</TableHead>
+                      <TableHead>联系电话</TableHead>
+                    </>
+                  ) : (
+                    <>
+                      <TableHead>单位职务</TableHead>
+                      <TableHead>手机号</TableHead>
+                    </>
+                  )}
                   <TableHead>生成时间</TableHead>
                   <TableHead className="text-center">操作</TableHead>
                 </TableRow>
@@ -133,7 +164,7 @@ export function BatchDetailDialog({
                   Array.from({ length: 3 }, (_, index) => (
                     // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
                     <TableRow key={index}>
-                      {Array.from({ length: 6 }, (_, cell) => (
+                      {Array.from({ length: tableColumnCount }, (_, cell) => (
                         // biome-ignore lint/suspicious/noArrayIndexKey: 同上
                         <TableCell key={cell}>
                           <Skeleton className="h-5 w-full" />
@@ -144,57 +175,79 @@ export function BatchDetailDialog({
                 ) : records.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={6}
+                      colSpan={tableColumnCount}
                       className="py-8 text-center text-muted-foreground text-sm"
                     >
                       这一批没有邀请函记录。
                     </TableCell>
                   </TableRow>
                 ) : (
-                  records.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell>
-                        <Checkbox
-                          checked={selected.has(row.memberId)}
-                          onCheckedChange={(checked) =>
-                            setSelected((prev) => {
-                              const next = new Set(prev);
-                              if (checked === true) next.add(row.memberId);
-                              else next.delete(row.memberId);
-                              return next;
-                            })
-                          }
-                        />
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {row.recipientName}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {row.companyPosition || "-"}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {maskMobile(row.mobile)}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap text-muted-foreground">
-                        {formatDateTime(row.createdAt)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-primary hover:text-primary"
-                          disabled={
-                            singleMutation.isPending &&
-                            singleMutation.variables === row.id
-                          }
-                          onClick={() => singleMutation.mutate(row.id)}
-                        >
-                          <DownloadIcon />
-                          下载
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  records.map((row) => {
+                    const recipientId = getRecipientId(row);
+                    return (
+                      <TableRow key={row.id}>
+                        <TableCell>
+                          <Checkbox
+                            checked={
+                              recipientId !== null && selected.has(recipientId)
+                            }
+                            onCheckedChange={(checked) =>
+                              setSelected((prev) => {
+                                if (recipientId === null) return prev;
+                                const next = new Set(prev);
+                                if (checked === true) next.add(recipientId);
+                                else next.delete(recipientId);
+                                return next;
+                              })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {row.recipientName}
+                        </TableCell>
+                        {recipientType === "organization" ? (
+                          <>
+                            <TableCell className="text-muted-foreground">
+                              {row.organizationMemberCount} 人
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {row.organizationContactName || "-"}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {maskMobile(row.organizationContactMobile)}
+                            </TableCell>
+                          </>
+                        ) : (
+                          <>
+                            <TableCell className="text-muted-foreground">
+                              {row.companyPosition || "-"}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {maskMobile(row.mobile)}
+                            </TableCell>
+                          </>
+                        )}
+                        <TableCell className="whitespace-nowrap text-muted-foreground">
+                          {formatDateTime(row.createdAt)}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-primary hover:text-primary"
+                            disabled={
+                              singleMutation.isPending &&
+                              singleMutation.variables === row.id
+                            }
+                            onClick={() => singleMutation.mutate(row.id)}
+                          >
+                            <DownloadIcon />
+                            下载
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
@@ -210,7 +263,11 @@ export function BatchDetailDialog({
             onClick={() => zipMutation.mutate()}
           >
             <DownloadIcon />
-            {selected.size > 0 ? `下载选中 ${selected.size} 份` : "下载全部"}
+            {selected.size > 0
+              ? `下载选中 ${selected.size} 份`
+              : recipientType === "organization"
+                ? "下载全部团体邀请函"
+                : "下载全部"}
           </Button>
         </DialogFooter>
       </DialogContent>

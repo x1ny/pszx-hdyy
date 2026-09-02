@@ -5,12 +5,13 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { formatDateTime } from "#/features/invitation/labels";
 import {
-  type InvitationBatchListItem,
   downloadInvitationBatch,
+  type InvitationBatchListItem,
   invitationBatchListQueryOptions,
   saveBlob,
 } from "#/features/invitation/queries";
 import { FilterActions, FilterBar } from "#/shared/components/filter-bar.tsx";
+import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button, buttonVariants } from "#/shared/components/ui/button.tsx";
 import {
   Empty,
@@ -43,7 +44,7 @@ const PAGE_SIZE = 10;
  * 活动下的邀请函生成记录。
  *
  * 邀请函没有状态机（BR-DEV-013：不维护业务状态），所以这一页没有「待发送/已发送」
- * 这类流转，只有「谁在什么时候用哪个模板给哪些人生成过」加上下载。
+ * 这类流转，只有「谁在什么时候用哪个模板给哪些人员/团体生成过」加上下载。
  */
 function InvitationsPage() {
   const { projectId, activityId: activityIdParam } = Route.useParams();
@@ -67,7 +68,7 @@ function InvitationsPage() {
 
   const downloadMutation = useMutation({
     mutationFn: (batch: InvitationBatchListItem) =>
-      downloadInvitationBatch(batch.id),
+      downloadInvitationBatch(batch.id, undefined, batch.recipientType),
     onSuccess: ({ blob, fileName }) => {
       saveBlob(blob, fileName);
       toast.success("已开始下载");
@@ -81,9 +82,12 @@ function InvitationsPage() {
     <div className="flex flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-semibold text-lg tracking-tight">邀请函生成记录</h2>
+          <h2 className="font-semibold text-lg tracking-tight">
+            邀请函生成记录
+          </h2>
           <p className="text-muted-foreground text-sm">
-            版式来自「邀请函模板」里上传的 .docx，下载为敏感操作，会留下审计记录。
+            版式来自「邀请函模板」里上传的
+            .docx，下载为敏感操作，会留下审计记录。
           </p>
         </div>
         <Link
@@ -113,7 +117,7 @@ function InvitationsPage() {
           <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="w-56 pl-8"
-            placeholder="按受邀人姓名筛选批次"
+            placeholder="按受邀人/团体名称筛选批次"
             value={keywordInput}
             onChange={(event) => setKeywordInput(event.target.value)}
           />
@@ -132,6 +136,7 @@ function InvitationsPage() {
           <TableHeader className="bg-muted/60">
             <TableRow className="hover:bg-transparent">
               <TableHead>批次号</TableHead>
+              <TableHead>对象</TableHead>
               <TableHead className="min-w-40">模板</TableHead>
               <TableHead>份数</TableHead>
               <TableHead>发函日期</TableHead>
@@ -145,7 +150,7 @@ function InvitationsPage() {
               Array.from({ length: 3 }, (_, index) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
                 <TableRow key={index}>
-                  {Array.from({ length: 7 }, (_, cell) => (
+                  {Array.from({ length: 8 }, (_, cell) => (
                     // biome-ignore lint/suspicious/noArrayIndexKey: 同上
                     <TableCell key={cell}>
                       <Skeleton className="h-5 w-full" />
@@ -155,7 +160,7 @@ function InvitationsPage() {
               ))
             ) : list.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7}>
+                <TableCell colSpan={8}>
                   <Empty className="border-0">
                     <EmptyHeader>
                       <EmptyMedia variant="icon">
@@ -163,7 +168,7 @@ function InvitationsPage() {
                       </EmptyMedia>
                       <EmptyTitle>还没有生成过邀请函</EmptyTitle>
                       <EmptyDescription>
-                        从活动人员里选人、挑一个模板，就能生成这场活动的邀请函。
+                        从活动人员或团体里选择收件对象，挑一个模板，就能生成这场活动的邀请函。
                       </EmptyDescription>
                     </EmptyHeader>
                   </Empty>
@@ -174,6 +179,13 @@ function InvitationsPage() {
                 <TableRow key={batch.id}>
                   <TableCell className="font-medium whitespace-nowrap">
                     {batch.batchNo}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">
+                      {batch.recipientType === "organization"
+                        ? "按团体"
+                        : "按人员"}
+                    </Badge>
                   </TableCell>
                   <TableCell>{batch.templateName}</TableCell>
                   <TableCell className="whitespace-nowrap">

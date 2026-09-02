@@ -68,7 +68,7 @@ export function buildSampleValues(
   return values;
 }
 
-/** 渲染一份邀请函时喂给模板的完整取值：批次填的自定义变量 + 按人/按批的系统变量。 */
+/** 渲染一份邀请函时喂给模板的完整取值：批次填的自定义变量 + 收件对象系统变量。 */
 export function buildRenderValues(input: {
   variables: InvitationVariableValues;
   recipientName: string;
@@ -89,12 +89,12 @@ const sanitizeSegment = (value: string) =>
   value.replace(/[\\/:*?"<>|\r\n]/g, "_").trim() || "未命名";
 
 /**
- * 单个文件命名：活动名称_人员姓名_证件号码后四位_邀请函_批次号（对齐文档
+ * 单个文件命名：活动名称_收件对象名称_证件号码后四位_邀请函_批次号（对齐文档
  * §8.4.1，末段做了替换，理由见下）。
  *
- * 证件号码只取后四位，不暴露完整敏感信息；证件在人员主档上可空（BR-DEV-028
- * 不强制实名），缺失时退回人员 ID——文档给压缩包定的同名冲突规则就是「文件名
- * 后追加人员ID」，这里沿用同一个兜底。
+ * 个人证件号码只取后四位，不暴露完整敏感信息；证件在人员主档上可空
+ * （BR-DEV-028 不强制实名），缺失时退回收件对象 ID。团体没有证件号码，直接
+ * 使用团体 ID 作为兜底，保证同批文件名不会互相覆盖。
  *
  * ⚠️ 末段用**批次号**而不是文档写的「生成日期」。
  *
@@ -107,12 +107,12 @@ export function buildInvitationFileName(input: {
   activityName: string;
   recipientName: string;
   idNumber: string | null;
-  memberId: number;
+  recipientId: number;
   batchNo: string;
 }) {
   const suffix = input.idNumber?.trim()
     ? input.idNumber.trim().slice(-4)
-    : String(input.memberId);
+    : String(input.recipientId);
 
   return `${[
     sanitizeSegment(input.activityName),
@@ -136,7 +136,11 @@ export async function loadTemplateFile(
     return { ok: false, message: "模板文件不存在或尚未上传完成" };
   }
 
-  return { ok: true, bytes: found.bytes, originalName: found.file.originalName };
+  return {
+    ok: true,
+    bytes: found.bytes,
+    originalName: found.file.originalName,
+  };
 }
 
 export type TemplateInspection =

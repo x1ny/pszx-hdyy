@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   bigint,
+  check,
   date,
   foreignKey,
   index,
@@ -14,6 +16,7 @@ import {
 import { user } from "../auth/schema";
 import { fileAsset } from "../file/schema";
 import { activityMember } from "../member/schema";
+import { organization } from "../organization/schema";
 import { activity } from "../project/schema";
 
 // ---------------------------------------------------------------------------
@@ -40,6 +43,11 @@ export type InvitationSystemVariable =
 
 export const INVITATION_VARIABLE_KINDS = ["system", "custom"] as const;
 export type InvitationVariableKind = (typeof INVITATION_VARIABLE_KINDS)[number];
+
+/** 邀请函的收件对象：可以是一名活动人员，也可以是一个活动中的团体。 */
+export const INVITATION_RECIPIENT_TYPES = ["member", "organization"] as const;
+export type InvitationRecipientType =
+  (typeof INVITATION_RECIPIENT_TYPES)[number];
 
 /**
  * 上传 docx 时解析出来的变量契约——「这个模板里有哪些占位符」，**不含取值**。
@@ -131,7 +139,7 @@ export const invitationTemplate = pgTable("invitation_template", {
 
 /**
  * 一次生成操作的分组，也是留档的单位。职责有两个：装下这一次填的变量取值，
- * 和留下「谁在什么时候用哪个模板给哪些人生成过」的痕迹。
+ * 和留下「谁在什么时候用哪个模板给哪些人员/团体生成过」的痕迹。
  *
  * 生成后不可变，所以没有 updatedAt / updatedBy。
  */
@@ -148,6 +156,16 @@ export const invitationBatch = pgTable(
     activityId: bigint("activity_id", { mode: "number" })
       .notNull()
       .references(() => activity.id),
+
+    /**
+     * 生成口径快照。member 是逐人生成，organization 是每个团体只生成
+     * 一份；不能只从记录数量反推，因为批次详情/列表需要明确告诉运营本批的
+     * 选择口径。
+     */
+    recipientType: text("recipient_type")
+      .$type<InvitationRecipientType>()
+      .notNull()
+      .default("member"),
 
     /**
      * 没有 onDelete，等于 NO ACTION：**被引用过的模板在数据库层面就删不掉**，
@@ -198,6 +216,10 @@ export const invitationBatch = pgTable(
   (table) => [
     // 生成记录页永远是「当前活动的批次列表」，这是它唯一的过滤条件。
     index("idx_invitation_batch_activity").on(table.activityId),
+    check(
+      "ck_invitation_batch_recipient_type",
+      sql`${table.recipientType} in ('member', 'organization')`,
+    ),
   ],
 );
 
@@ -224,10 +246,25 @@ export const invitationRecord = pgTable(
       .primaryKey()
       .generatedByDefaultAsIdentity(),
 
-    // 这两列没有单列 .references()：它们的外键是下面那条复合外键，单列外键
-    // 会和复合外键重复约束同一件事（同 activity_member 的做法）。
+    /** 收件对象类型快照，和批次一致，便于记录层约束两种目标列互斥。 */
+    recipientType: text("recipient_type")
+      .$type<InvitationRecipientType>()
+      .notNull()
+      .default("member"),
+
+    // memberId 只有个人记录才有值；个人记录的外键是下面那条复合外键，单列
+    // 外键会和复合外键重复约束同一件事（同 activity_member 的做法）。
     activityId: bigint("activity_id", { mode: "number" }).notNull(),
-    memberId: bigint("member_id", { mode: "number" }).notNull(),
+    memberId: bigint("member_id", { mode: "number" }),
+
+    /**
+     * 团体记录只指向团体主档，不指向团体里的某一个人。这样团队邀请函
+     * 才不会因为选了 4 个成员而产生 4 条记录，也不会把其中某个人错误当成
+     * 下载文件的收件人。
+     */
+    organizationId: bigint("organization_id", { mode: "number" }).references(
+      () => organization.id,
+    ),
 
     /** cascade：批次没了，它名下的记录也就没了。 */
     batchId: bigint("batch_id", { mode: "number" })
@@ -250,20 +287,35 @@ export const invitationRecord = pgTable(
       .notNull(),
   },
   (table) => [
-    // 同一批次里同一个人只能出现一次。**不约束到活动维度**——那样就变成
-    // 一人一函了，跨批次重新生成会把上一批掏空。
-    unique("uk_invitation_record").on(table.batchId, table.memberId),
+    // 同一批次里同一个人/团体只能出现一次。两个唯一约束分开写，是因为
+    // PostgreSQL 对 NULL 不互相冲突：个人记录的 organizationId、团体记录的
+    // memberId 都为空。
+    unique("uk_invitation_record_member").on(table.batchId, table.memberId),
+    unique("uk_invitation_record_organization").on(
+      table.batchId,
+      table.organizationId,
+    ),
+
+    check(
+      "ck_invitation_record_recipient_target",
+      sql`(
+        (${table.recipientType} = 'member' and ${table.memberId} is not null and ${table.organizationId} is null)
+        or
+        (${table.recipientType} = 'organization' and ${table.memberId} is null and ${table.organizationId} is not null)
+      )`,
+    ),
 
     /**
-     * ⭐ 复合外键：邀请函只能发给**本活动的活动人员**。
+     * ⭐ 复合外键：个人邀请函只能发给**本活动的活动人员**。团体记录的
+     * organizationId 不参与这条复合外键，由接口层校验该团体在本活动有启用成员。
      *
      * 业务决策是「先选活动，从活动人员里选人」（对齐 BR-DEV-033A）。在接口层
      * 校验一次是不够的——只要出现第二个写入口（导入、脚本、以后的批量工具），
-     * 这条不变量就会被绕过。靠 activity_member 上的 uk_activity_member 当靶子，
-     * 数据库直接钉死。
+     * 个人记录的这条不变量就会被绕过。靠 activity_member 上的 uk_activity_member
+     * 当靶子，数据库直接钉死。
      *
-     * 顺带解决了 activityId / memberId 各自的存在性：它们必然是 activity_member
-     * 里真实存在的一行，而那张表对 activity 和 member 都有真外键。
+     * 顺带解决了个人记录 activityId / memberId 各自的存在性：它们必然是
+     * activity_member 里真实存在的一行，而那张表对 activity 和 member 都有真外键。
      *
      * 没有 cascade：移除活动人员时数据库会拦住。这是要的行为——文档要求移除
      * 人员时「展示清单并二次确认」后才解除邀请函等下游关联，那个确认动作应该
@@ -311,9 +363,10 @@ export const invitationDownloadLog = pgTable("invitation_download_log", {
   activityId: bigint("activity_id", { mode: "number" }).notNull(),
   scope: text("scope").$type<InvitationDownloadScope>().notNull(),
 
-  /** 人员范围：单份下载记 memberId，批量下载记 batchId，各自另一列为空。 */
+  /** 收件对象范围：单份下载记 memberId 或 organizationId，批量下载记 batchId。 */
   batchId: bigint("batch_id", { mode: "number" }),
   memberId: bigint("member_id", { mode: "number" }),
+  organizationId: bigint("organization_id", { mode: "number" }),
 
   fileCount: integer("file_count").notNull(),
 

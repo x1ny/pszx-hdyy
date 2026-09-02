@@ -16,7 +16,8 @@ export type InvitationTemplate = ApiData<
 export type InvitationTemplateStatus = InvitationTemplate["status"];
 
 /** 上传 docx 时由服务端解析出来的变量契约。`kind` 决定它显不显示输入框。 */
-export type InvitationTemplateVariable = InvitationTemplate["variables"][number];
+export type InvitationTemplateVariable =
+  InvitationTemplate["variables"][number];
 
 export type InvitationTemplateFilters = InferRequestType<
   typeof api.api.invitation.template.list.$post
@@ -30,7 +31,8 @@ export type InvitationTemplateFormValues = InferRequestType<
 export type InvitationBatch = ApiData<
   InferResponseType<typeof api.api.invitation.batch.get.$post>
 >;
-export type InvitationBatchRecord = NonNullable<InvitationBatch>["records"][number];
+export type InvitationBatchRecord =
+  NonNullable<InvitationBatch>["records"][number];
 
 /** 列表行：**不带 records**，两个接口的字段投影不一样，不能共用一个类型。 */
 export type InvitationBatchListItem = ApiData<
@@ -44,6 +46,8 @@ export type InvitationBatchFilters = InferRequestType<
 export type CreateInvitationBatchValues = InferRequestType<
   typeof api.api.invitation.batch.create.$post
 >["json"];
+export type InvitationRecipientType =
+  CreateInvitationBatchValues["recipientType"];
 
 // ---------------------------------------------------------------------------
 // 二进制响应
@@ -58,8 +62,13 @@ export type CreateInvitationBatchValues = InferRequestType<
 async function unwrapFile(request: Promise<Response>) {
   const response = await request;
 
-  if ((response.headers.get("content-type") ?? "").includes("application/json")) {
-    const result = (await response.json()) as { code: string; message?: string };
+  if (
+    (response.headers.get("content-type") ?? "").includes("application/json")
+  ) {
+    const result = (await response.json()) as {
+      code: string;
+      message?: string;
+    };
     throw new ApiError(result.code, result.message ?? "下载失败");
   }
 
@@ -120,8 +129,9 @@ export const invitationTemplateListQueryOptions = (
 export const getInvitationTemplate = (id: number) =>
   unwrap(api.api.invitation.template.get.$post({ json: { id } }));
 
-export const createInvitationTemplate = (values: InvitationTemplateFormValues) =>
-  unwrap(api.api.invitation.template.create.$post({ json: values }));
+export const createInvitationTemplate = (
+  values: InvitationTemplateFormValues,
+) => unwrap(api.api.invitation.template.create.$post({ json: values }));
 
 export const updateInvitationTemplate = (
   values: InvitationTemplateFormValues & { id: number },
@@ -175,7 +185,8 @@ export const invitationBatchListQueryOptions = (
 ) =>
   queryOptions({
     queryKey: invitationBatchKeys.list(filters),
-    queryFn: () => unwrap(api.api.invitation.batch.list.$post({ json: filters })),
+    queryFn: () =>
+      unwrap(api.api.invitation.batch.list.$post({ json: filters })),
     placeholderData: keepPreviousData,
   });
 
@@ -200,10 +211,14 @@ export const downloadInvitationRecord = (recordId: number) =>
 
 export const downloadInvitationBatch = (
   batchId: number,
-  memberIds?: number[],
+  recipientIds?: number[],
+  recipientType: InvitationRecipientType = "member",
 ) =>
   unwrapFile(
     api.api.invitation.batch.download.$post({
-      json: { batchId, memberIds },
+      json:
+        recipientType === "organization"
+          ? { batchId, organizationIds: recipientIds }
+          : { batchId, memberIds: recipientIds },
     }) as unknown as Promise<Response>,
   );

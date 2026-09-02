@@ -1,4 +1,14 @@
-import { and, asc, count, desc, eq, exists, ilike, inArray, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  ilike,
+  inArray,
+  sql,
+} from "drizzle-orm";
 import { zipSync } from "fflate";
 import { Hono } from "hono";
 import { db } from "../../infra/db";
@@ -10,14 +20,16 @@ import { type AuthedVariables, requireUser } from "../auth";
 import { user } from "../auth/schema";
 import { fileAsset } from "../file/schema";
 import { activityMember, member } from "../member/schema";
+import { organization } from "../organization/schema";
 import { activity } from "../project/schema";
 import {
+  type InvitationDownloadScope,
+  type InvitationRecipientType,
+  type InvitationVariableValues,
   invitationBatch,
   invitationDownloadLog,
   invitationRecord,
   invitationTemplate,
-  type InvitationDownloadScope,
-  type InvitationVariableValues,
 } from "./schema";
 import {
   buildInvitationFileName,
@@ -35,12 +47,12 @@ import {
   CreateInvitationTemplateInput,
   DownloadInvitationBatchInput,
   DownloadInvitationRecordInput,
+  InspectInvitationTemplateInput,
   InvitationBatchIdInput,
   InvitationTemplateIdInput,
   LastVariableValuesInput,
   ListInvitationBatchesInput,
   ListInvitationTemplatesInput,
-  InspectInvitationTemplateInput,
   PreviewInvitationTemplateInput,
   SetInvitationTemplateStatusInput,
   UpdateInvitationTemplateInput,
@@ -49,7 +61,7 @@ import {
 const DOCX_MIME =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-/** 批量下载的体积上限（BR-DEV-014D：200 人或 500 MB，以先到者为准）。 */
+/** 批量下载的体积上限（BR-DEV-014D：200 个收件对象或 500 MB，以先到者为准）。 */
 const BATCH_DOWNLOAD_MAX_BYTES = 500 * 1024 * 1024;
 
 const templateFields = {
@@ -78,6 +90,7 @@ const batchFields = {
   id: invitationBatch.id,
   batchNo: invitationBatch.batchNo,
   activityId: invitationBatch.activityId,
+  recipientType: invitationBatch.recipientType,
   templateId: invitationBatch.templateId,
   templateName: invitationBatch.templateName,
   variables: invitationBatch.variables,
@@ -117,23 +130,99 @@ async function loadBatchDetail(id: number) {
 
   if (!batch) return undefined;
 
-  // 单位职务/手机号只用于列表展示，不快照——通过 memberId 现查即可，
-  // 快照的意义是保住产物可重现，不是给列表做缓存。
+  // 单位职务/手机号只用于个人记录展示，不快照——通过 memberId 现查即可；
+  // 团体记录的成员数和联系人同样是当前活动范围的展示派生值。
   const records = await db
     .select({
       id: invitationRecord.id,
+      recipientType: invitationRecord.recipientType,
       memberId: invitationRecord.memberId,
+      organizationId: invitationRecord.organizationId,
       recipientName: invitationRecord.recipientName,
       companyPosition: member.companyPosition,
       mobile: member.mobile,
+      organizationName: organization.name,
       createdAt: invitationRecord.createdAt,
     })
     .from(invitationRecord)
     .leftJoin(member, eq(invitationRecord.memberId, member.id))
+    .leftJoin(
+      organization,
+      eq(invitationRecord.organizationId, organization.id),
+    )
     .where(eq(invitationRecord.batchId, id))
     .orderBy(asc(invitationRecord.id));
 
-  return { ...batch, records };
+  const organizationIds = [
+    ...new Set(
+      records.flatMap((record) =>
+        record.organizationId === null ? [] : [record.organizationId],
+      ),
+    ),
+  ];
+
+  const organizationMemberRows =
+    organizationIds.length === 0
+      ? []
+      : await db
+          .select({
+            organizationId: activityMember.organizationId,
+            memberName: member.name,
+            mobile: member.mobile,
+            ownerName: activityMember.ownerName,
+          })
+          .from(activityMember)
+          .innerJoin(member, eq(activityMember.memberId, member.id))
+          .where(
+            and(
+              eq(activityMember.activityId, batch.activityId),
+              inArray(activityMember.organizationId, organizationIds),
+              eq(member.status, "enabled"),
+            ),
+          )
+          .orderBy(asc(activityMember.id));
+
+  const organizationSummary = new Map<
+    number,
+    {
+      memberCount: number;
+      contactName: string | null;
+      contactMobile: string | null;
+    }
+  >();
+  for (const row of organizationMemberRows) {
+    if (row.organizationId === null) continue;
+    const summary = organizationSummary.get(row.organizationId) ?? {
+      memberCount: 0,
+      contactName: null,
+      contactMobile: null,
+    };
+    summary.memberCount += 1;
+    const ownerName = row.ownerName?.trim();
+    if (!summary.contactName && ownerName) {
+      summary.contactName = ownerName;
+      if (ownerName === row.memberName) {
+        summary.contactMobile = row.mobile;
+      }
+    }
+    organizationSummary.set(row.organizationId, summary);
+  }
+
+  return {
+    ...batch,
+    records: records.map((record) => {
+      const summary =
+        record.organizationId === null
+          ? undefined
+          : organizationSummary.get(record.organizationId);
+      return {
+        ...record,
+        organizationMemberCount: summary?.memberCount ?? 0,
+        organizationContactName: summary?.contactName ?? null,
+        organizationContactMobile: summary?.contactMobile ?? null,
+      };
+    }),
+  };
 }
 
 type DownloadAudit = {
@@ -141,6 +230,7 @@ type DownloadAudit = {
   scope: InvitationDownloadScope;
   batchId?: number;
   memberId?: number;
+  organizationId?: number;
   fileCount: number;
   result: "success" | "failed";
   failReason?: string;
@@ -158,6 +248,7 @@ async function logDownload(audit: DownloadAudit) {
       scope: audit.scope,
       batchId: audit.batchId ?? null,
       memberId: audit.memberId ?? null,
+      organizationId: audit.organizationId ?? null,
       fileCount: audit.fileCount,
       result: audit.result,
       failReason: audit.failReason ?? null,
@@ -207,7 +298,10 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
       db
         .select(templateReadFields)
         .from(invitationTemplate)
-        .innerJoin(fileAsset, eq(invitationTemplate.templateFileId, fileAsset.id))
+        .innerJoin(
+          fileAsset,
+          eq(invitationTemplate.templateFileId, fileAsset.id),
+        )
         .where(where)
         .orderBy(desc(invitationTemplate.id))
         .limit(limit)
@@ -344,7 +438,10 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
       if (!inspection.ok) return c.json(invalid(inspection.message));
 
       return c.json(
-        ok({ variables: inspection.variables, originalName: file.originalName }),
+        ok({
+          variables: inspection.variables,
+          originalName: file.originalName,
+        }),
       );
     },
   )
@@ -384,20 +481,25 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
   // ---------------------------------------------------------------------
 
   /** 生成页的默认值：该模板上一次生成时填的那组自定义变量。 */
-  .post("/batch/lastVariables", jsonBody(LastVariableValuesInput), async (c) => {
-    const [row] = await db
-      .select({ variables: invitationBatch.variables })
-      .from(invitationBatch)
-      .where(eq(invitationBatch.templateId, c.req.valid("json").templateId))
-      .orderBy(desc(invitationBatch.createdAt))
-      .limit(1);
+  .post(
+    "/batch/lastVariables",
+    jsonBody(LastVariableValuesInput),
+    async (c) => {
+      const [row] = await db
+        .select({ variables: invitationBatch.variables })
+        .from(invitationBatch)
+        .where(eq(invitationBatch.templateId, c.req.valid("json").templateId))
+        .orderBy(desc(invitationBatch.createdAt))
+        .limit(1);
 
-    return c.json(ok({ variables: row?.variables ?? {} }));
-  })
+      return c.json(ok({ variables: row?.variables ?? {} }));
+    },
+  )
 
   .post("/batch/create", jsonBody(CreateInvitationBatchInput), async (c) => {
-    const { activityId, templateId, issueDate, variables, memberIds } =
-      c.req.valid("json");
+    const input = c.req.valid("json");
+    const { activityId, templateId, issueDate, variables, recipientType } =
+      input;
     const userId = c.get("authedUser").id;
 
     const [template] = await db
@@ -420,28 +522,90 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
       );
     }
 
-    // 只能发给本活动的活动人员。数据库层有复合外键兜底，这里查一次是为了
-    // 给出「哪几个人不在名单里」而不是一句外键冲突。
-    const targets = await db
-      .select({
-        memberId: activityMember.memberId,
-        name: member.name,
-        status: member.status,
-      })
-      .from(activityMember)
-      .innerJoin(member, eq(activityMember.memberId, member.id))
-      .where(
-        and(
-          eq(activityMember.activityId, activityId),
-          inArray(activityMember.memberId, memberIds),
-        ),
-      );
+    type InvitationRecordInsert = {
+      activityId: number;
+      memberId: number | null;
+      organizationId: number | null;
+      recipientName: string;
+      recipientType: InvitationRecipientType;
+    };
 
-    if (targets.length !== memberIds.length) {
-      return c.json(invalid("存在不属于本活动人员名单的邀请对象，请刷新后重试"));
-    }
-    if (targets.some((target) => target.status !== "enabled")) {
-      return c.json(invalid("邀请对象中存在已停用的人员"));
+    let recipientRecords: InvitationRecordInsert[];
+    if (recipientType === "member") {
+      // 只能发给本活动的活动人员。数据库层有复合外键兜底，这里查一次是为了
+      // 给出「哪几个人不在名单里」而不是一句外键冲突。
+      const { memberIds } = input;
+      const targets = await db
+        .select({
+          memberId: activityMember.memberId,
+          name: member.name,
+          status: member.status,
+        })
+        .from(activityMember)
+        .innerJoin(member, eq(activityMember.memberId, member.id))
+        .where(
+          and(
+            eq(activityMember.activityId, activityId),
+            inArray(activityMember.memberId, memberIds),
+          ),
+        );
+
+      if (targets.length !== memberIds.length) {
+        return c.json(
+          invalid("存在不属于本活动人员名单的邀请对象，请刷新后重试"),
+        );
+      }
+      if (targets.some((target) => target.status !== "enabled")) {
+        return c.json(invalid("邀请对象中存在已停用的人员"));
+      }
+
+      recipientRecords = targets.map((target) => ({
+        activityId,
+        memberId: target.memberId,
+        organizationId: null,
+        recipientName: target.name,
+        recipientType,
+      }));
+    } else {
+      const { organizationIds } = input;
+      // 团体必须在本活动仍有启用人员。查询按成员返回，下面再收敛成每个团体
+      // 一条记录，确保选择 4 名成员不会生成 4 份团队邀请函。
+      const targets = await db
+        .select({
+          organizationId: activityMember.organizationId,
+          organizationName: organization.name,
+        })
+        .from(activityMember)
+        .innerJoin(member, eq(activityMember.memberId, member.id))
+        .innerJoin(
+          organization,
+          eq(activityMember.organizationId, organization.id),
+        )
+        .where(
+          and(
+            eq(activityMember.activityId, activityId),
+            inArray(activityMember.organizationId, organizationIds),
+            eq(member.status, "enabled"),
+          ),
+        );
+
+      const targetNames = new Map<number, string>();
+      for (const target of targets) {
+        if (target.organizationId !== null) {
+          targetNames.set(target.organizationId, target.organizationName);
+        }
+      }
+      if (targetNames.size !== organizationIds.length) {
+        return c.json(invalid("存在不属于本活动的团体，请刷新后重试"));
+      }
+
+      recipientRecords = organizationIds.map((organizationId) => ({
+        activityId,
+        memberId: null,
+        organizationId,
+        recipientName: targetNames.get(organizationId) as string,
+        recipientType,
+      }));
     }
 
     const batchId = await db.transaction(async (tx) => {
@@ -451,6 +615,7 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
           // 占位；拿到自增 id 后立刻回填真正的批次号。
           batchNo: crypto.randomUUID(),
           activityId,
+          recipientType,
           templateId,
           templateFileId: template.templateFileId,
           templateName: template.name,
@@ -470,16 +635,13 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
         .set({ batchNo: buildBatchNo(inserted.id, inserted.createdAt) })
         .where(eq(invitationBatch.id, inserted.id));
 
-      // 每批独立留档：直接插入，不做 upsert。同一个人可以在多个批次里各有
+      // 每批独立留档：直接插入，不做 upsert。同一个人/团体可以在多个批次里各有
       // 一份，后生成的不动已有批次——那些文件可能已经发出去了，事后还要能
-      // 重新下载。批次内的重复由 uk_invitation_record(batchId, memberId) 挡住，
-      // 而 memberIds 在入参层已经去过重，正常路径不会撞上。
+      // 重新下载。两种收件对象都已经在入参层去过重，正常路径不会撞上批次内唯一约束。
       await tx.insert(invitationRecord).values(
-        targets.map((target) => ({
-          activityId,
-          memberId: target.memberId,
+        recipientRecords.map((record) => ({
+          ...record,
           batchId: inserted.id,
-          recipientName: target.name,
         })),
       );
 
@@ -549,7 +711,9 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
 
       const [row] = await db
         .select({
+          recipientType: invitationRecord.recipientType,
           memberId: invitationRecord.memberId,
+          organizationId: invitationRecord.organizationId,
           recipientName: invitationRecord.recipientName,
           batchId: invitationBatch.id,
           batchNo: invitationBatch.batchNo,
@@ -575,14 +739,19 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
         activityId: row.activityId,
         scope: "single" as const,
         batchId: row.batchId,
-        memberId: row.memberId,
+        memberId: row.memberId ?? undefined,
+        organizationId: row.organizationId ?? undefined,
         fileCount: 1,
         downloadedBy: userId,
       };
 
       const file = await loadTemplateFile(row.templateFileId);
       if (!file.ok) {
-        await logDownload({ ...audit, result: "failed", failReason: file.message });
+        await logDownload({
+          ...audit,
+          result: "failed",
+          failReason: file.message,
+        });
         return c.json(invalid(file.message));
       }
 
@@ -598,13 +767,18 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
 
         await logDownload({ ...audit, result: "success" });
 
+        const recipientId = row.memberId ?? row.organizationId;
+        if (recipientId === null) {
+          return c.json(invalid("邀请函收件对象不存在，请联系管理员"));
+        }
+
         return docxResponse(
           bytes,
           buildInvitationFileName({
             activityName: row.activityName,
             recipientName: row.recipientName,
             idNumber: row.idNumber,
-            memberId: row.memberId,
+            recipientId,
             batchNo: row.batchNo,
           }),
         );
@@ -626,111 +800,140 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
    * 单份几十毫秒、200 份几秒钟就完。等以后接上 PDF（要过 LibreOffice，单份
    * 一两秒）时再改成任务表 + 轮询，那时它才真的需要。
    */
-  .post("/batch/download", jsonBody(DownloadInvitationBatchInput), async (c) => {
-    const { batchId, memberIds } = c.req.valid("json");
-    const userId = c.get("authedUser").id;
+  .post(
+    "/batch/download",
+    jsonBody(DownloadInvitationBatchInput),
+    async (c) => {
+      const { batchId, memberIds, organizationIds } = c.req.valid("json");
+      const userId = c.get("authedUser").id;
 
-    const [batch] = await db
-      .select({
-        id: invitationBatch.id,
-        batchNo: invitationBatch.batchNo,
-        activityId: invitationBatch.activityId,
-        activityName: activity.name,
-        templateFileId: invitationBatch.templateFileId,
-        variables: invitationBatch.variables,
-        issueDate: invitationBatch.issueDate,
-      })
-      .from(invitationBatch)
-      .innerJoin(activity, eq(invitationBatch.activityId, activity.id))
-      .where(eq(invitationBatch.id, batchId));
+      const [batch] = await db
+        .select({
+          id: invitationBatch.id,
+          batchNo: invitationBatch.batchNo,
+          activityId: invitationBatch.activityId,
+          recipientType: invitationBatch.recipientType,
+          activityName: activity.name,
+          templateFileId: invitationBatch.templateFileId,
+          variables: invitationBatch.variables,
+          issueDate: invitationBatch.issueDate,
+        })
+        .from(invitationBatch)
+        .innerJoin(activity, eq(invitationBatch.activityId, activity.id))
+        .where(eq(invitationBatch.id, batchId));
 
-    if (!batch) return c.json(notFound("生成记录不存在"));
-
-    const records = await db
-      .select({
-        memberId: invitationRecord.memberId,
-        recipientName: invitationRecord.recipientName,
-        idNumber: member.idNumber,
-      })
-      .from(invitationRecord)
-      .leftJoin(member, eq(invitationRecord.memberId, member.id))
-      .where(
-        and(
-          eq(invitationRecord.batchId, batchId),
-          memberIds ? inArray(invitationRecord.memberId, memberIds) : undefined,
-        ),
-      )
-      .orderBy(asc(invitationRecord.id));
-
-    const audit = {
-      activityId: batch.activityId,
-      scope: "batch" as const,
-      batchId: batch.id,
-      fileCount: records.length,
-      downloadedBy: userId,
-    };
-
-    if (records.length === 0) {
-      return c.json(invalid("该批次下没有可下载的邀请函"));
-    }
-    if (records.length > 200) {
-      return c.json(invalid("单次最多下载 200 份，请分批下载"));
-    }
-
-    const file = await loadTemplateFile(batch.templateFileId);
-    if (!file.ok) {
-      await logDownload({ ...audit, result: "failed", failReason: file.message });
-      return c.json(invalid(file.message));
-    }
-
-    try {
-      const entries: Record<string, Uint8Array> = {};
-      let totalBytes = 0;
-
-      for (const record of records) {
-        const bytes = renderDocx(
-          file.bytes,
-          buildRenderValues({
-            variables: batch.variables as InvitationVariableValues,
-            recipientName: record.recipientName,
-            issueDate: batch.issueDate,
-          }),
-        );
-
-        totalBytes += bytes.byteLength;
-        if (totalBytes > BATCH_DOWNLOAD_MAX_BYTES) {
-          return c.json(invalid("本次下载超过 500 MB，请缩小人员范围分批下载"));
-        }
-
-        // 文件名规则已经保证唯一（证件后四位，缺失时退回人员 ID），不会互相覆盖。
-        entries[
-          buildInvitationFileName({
-            activityName: batch.activityName,
-            recipientName: record.recipientName,
-            idNumber: record.idNumber,
-            memberId: record.memberId,
-            batchNo: batch.batchNo,
-          })
-        ] = bytes;
+      if (!batch) return c.json(notFound("生成记录不存在"));
+      if (batch.recipientType === "organization" && memberIds) {
+        return c.json(invalid("团体批次下载请传团体编号"));
+      }
+      if (batch.recipientType === "member" && organizationIds) {
+        return c.json(invalid("个人批次下载请传人员编号"));
       }
 
-      // level 0（仅打包不压缩）：docx 本身就是 zip，里面的内容已经压过一遍，
-      // 再压一次几乎不减体积，白烧一遍 CPU。
-      const zip = zipSync(entries, { level: 0 });
+      const records = await db
+        .select({
+          memberId: invitationRecord.memberId,
+          organizationId: invitationRecord.organizationId,
+          recipientName: invitationRecord.recipientName,
+          idNumber: member.idNumber,
+        })
+        .from(invitationRecord)
+        .leftJoin(member, eq(invitationRecord.memberId, member.id))
+        .where(
+          and(
+            eq(invitationRecord.batchId, batchId),
+            batch.recipientType === "organization"
+              ? organizationIds
+                ? inArray(invitationRecord.organizationId, organizationIds)
+                : undefined
+              : memberIds
+                ? inArray(invitationRecord.memberId, memberIds)
+                : undefined,
+          ),
+        )
+        .orderBy(asc(invitationRecord.id));
 
-      await logDownload({ ...audit, result: "success" });
+      const audit = {
+        activityId: batch.activityId,
+        scope: "batch" as const,
+        batchId: batch.id,
+        fileCount: records.length,
+        downloadedBy: userId,
+      };
 
-      return docxResponse(
-        zip,
-        `${batch.activityName}_邀请函_批量下载_${batch.batchNo}.zip`,
-        "application/zip",
-      );
-    } catch (error) {
-      const message =
-        error instanceof DocxTemplateError
-          ? error.message
-          : "邀请函渲染失败，请检查模板文件";
-      await logDownload({ ...audit, result: "failed", failReason: message });
-      return c.json(invalid(message));
-    }
-  });
+      if (records.length === 0) {
+        return c.json(invalid("该批次下没有可下载的邀请函"));
+      }
+      if (records.length > 200) {
+        return c.json(invalid("单次最多下载 200 份，请分批下载"));
+      }
+
+      const file = await loadTemplateFile(batch.templateFileId);
+      if (!file.ok) {
+        await logDownload({
+          ...audit,
+          result: "failed",
+          failReason: file.message,
+        });
+        return c.json(invalid(file.message));
+      }
+
+      try {
+        const entries: Record<string, Uint8Array> = {};
+        let totalBytes = 0;
+
+        for (const record of records) {
+          const bytes = renderDocx(
+            file.bytes,
+            buildRenderValues({
+              variables: batch.variables as InvitationVariableValues,
+              recipientName: record.recipientName,
+              issueDate: batch.issueDate,
+            }),
+          );
+
+          totalBytes += bytes.byteLength;
+          if (totalBytes > BATCH_DOWNLOAD_MAX_BYTES) {
+            return c.json(
+              invalid("本次下载超过 500 MB，请缩小人员范围分批下载"),
+            );
+          }
+
+          // 文件名规则已经保证唯一（个人证件后四位、团体/个人缺失证件时退回
+          // 收件对象 ID），不会互相覆盖。
+          const recipientId = record.memberId ?? record.organizationId;
+          if (recipientId === null) {
+            return c.json(invalid("邀请函收件对象不存在，请联系管理员"));
+          }
+          entries[
+            buildInvitationFileName({
+              activityName: batch.activityName,
+              recipientName: record.recipientName,
+              idNumber: record.idNumber,
+              recipientId,
+              batchNo: batch.batchNo,
+            })
+          ] = bytes;
+        }
+
+        // level 0（仅打包不压缩）：docx 本身就是 zip，里面的内容已经压过一遍，
+        // 再压一次几乎不减体积，白烧一遍 CPU。
+        const zip = zipSync(entries, { level: 0 });
+
+        await logDownload({ ...audit, result: "success" });
+
+        return docxResponse(
+          zip,
+          `${batch.activityName}_邀请函_批量下载_${batch.batchNo}.zip`,
+          "application/zip",
+        );
+      } catch (error) {
+        const message =
+          error instanceof DocxTemplateError
+            ? error.message
+            : "邀请函渲染失败，请检查模板文件";
+        await logDownload({ ...audit, result: "failed", failReason: message });
+        return c.json(invalid(message));
+      }
+    },
+  );

@@ -4,7 +4,9 @@ import {
   ArrowLeftIcon,
   Loader2Icon,
   SearchIcon,
+  UserRoundIcon,
   UsersRoundIcon,
+  XIcon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -18,6 +20,7 @@ import {
   createInvitationBatch,
   getInvitationTemplate,
   getLastVariableValues,
+  type InvitationRecipientType,
   type InvitationTemplate,
   invitationTemplateListQueryOptions,
   previewInvitationTemplate,
@@ -27,6 +30,7 @@ import {
   activityMemberListQueryOptions,
 } from "#/features/member/relation-queries";
 import { FilterActions } from "#/shared/components/filter-bar.tsx";
+import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import { Checkbox } from "#/shared/components/ui/checkbox.tsx";
 import {
@@ -69,6 +73,10 @@ import {
   TableHeader,
   TableRow,
 } from "#/shared/components/ui/table.tsx";
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from "#/shared/components/ui/toggle-group.tsx";
 import { cn } from "#/shared/lib/utils.ts";
 
 export const Route = createFileRoute(
@@ -79,14 +87,22 @@ export const Route = createFileRoute(
 
 const MEMBER_PAGE_SIZE = 10;
 
+type OrganizationRecipient = {
+  id: number;
+  name: string;
+  memberCount: number;
+  contactName: string | null;
+  contactMobile: string | null;
+};
+
 /**
  * 生成邀请函。
  *
- * 三件事按顺序定下来：**选谁**（只能从本活动人员里选，BR-DEV-033A）、
+ * 三件事按顺序定下来：**选收件对象**（人员模式只能从本活动人员里选，团体模式只能从本活动团体里选）、
  * **用哪个模板**（全局模板池里已启用的）、**这次的变量填什么**。
  *
  * 变量表单是**跟着模板动态长出来的**——模板里有哪几个 `{{}}`，这里就有几个
- * 输入框。系统变量（姓名、发函日期）不出现在这里：姓名逐人自动填，发函日期
+ * 输入框。系统变量（姓名、发函日期）不出现在这里：姓名按收件对象自动填，发函日期
  * 单独一个日期选择器。
  */
 function GeneratePage() {
@@ -98,49 +114,64 @@ function GeneratePage() {
   const [nameFilter, setNameFilter] = useState<string>();
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Map<number, string>>(new Map());
+  const [recipientType, setRecipientType] =
+    useState<InvitationRecipientType>("member");
   const [organizationDialogOpen, setOrganizationDialogOpen] = useState(false);
   const [selectedOrganizations, setSelectedOrganizations] = useState<
     Set<number>
   >(new Set());
+  const [organizationDialogSelection, setOrganizationDialogSelection] =
+    useState<Set<number>>(new Set());
 
   const [template, setTemplate] = useState<InvitationTemplate>();
   const [variables, setVariables] = useState<Record<string, string>>({});
   const [issueDate, setIssueDate] = useState(todayIsoDate());
   const [previewOpen, setPreviewOpen] = useState(false);
 
-  const membersQuery = useQuery(
-    activityMemberListQueryOptions({
+  const membersQuery = useQuery({
+    ...activityMemberListQueryOptions({
       activityId,
       name: nameFilter,
       memberStatus: "enabled",
       page,
       pageSize: MEMBER_PAGE_SIZE,
     }),
-  );
+    enabled: recipientType === "member",
+  });
   const members = membersQuery.data?.list ?? [];
   const memberTotal = membersQuery.data?.total ?? 0;
 
   const organizationMembersQuery = useQuery({
     ...activityMemberAllEnabledQueryOptions(activityId),
-    enabled: organizationDialogOpen,
+    enabled: recipientType === "organization" || organizationDialogOpen,
   });
   const organizationMembers = organizationMembersQuery.data ?? [];
   const organizationOptions = useMemo(() => {
-    const groups = new Map<
-      number,
-      { id: number; name: string; memberCount: number }
-    >();
+    const groups = new Map<number, OrganizationRecipient>();
 
     for (const member of organizationMembers) {
       if (member.organizationId === null || !member.organizationName) continue;
       const current = groups.get(member.organizationId);
+      const ownerName = member.ownerName?.trim() || null;
       if (current) {
         current.memberCount += 1;
+        if (!current.contactName && ownerName) {
+          current.contactName = ownerName;
+        }
+        if (
+          current.contactName === ownerName &&
+          ownerName === member.name &&
+          !current.contactMobile
+        ) {
+          current.contactMobile = member.mobile;
+        }
       } else {
         groups.set(member.organizationId, {
           id: member.organizationId,
           name: member.organizationName,
           memberCount: 1,
+          contactName: ownerName,
+          contactMobile: ownerName === member.name ? member.mobile : null,
         });
       }
     }
@@ -149,6 +180,18 @@ function GeneratePage() {
       left.name.localeCompare(right.name, "zh-CN"),
     );
   }, [organizationMembers]);
+
+  const selectedOrganizationRows = useMemo(
+    () =>
+      organizationOptions.filter((organization) =>
+        selectedOrganizations.has(organization.id),
+      ),
+    [organizationOptions, selectedOrganizations],
+  );
+  const selectedOrganizationMemberCount = selectedOrganizationRows.reduce(
+    (total, organization) => total + organization.memberCount,
+    0,
+  );
 
   const templatesQuery = useQuery(
     invitationTemplateListQueryOptions({
@@ -198,6 +241,18 @@ function GeneratePage() {
   };
 
   const toggleOrganization = (organizationId: number, checked: boolean) => {
+    setOrganizationDialogSelection((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(organizationId);
+      else next.delete(organizationId);
+      return next;
+    });
+  };
+
+  const toggleSelectedOrganization = (
+    organizationId: number,
+    checked: boolean,
+  ) => {
     setSelectedOrganizations((prev) => {
       const next = new Set(prev);
       if (checked) next.add(organizationId);
@@ -207,17 +262,27 @@ function GeneratePage() {
   };
 
   const openOrganizationDialog = () => {
-    setSelectedOrganizations(new Set());
+    setOrganizationDialogSelection(
+      recipientType === "organization"
+        ? new Set(selectedOrganizations)
+        : new Set(),
+    );
     setOrganizationDialogOpen(true);
   };
 
   const applyOrganizationSelection = () => {
+    if (recipientType === "organization") {
+      setSelectedOrganizations(new Set(organizationDialogSelection));
+      setOrganizationDialogOpen(false);
+      return;
+    }
+
     setSelected((prev) => {
       const next = new Map(prev);
       for (const member of organizationMembers) {
         if (
           member.organizationId !== null &&
-          selectedOrganizations.has(member.organizationId)
+          organizationDialogSelection.has(member.organizationId)
         ) {
           next.set(member.memberId, member.name);
         }
@@ -225,13 +290,13 @@ function GeneratePage() {
       return next;
     });
     setOrganizationDialogOpen(false);
-    setSelectedOrganizations(new Set());
+    setOrganizationDialogSelection(new Set());
   };
 
   const organizationSelectionMemberCount = organizationMembers.filter(
     (member) =>
       member.organizationId !== null &&
-      selectedOrganizations.has(member.organizationId) &&
+      organizationDialogSelection.has(member.organizationId) &&
       !selected.has(member.memberId),
   ).length;
 
@@ -247,25 +312,45 @@ function GeneratePage() {
    * 不做「勾满就不让勾」——那样用户只会觉得复选框坏了；让他勾出来、看见超了
    * 多少、自己决定去掉谁，比替他截断清楚。
    */
-  const overLimit = selected.size > INVITATION_BATCH_MAX;
+  const selectedCount =
+    recipientType === "organization"
+      ? selectedOrganizations.size
+      : selected.size;
+  const overLimit = selectedCount > INVITATION_BATCH_MAX;
 
   const canSubmit =
     !!template &&
-    selected.size > 0 &&
+    selectedCount > 0 &&
     !overLimit &&
     missingVariables.length === 0;
 
   const submitMutation = useMutation({
     mutationFn: () =>
-      createInvitationBatch({
-        activityId,
-        templateId: template?.id as number,
-        issueDate,
-        variables,
-        memberIds: [...selected.keys()],
-      }),
+      createInvitationBatch(
+        recipientType === "organization"
+          ? {
+              activityId,
+              templateId: template?.id as number,
+              issueDate,
+              variables,
+              recipientType,
+              organizationIds: [...selectedOrganizations],
+            }
+          : {
+              activityId,
+              templateId: template?.id as number,
+              issueDate,
+              variables,
+              recipientType,
+              memberIds: [...selected.keys()],
+            },
+      ),
     onSuccess: () => {
-      toast.success(`已生成 ${selected.size} 份邀请函`);
+      toast.success(
+        "已生成 " +
+          selectedCount +
+          (recipientType === "organization" ? " 份团体邀请函" : " 份邀请函"),
+      );
       navigate({
         to: "/project/$projectId/activity/$activityId/invitations",
         params: { projectId, activityId: activityIdParam },
@@ -275,6 +360,15 @@ function GeneratePage() {
   });
 
   const rangeEnd = Math.min(page * MEMBER_PAGE_SIZE, memberTotal);
+  const previewRecipientName =
+    recipientType === "organization"
+      ? selectedOrganizationRows[0]?.name
+      : [...selected.values()][0];
+  const allOrganizationsSelected =
+    organizationOptions.length > 0 &&
+    organizationOptions.every((organization) =>
+      selectedOrganizations.has(organization.id),
+    );
 
   return (
     <div className="flex flex-1 flex-col gap-4">
@@ -291,7 +385,9 @@ function GeneratePage() {
           <h2 className="font-semibold text-lg tracking-tight">生成邀请函</h2>
           <p className="text-muted-foreground text-sm">
             每次生成独立留档，不会影响之前已经生成过的批次。单次最多{" "}
-            {INVITATION_BATCH_MAX} 人，超出请分批生成。
+            {INVITATION_BATCH_MAX}{" "}
+            {recipientType === "organization" ? "个团体" : "人"}
+            ，超出请分批生成。
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -308,7 +404,7 @@ function GeneratePage() {
             // 一段距离，光靠那行红字不够。
             title={
               overLimit
-                ? `单次最多 ${INVITATION_BATCH_MAX} 人，请取消部分选择后再生成`
+                ? `单次最多 ${INVITATION_BATCH_MAX} ${recipientType === "organization" ? "个团体" : "人"}，请取消部分选择后再生成`
                 : undefined
             }
             onClick={() => submitMutation.mutate()}
@@ -316,177 +412,395 @@ function GeneratePage() {
             {submitMutation.isPending ? (
               <Loader2Icon className="animate-spin" />
             ) : null}
-            生成 {selected.size > 0 ? `${selected.size} 份` : ""}
+            生成 {selectedCount > 0 ? `${selectedCount} 份` : ""}
           </Button>
         </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_22rem]">
-        {/* 选人 */}
+        {/* 选择对象 */}
         <div className="rounded-lg border bg-card shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b p-3">
             <div className="font-medium text-sm">
               邀请对象
-              {/* 上限常驻显示，不等超了才冒出来——用户是在这里一个个勾的，
-                  额度必须跟着计数一起看得见。 */}
               <span
                 className={cn(
                   "ml-2 font-normal",
                   overLimit ? "text-destructive" : "text-muted-foreground",
                 )}
               >
-                已选 {selected.size} / {INVITATION_BATCH_MAX} 人
+                {recipientType === "organization" ? (
+                  <>
+                    已选 {selectedCount} / {INVITATION_BATCH_MAX} 个团体（共{" "}
+                    {selectedOrganizationMemberCount} 人），将生成{" "}
+                    {selectedCount} 份团体邀请函
+                  </>
+                ) : (
+                  <>
+                    已选 {selectedCount} / {INVITATION_BATCH_MAX} 人
+                  </>
+                )}
                 {overLimit
-                  ? ` · 超出 ${selected.size - INVITATION_BATCH_MAX} 人，请取消部分选择`
+                  ? " · 超出 " +
+                    (selectedCount - INVITATION_BATCH_MAX) +
+                    (recipientType === "organization" ? "个团体" : "人") +
+                    "，请取消部分选择"
                   : null}
               </span>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={openOrganizationDialog}
-              >
+            <ToggleGroup
+              value={[recipientType]}
+              variant="outline"
+              size="sm"
+              aria-label="邀请对象类型"
+              onValueChange={(value) => {
+                const next = value[0];
+                if (next === "member" || next === "organization") {
+                  setRecipientType(next);
+                }
+              }}
+            >
+              <ToggleGroupItem value="member">
+                <UserRoundIcon data-icon="inline-start" />
+                按人员选择
+              </ToggleGroupItem>
+              <ToggleGroupItem value="organization">
                 <UsersRoundIcon data-icon="inline-start" />
-                按团体勾选
-              </Button>
-              <form
-                className="flex items-center gap-2"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  const next = nameInput.trim() || undefined;
-                  // 条件没变时 setState 会被 React 原地吞掉，显式重拉一次，让
-                  // 「查询」同时承担刷新语义（理由见 filter-bar.tsx）。
-                  if (next === nameFilter && page === 1) {
-                    membersQuery.refetch();
-                    return;
-                  }
-                  setNameFilter(next);
-                  setPage(1);
-                }}
-              >
-                <div className="relative">
-                  <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    className="w-48 pl-8"
-                    placeholder="搜索姓名"
-                    value={nameInput}
-                    onChange={(event) => setNameInput(event.target.value)}
-                  />
-                </div>
-                {/* 卡片头里的一条内嵌筛选，不套 FilterBar 的边框和底色，但触发方式
-                    和按钮样式跟列表页保持一致。这里没有别的条件，不需要重置。 */}
-                <FilterActions />
-              </form>
-            </div>
+                按团体生成
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
 
-          <Table>
-            <TableHeader className="bg-muted/60">
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="w-10">
-                  <Checkbox
-                    checked={allOnPageSelected}
-                    onCheckedChange={(checked) => {
-                      for (const row of members) {
-                        toggleMember(row.memberId, row.name, checked === true);
-                      }
-                    }}
-                  />
-                </TableHead>
-                <TableHead>姓名</TableHead>
-                <TableHead>所属团体</TableHead>
-                <TableHead>单位职务</TableHead>
-                <TableHead>手机号</TableHead>
-                <TableHead>来源</TableHead>
-                <TableHead>分组</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {membersQuery.isPending ? (
-                Array.from({ length: 3 }, (_, index) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
-                  <TableRow key={index}>
-                    {Array.from({ length: 7 }, (_, cell) => (
-                      // biome-ignore lint/suspicious/noArrayIndexKey: 同上
-                      <TableCell key={cell}>
-                        <Skeleton className="h-5 w-full" />
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              ) : members.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7}>
-                    <Empty className="border-0">
-                      <EmptyHeader>
-                        <EmptyMedia variant="icon">
-                          <UsersRoundIcon />
-                        </EmptyMedia>
-                        <EmptyTitle>没有可邀请的活动人员</EmptyTitle>
-                        <EmptyDescription>
-                          先到「活动人员」页把人加进来，邀请函只能发给本活动人员。
-                        </EmptyDescription>
-                      </EmptyHeader>
-                    </Empty>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                members.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell>
+          {recipientType === "member" ? (
+            <>
+              <div className="flex flex-wrap items-center justify-end gap-2 border-b p-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={openOrganizationDialog}
+                >
+                  <UsersRoundIcon data-icon="inline-start" />
+                  按团体勾选
+                </Button>
+                <form
+                  className="flex items-center gap-2"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const next = nameInput.trim() || undefined;
+                    // 条件没变时 setState 会被 React 原地吞掉，显式重拉一次。
+                    if (next === nameFilter && page === 1) {
+                      membersQuery.refetch();
+                      return;
+                    }
+                    setNameFilter(next);
+                    setPage(1);
+                  }}
+                >
+                  <div className="relative">
+                    <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      className="w-48 pl-8"
+                      placeholder="搜索姓名"
+                      value={nameInput}
+                      onChange={(event) => setNameInput(event.target.value)}
+                    />
+                  </div>
+                  <FilterActions />
+                </form>
+              </div>
+
+              <Table>
+                <TableHeader className="bg-muted/60">
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="w-10">
                       <Checkbox
-                        checked={selected.has(row.memberId)}
-                        onCheckedChange={(checked) =>
-                          toggleMember(row.memberId, row.name, checked === true)
-                        }
+                        checked={allOnPageSelected}
+                        onCheckedChange={(checked) => {
+                          for (const row of members) {
+                            toggleMember(
+                              row.memberId,
+                              row.name,
+                              checked === true,
+                            );
+                          }
+                        }}
                       />
-                    </TableCell>
-                    <TableCell className="font-medium">{row.name}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {row.organizationName || "-"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {row.companyPosition || "-"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {maskMobile(row.mobile)}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {row.source || "-"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {row.groupName || "-"}
-                    </TableCell>
+                    </TableHead>
+                    <TableHead>姓名</TableHead>
+                    <TableHead>所属团体</TableHead>
+                    <TableHead>单位职务</TableHead>
+                    <TableHead>手机号</TableHead>
+                    <TableHead>来源</TableHead>
+                    <TableHead>分组</TableHead>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                  {membersQuery.isPending ? (
+                    Array.from({ length: 3 }, (_, index) => (
+                      // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
+                      <TableRow key={index}>
+                        {Array.from({ length: 7 }, (_, cell) => (
+                          // biome-ignore lint/suspicious/noArrayIndexKey: 同上
+                          <TableCell key={cell}>
+                            <Skeleton className="h-5 w-full" />
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  ) : members.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7}>
+                        <Empty className="border-0">
+                          <EmptyHeader>
+                            <EmptyMedia variant="icon">
+                              <UsersRoundIcon />
+                            </EmptyMedia>
+                            <EmptyTitle>没有可邀请的活动人员</EmptyTitle>
+                            <EmptyDescription>
+                              先到「活动人员」页把人加进来，邀请函只能发给本活动人员。
+                            </EmptyDescription>
+                          </EmptyHeader>
+                        </Empty>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    members.map((row) => (
+                      <TableRow key={row.id}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selected.has(row.memberId)}
+                            onCheckedChange={(checked) =>
+                              toggleMember(
+                                row.memberId,
+                                row.name,
+                                checked === true,
+                              )
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {row.name}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {row.organizationName || "-"}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {row.companyPosition || "-"}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {maskMobile(row.mobile)}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {row.source || "-"}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {row.groupName || "-"}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
 
-          <div className="flex items-center justify-between gap-2 border-t p-3">
-            <span className="text-muted-foreground text-sm">
-              共 {memberTotal} 名可邀请人员
-            </span>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1}
-                onClick={() => setPage((prev) => prev - 1)}
-              >
-                上一页
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={rangeEnd >= memberTotal}
-                onClick={() => setPage((prev) => prev + 1)}
-              >
-                下一页
-              </Button>
-            </div>
-          </div>
+              <div className="flex items-center justify-between gap-2 border-t p-3">
+                <span className="text-muted-foreground text-sm">
+                  共 {memberTotal} 名可邀请人员
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page <= 1}
+                    onClick={() => setPage((prev) => prev - 1)}
+                  >
+                    上一页
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={rangeEnd >= memberTotal}
+                    onClick={() => setPage((prev) => prev + 1)}
+                  >
+                    下一页
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b p-3">
+                <div>
+                  <p className="font-medium text-sm">按团体生成</p>
+                  <p className="text-muted-foreground text-xs">
+                    以团体为发函对象，每个团体只生成 1
+                    份邀请函，发函抬头为团体名称。
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={openOrganizationDialog}
+                >
+                  <UsersRoundIcon data-icon="inline-start" />
+                  选择团体
+                </Button>
+              </div>
+
+              {selectedOrganizationRows.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
+                  <span className="text-muted-foreground text-sm">
+                    已选团体
+                  </span>
+                  {selectedOrganizationRows.map((organization) => (
+                    <Badge
+                      key={organization.id}
+                      variant="secondary"
+                      className="gap-1 pr-1"
+                    >
+                      {organization.name}（{organization.memberCount} 人）
+                      <button
+                        type="button"
+                        className="inline-flex size-4 items-center justify-center rounded-full hover:bg-foreground/10"
+                        aria-label={`移除${organization.name}`}
+                        onClick={() =>
+                          toggleSelectedOrganization(organization.id, false)
+                        }
+                      >
+                        <XIcon className="size-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              ) : null}
+
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-muted/60">
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="w-10">
+                        <Checkbox
+                          checked={allOrganizationsSelected}
+                          onCheckedChange={(checked) =>
+                            setSelectedOrganizations(
+                              checked === true
+                                ? new Set(
+                                    organizationOptions.map(
+                                      (organization) => organization.id,
+                                    ),
+                                  )
+                                : new Set(),
+                            )
+                          }
+                        />
+                      </TableHead>
+                      <TableHead>团体名称</TableHead>
+                      <TableHead>成员人数</TableHead>
+                      <TableHead>团体负责人</TableHead>
+                      <TableHead>联系电话</TableHead>
+                      <TableHead>生成份数</TableHead>
+                      <TableHead>发函抬头</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {organizationMembersQuery.isPending ? (
+                      Array.from({ length: 3 }, (_, index) => (
+                        // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
+                        <TableRow key={index}>
+                          {Array.from({ length: 7 }, (_, cell) => (
+                            // biome-ignore lint/suspicious/noArrayIndexKey: 同上
+                            <TableCell key={cell}>
+                              <Skeleton className="h-5 w-full" />
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))
+                    ) : organizationMembersQuery.isError ? (
+                      <TableRow>
+                        <TableCell colSpan={7}>
+                          <div className="flex flex-col items-center gap-3 py-8 text-center">
+                            <p className="text-muted-foreground text-sm">
+                              团体加载失败，请重试。
+                            </p>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => organizationMembersQuery.refetch()}
+                            >
+                              重试
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : organizationOptions.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7}>
+                          <Empty className="border-0">
+                            <EmptyHeader>
+                              <EmptyMedia variant="icon">
+                                <UsersRoundIcon />
+                              </EmptyMedia>
+                              <EmptyTitle>当前活动没有可选团体</EmptyTitle>
+                              <EmptyDescription>
+                                只有当前活动中仍有启用人员的团体会显示在这里。
+                              </EmptyDescription>
+                            </EmptyHeader>
+                          </Empty>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      organizationOptions.map((organization) => (
+                        <TableRow key={organization.id}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedOrganizations.has(
+                                organization.id,
+                              )}
+                              onCheckedChange={(checked) =>
+                                toggleSelectedOrganization(
+                                  organization.id,
+                                  checked === true,
+                                )
+                              }
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {organization.name}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {organization.memberCount} 人
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {organization.contactName || "-"}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {maskMobile(organization.contactMobile)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">1 份</Badge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {organization.name}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t p-3">
+                <span className="text-muted-foreground text-sm">
+                  共 {organizationOptions.length} 个可邀请团体 · 当前活动共{" "}
+                  {organizationMembers.length} 名启用人员
+                </span>
+                <span className="font-medium text-sm">
+                  已选 {selectedOrganizations.size} 个团体 · 共{" "}
+                  {selectedOrganizationMemberCount} 名成员 · 预计生成{" "}
+                  {selectedOrganizations.size} 份邀请函
+                </span>
+              </div>
+            </>
+          )}
         </div>
 
         {/* 模板 + 变量 */}
@@ -575,15 +889,18 @@ function GeneratePage() {
         open={organizationDialogOpen}
         onOpenChange={(open) => {
           setOrganizationDialogOpen(open);
-          if (!open) setSelectedOrganizations(new Set());
+          if (!open) setOrganizationDialogSelection(new Set());
         }}
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>按团体勾选</DialogTitle>
+            <DialogTitle>
+              {recipientType === "organization" ? "选择团体" : "按团体勾选"}
+            </DialogTitle>
             <DialogDescription>
-              选择一个或多个团体，确认后会勾选这些团体在当前活动中的全部启用人员。
-              你仍可以回到人员列表逐人调整。
+              {recipientType === "organization"
+                ? "选择一个或多个团体，每个团体只生成一份邀请函，确认后可继续调整。"
+                : "选择一个或多个团体，确认后会勾选这些团体在当前活动中的全部启用人员。你仍可以回到人员列表逐人调整。"}
             </DialogDescription>
           </DialogHeader>
           <DialogBody>
@@ -623,10 +940,12 @@ function GeneratePage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">
-                    选择后将批量勾选团体成员
+                    {recipientType === "organization"
+                      ? "每个选中的团体生成一份邀请函"
+                      : "选择后将批量勾选团体成员"}
                   </span>
                   <span className="font-medium">
-                    已选 {selectedOrganizations.size} 个团体
+                    已选 {organizationDialogSelection.size} 个团体
                   </span>
                 </div>
                 <FieldGroup className="gap-2">
@@ -640,7 +959,9 @@ function GeneratePage() {
                       >
                         <Checkbox
                           id={checkboxId}
-                          checked={selectedOrganizations.has(organization.id)}
+                          checked={organizationDialogSelection.has(
+                            organization.id,
+                          )}
                           onCheckedChange={(checked) =>
                             toggleOrganization(
                               organization.id,
@@ -660,10 +981,15 @@ function GeneratePage() {
                     );
                   })}
                 </FieldGroup>
-                {selectedOrganizations.size > 0 ? (
+                {organizationDialogSelection.size > 0 ? (
                   <p className="text-muted-foreground text-xs">
-                    本次将新增勾选 {organizationSelectionMemberCount}{" "}
-                    名人员；已勾选的人不会重复计算。
+                    {recipientType === "organization"
+                      ? "本次将生成 " +
+                        organizationDialogSelection.size +
+                        " 份团体邀请函，邀请抬头为团体名称。"
+                      : "本次将新增勾选 " +
+                        organizationSelectionMemberCount +
+                        " 名人员；已勾选的人不会重复计算。"}
                   </p>
                 ) : null}
               </div>
@@ -678,13 +1004,13 @@ function GeneratePage() {
             </Button>
             <Button
               disabled={
-                selectedOrganizations.size === 0 ||
+                organizationDialogSelection.size === 0 ||
                 organizationMembersQuery.isPending ||
                 organizationMembersQuery.isError
               }
               onClick={applyOrganizationSelection}
             >
-              确认勾选
+              {recipientType === "organization" ? "确认选择" : "确认勾选"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -704,15 +1030,16 @@ function GeneratePage() {
                   template.templateFileId,
                   variables,
                   issueDate,
-                  [...selected.values()][0] ?? "",
+                  recipientType,
+                  previewRecipientName ?? "",
                 ]}
                 enabled={previewOpen}
                 load={() =>
                   previewInvitationTemplate({
                     templateFileId: template.templateFileId,
                     variables,
-                    // 用第一个选中的人预览，比样例「张三」更能说明问题。
-                    recipientName: [...selected.values()][0],
+                    // 用第一个选中的收件对象预览，比样例「张三」更能说明问题。
+                    recipientName: previewRecipientName,
                     issueDate,
                   })
                 }
