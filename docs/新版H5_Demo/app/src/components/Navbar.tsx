@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 export default function Navbar() {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-[var(--line)] bg-white/90 backdrop-blur">
-      <div className="mx-auto flex h-12 max-w-[480px] items-center justify-between px-4">
+      <div className="mx-auto flex h-12 max-w-[393px] items-center justify-between px-4">
         <Link to="/" className="text-h-section text-[var(--ink-1)]">
           行·见 行程分享
         </Link>

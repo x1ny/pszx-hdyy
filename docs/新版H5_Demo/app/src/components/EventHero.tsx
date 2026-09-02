@@ -1,43 +1,11 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import type { EventInfo } from '@/types/itinerary'
-import { isNavigable, openNavigation } from '@/lib/actions'
 import { Icon } from '@/components/shared'
-import type { IconName } from '@/components/shared'
 import EventDetailOverlay from '@/components/EventDetailOverlay'
 import { PhoneChip } from '@/components/TransfersSection'
-import { useToast } from '@/lib/toast-context'
 
 const EASE = [0.22, 1, 0.36, 1] as [number, number, number, number]
-
-/**
- * Compact hero action chip: 36px visual height (design.md §1 NavChip spec)
- * with the hit area expanded to ≥44px via a ::before overlay (no layout cost).
- */
-function HeroActionChip({
-  icon,
-  label,
-  onClick,
-  ariaLabel,
-}: {
-  icon: IconName
-  label: string
-  onClick: () => void
-  ariaLabel?: string
-}) {
-  return (
-    <motion.button
-      type="button"
-      whileTap={{ scale: 0.94 }}
-      onClick={onClick}
-      aria-label={ariaLabel ?? label}
-      className="relative flex h-9 shrink-0 items-center gap-1 rounded-[10px] border border-[var(--theme-primary)]/15 bg-[var(--theme-soft)] px-2.5 text-body font-bold text-[var(--theme-primary)] before:absolute before:-inset-x-1 before:-inset-y-2 before:content-['']"
-    >
-      <Icon name={icon} size={14} />
-      {label}
-    </motion.button>
-  )
-}
 
 /**
  * Title reveal borrowed from cinematic opening sequences: each character
@@ -75,7 +43,8 @@ function RevealTitle({ title }: { title: string }) {
  * Module 1 — 活动概况: 200px hero (gradient + image + texture) with the white
  * content card cutting in from the bottom (24px top radius, rounded
  * transition into the content below). Rows: title (2-line clamp) / date+time
- * / city+venue with nav action / collapsible intro.
+ * / collapsible intro. The venue line lives in the 活动详情 overlay — the
+ * hero stays focused on "what & when".
  */
 export default function EventHero({
   userName,
@@ -86,15 +55,7 @@ export default function EventHero({
   greeting: string
   event: EventInfo
 }) {
-  const { show } = useToast()
   const [detailOpen, setDetailOpen] = useState(false)
-
-  const venueNavigable = isNavigable(event.venueGeo)
-  const handleNav = () => {
-    if (!venueNavigable) return
-    openNavigation(event.venueGeo)
-    show('已为你打开地图')
-  }
 
   return (
     <section className="relative">
@@ -153,23 +114,6 @@ export default function EventHero({
             <span className="font-num text-body font-extrabold text-[var(--ink-1)]">
               {event.timeRange}
             </span>
-          </motion.div>
-
-          {/* city + venue + navigation action */}
-          <motion.div
-            variants={{ hidden: { y: 10, opacity: 0 }, show: { y: 0, opacity: 1 } }}
-            transition={{ duration: 0.4, ease: EASE }}
-            className="mt-1.5 flex items-center justify-between gap-2"
-          >
-            <span className="flex min-w-0 items-center gap-1.5">
-              <Icon name="map-pin" size={14} className="shrink-0 text-[var(--ink-3)]" />
-              <span className="truncate text-body text-[var(--ink-2)]">
-                {event.city} · {event.venue}
-              </span>
-            </span>
-            {venueNavigable && (
-              <HeroActionChip icon="navigation" label="导航" onClick={handleNav} />
-            )}
           </motion.div>
 
           {/* intro: 2-line clamp; 查看详情 opens the full detail overlay

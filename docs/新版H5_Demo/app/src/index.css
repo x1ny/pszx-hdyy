@@ -21,13 +21,15 @@
     --bg-card: #ffffff;
     --line: #ebedf1;
 
-    /* —— 交通类型色 —— */
-    --rail: #2e6bff;
-    --rail-soft: #eaf0ff;
-    --air: #8b5cf6;
-    --air-soft: #f1ecfe;
-    --car: #12b76a;
-    --car-soft: #e7f8f0;
+    /* —— 交通类型（中性化单 accent 体系：飞机/动车/用车靠图标区分，
+          颜色只留给主题红承担"重点/进行中/行动"——多色相会让一个
+          扫读型页面显得花哨）—— */
+    --rail: #4a515c;
+    --rail-soft: #f1f2f5;
+    --air: #4a515c;
+    --air-soft: #f1f2f5;
+    --car: #4a515c;
+    --car-soft: #f1f2f5;
 
     /* —— 状态 —— */
     --success: #12b76a;
@@ -74,7 +76,7 @@
   }
 
   body {
-    /* Surroundings stay black so the centered 480px app surface
+    /* Surroundings stay black so the centered 393px (iPhone 15 Pro logical width) app surface
        (--bg-page, set on the Layout container) reads as a distinct panel
        on desktop instead of blending into the page. */
     background: #000000;

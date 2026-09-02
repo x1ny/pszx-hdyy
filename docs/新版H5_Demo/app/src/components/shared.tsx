@@ -22,7 +22,9 @@ export type IconName =
   | 'clock'
   | 'zoom-in'
   | 'user-round'
+  | 'users-round'
   | 'megaphone'
+  | 'lock-keyhole'
 
 const ICON_PATHS: Record<IconName, ReactNode> = {
   'train-front': (
@@ -117,6 +119,20 @@ const ICON_PATHS: Record<IconName, ReactNode> = {
       <path d="M20 21a8 8 0 0 0-16 0" />
     </>
   ),
+  'users-round': (
+    <>
+      <path d="M18 21a8 8 0 0 0-16 0" />
+      <circle cx="10" cy="8" r="5" />
+      <path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3" />
+    </>
+  ),
+  'lock-keyhole': (
+    <>
+      <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+      <circle cx="12" cy="16" r="1" />
+    </>
+  ),
 }
 
 export function Icon({
@@ -209,8 +225,8 @@ export function PillTag({
   style,
 }: {
   children: ReactNode
-  /** solid = filled theme bg white text (seat highlight); soft = tinted bg */
-  variant?: 'solid' | 'soft'
+  /** solid = filled theme bg white text; soft = tinted bg; outline = same-hue wireframe */
+  variant?: 'solid' | 'soft' | 'outline'
   className?: string
   style?: React.CSSProperties
 }) {
@@ -220,7 +236,13 @@ export function PillTag({
       style={{
         ...(variant === 'solid'
           ? { background: 'var(--theme-gradient)', color: '#fff' }
-          : { background: 'var(--theme-soft)', color: 'var(--theme-primary)' }),
+          : variant === 'outline'
+            ? {
+                background: '#fff',
+                color: 'var(--theme-primary)',
+                border: '1px solid var(--theme-primary)',
+              }
+            : { background: 'var(--theme-soft)', color: 'var(--theme-primary)' }),
         ...style,
       }}
     >
@@ -343,7 +365,7 @@ export function FullScreenOverlay({
             onDragEnd={(_, info) => {
               if (info.offset.y > 80 || info.velocity.y > 400) onClose()
             }}
-            className="absolute inset-0 mx-auto flex w-full max-w-[480px] flex-col bg-white"
+            className="absolute inset-0 mx-auto flex w-full max-w-[393px] flex-col bg-white"
           >
             <div className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--line)] px-4">
               <h3 className="text-h-section text-[var(--ink-1)]">{title}</h3>

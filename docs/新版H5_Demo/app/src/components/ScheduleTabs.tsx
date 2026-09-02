@@ -1,18 +1,15 @@
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import type { AgendaItem, Transfer } from '@/types/itinerary'
-import AgendaTimeline from '@/components/AgendaTimeline'
-import TransferCards from '@/components/TransfersSection'
+import MergedDayTimeline, { type DayEntry } from '@/components/AgendaTimeline'
 import { Icon } from '@/components/shared'
 import { cn } from '@/lib/utils'
 
 const EASE = [0.22, 1, 0.36, 1] as [number, number, number, number]
 
-type TabKey = 'agenda' | 'transfers'
-
 /* ------------------------------------------------------------------ */
 /* Day cards — each event day is ONE big card: a header (date tile,    */
-/* 第N天, weekday, count, chevron) with collapsible content. Days      */
+/* day label, weekday, count, chevron) with collapsible content. Days  */
 /* before the reference day start collapsed; current/future expand.    */
 /* ------------------------------------------------------------------ */
 
@@ -37,6 +34,12 @@ function transferDay(t: Transfer): string {
   return m ? `${m[1]}-${m[2]}-${m[3]}` : ''
 }
 
+/** Transfer within-day sort key: sortTime '20250618T061000' → '06:10'. */
+function transferTime(t: Transfer): string {
+  const m = /^\d{8}T(\d{2})(\d{2})/.exec(t.sortTime)
+  return m ? `${m[1]}:${m[2]}` : ''
+}
+
 function uniqueDays(days: string[]): string[] {
   return Array.from(new Set(days.filter(Boolean))).sort()
 }
@@ -59,7 +62,7 @@ function currentDayOf(days: string[], agenda: AgendaItem[]): string {
 }
 
 function DayCard({
-  index,
+  label,
   day,
   count,
   defaultOpen,
@@ -67,7 +70,7 @@ function DayCard({
   isPast,
   children,
 }: {
-  index: number
+  label: string
   day: string
   count: number
   defaultOpen: boolean
@@ -81,7 +84,7 @@ function DayCard({
 
   return (
     <section
-      aria-label={`第${index + 1}天 ${day}`}
+      aria-label={`${label} ${day}`}
       /* transfer perforation notches inside this card blend with the card
          surface instead of the page */
       className="mb-3 overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--bg-card)] shadow-card [--notch-bg:var(--bg-card)]"
@@ -110,7 +113,7 @@ function DayCard({
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5">
             <span className={cn('text-body font-bold', isPast ? 'text-[var(--ink-3)]' : 'text-[var(--ink-1)]')}>
-              第{CN_NUM[index] ?? index + 1}天
+              {label}
             </span>
             {isCurrent && (
               <span className="bg-theme-gradient rounded-full px-1.5 py-px text-[10px] font-bold leading-4 text-white">
@@ -152,14 +155,21 @@ function DayCard({
 }
 
 /**
- * 我的议程 / 行程信息 as a segmented tab switch. The active-pill slides
- * via layoutId; panels cross-fade with a short vertical drift, disabled
- * under reduced motion.
+ * 我的日程 — merged 我的议程 + 行程信息 in ONE chronological view.
  *
- * Multi-day layout: inside each panel, every day is one big collapsible
- * card; days before the current day start collapsed. The agenda panel
- * shows sessions only; car transfers bound via carId fold under their
- * session, while rail/air live in the 行程信息 tab.
+ * Grouping & labeling rules:
+ * - Days are the union of agenda dates and standalone-transfer days, so a
+ *   flight on the day BEFORE the event gets its own day card instead of
+ *   being orphaned in a separate tab.
+ * - Days containing agenda sessions are numbered 第一天/第二天… in order.
+ * - Transfer-only days are labeled by position relative to the event:
+ *   before the first session day → 出发日; after the last → 返程日;
+ *   a gap day in between → 自由活动.
+ * - Every transfer (including cars referenced by a session's carId) is a
+ *   standalone row in the merged timeline — a pre-session ride sorts
+ *   BEFORE its session, matching real-world chronology.
+ * - Days before the current day start collapsed; a single-day schedule
+ *   skips the day-card chrome entirely.
  */
 export default function ScheduleTabs({
   agenda,
@@ -170,144 +180,87 @@ export default function ScheduleTabs({
   transfers: Transfer[]
   onShowSeatMap: (item: AgendaItem) => void
 }) {
-  const [tab, setTab] = useState<TabKey>('agenda')
-  const reduceMotion = useReducedMotion()
+  // All transfers are standalone timeline rows, sorted by time — a ride
+  // to a session appears before that session, not folded under it.
+  const standaloneTransfers = transfers
 
   const agendaDays = useMemo(() => uniqueDays(agenda.map((a) => a.date)), [agenda])
-  const transferDays = useMemo(() => uniqueDays(transfers.map(transferDay)), [transfers])
-  const currentDay = useMemo(() => currentDayOf(agendaDays, agenda), [agendaDays, agenda])
+  const days = useMemo(
+    () => uniqueDays([...agendaDays, ...standaloneTransfers.map(transferDay)]),
+    [agendaDays, standaloneTransfers],
+  )
+  const currentDay = useMemo(() => currentDayOf(days, agenda), [days, agenda])
 
-  const agendaByDay = useMemo(() => {
-    const map = new Map<string, AgendaItem[]>()
-    for (const a of agenda) {
-      const list = map.get(a.date) ?? []
-      list.push(a)
-      map.set(a.date, list)
-    }
-    return map
-  }, [agenda])
-
-  const transfersByDay = useMemo(() => {
-    const map = new Map<string, Transfer[]>()
-    for (const t of transfers) {
-      const d = transferDay(t)
-      if (!d) continue
+  const entriesByDay = useMemo(() => {
+    const map = new Map<string, DayEntry[]>()
+    const push = (d: string, entry: DayEntry) => {
       const list = map.get(d) ?? []
-      list.push(t)
+      list.push(entry)
       map.set(d, list)
     }
+    for (const a of agenda) push(a.date, { kind: 'agenda', item: a, time: a.start })
+    for (const t of standaloneTransfers) {
+      const d = transferDay(t)
+      // Day-level expiry, same granularity as the day card's isPast.
+      if (d) push(d, { kind: 'transfer', transfer: t, time: transferTime(t), finished: d < currentDay })
+    }
+    for (const list of map.values()) list.sort((a, b) => a.time.localeCompare(b.time))
     return map
-  }, [transfers])
+  }, [agenda, standaloneTransfers, currentDay])
 
-  const tabs: { key: TabKey; label: string; count: number }[] = [
-    { key: 'agenda', label: '我的议程', count: agenda.length },
-    { key: 'transfers', label: '行程信息', count: transfers.length },
-  ]
+  /** 第N天 for session days; positional labels for transfer-only days. */
+  const dayLabel = (d: string): string => {
+    const i = agendaDays.indexOf(d)
+    if (i >= 0) return `第${CN_NUM[i] ?? i + 1}天`
+    const first = agendaDays[0]
+    const last = agendaDays[agendaDays.length - 1]
+    if (first && d < first) return '出发日'
+    if (last && d > last) return '返程日'
+    return '自由活动'
+  }
+
+  const totalCount = agenda.length + standaloneTransfers.length
+
+  const sectionLabel = '我的行程'
 
   return (
-    <section aria-label="议程与行程">
-      <div className="px-4">
-        <div
-          role="tablist"
-          aria-label="议程与行程切换"
-          className="grid grid-cols-2 rounded-full bg-[#EBEDF2] p-1"
-        >
-          {tabs.map((t) => {
-            const active = t.key === tab
-            return (
-              <button
-                key={t.key}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setTab(t.key)}
-                className="relative flex h-9 items-center justify-center rounded-full"
-              >
-                {active && (
-                  <motion.span
-                    layoutId="schedule-tab-pill"
-                    transition={
-                      reduceMotion
-                        ? { duration: 0 }
-                        : { type: 'spring', stiffness: 500, damping: 38 }
-                    }
-                    className="absolute inset-0 rounded-full bg-white shadow-[0_1px_4px_rgba(20,26,38,0.1)]"
-                  />
-                )}
-                <span
-                  className={cn(
-                    'relative z-10 flex items-baseline gap-1 text-body font-bold transition-colors duration-150',
-                    active ? 'text-[var(--theme-primary)]' : 'text-[var(--ink-3)]',
-                  )}
-                >
-                  {t.label}
-                  <span className="font-num text-[11px] font-extrabold">{t.count}</span>
-                </span>
-              </button>
-            )
-          })}
-        </div>
+    <section aria-label={sectionLabel} className="px-4">
+      {/* quiet section header: restores the boundary between the hero
+          (what the event is) and the day list (what the guest does) that
+          the removed tab bar used to carry. Label is fixed copy per
+          product decision (我的行程), independent of user.greeting. */}
+      <div className="mb-2 flex items-baseline justify-between">
+        <h2 className="text-[12px] font-bold tracking-[0.14em] text-[var(--ink-3)]">{sectionLabel}</h2>
+        <span className="text-caption text-[var(--ink-4)]">
+          共{days.length}天 · <span className="font-num">{totalCount}</span>项
+        </span>
       </div>
-
-      <div className="mt-2.5 px-4">
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div
-            key={tab}
-            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
-            transition={{ duration: 0.18, ease: EASE }}
-          >
-            {/* Single-day events skip the day-card chrome entirely — the
-                hero already carries the date, so a 第一天 header would be
-                redundant grouping; the timeline / full ticket cards render
-                directly. */}
-            {tab === 'agenda' ? (
-              agendaDays.length <= 1 ? (
-                <AgendaTimeline
-                  agenda={agenda}
-                  transfers={transfers}
-                  onShowSeatMap={onShowSeatMap}
-                />
-              ) : (
-                agendaDays.map((d, i) => (
-                  <DayCard
-                    key={d}
-                    index={i}
-                    day={d}
-                    count={agendaByDay.get(d)?.length ?? 0}
-                    defaultOpen={d >= currentDay}
-                    isCurrent={d === currentDay}
-                    isPast={d < currentDay}
-                  >
-                    <AgendaTimeline
-                      agenda={agendaByDay.get(d) ?? []}
-                      transfers={transfers}
-                      onShowSeatMap={onShowSeatMap}
-                    />
-                  </DayCard>
-                ))
-              )
-            ) : transferDays.length <= 1 ? (
-              <TransferCards transfers={transfers} />
-            ) : (
-              transferDays.map((d, i) => (
-                <DayCard
-                  key={d}
-                  index={i}
-                  day={d}
-                  count={transfersByDay.get(d)?.length ?? 0}
-                  defaultOpen={d >= currentDay}
-                  isCurrent={d === currentDay}
-                  isPast={d < currentDay}
-                >
-                  <TransferCards transfers={transfersByDay.get(d) ?? []} inset />
-                </DayCard>
-              ))
-            )}
-          </motion.div>
-        </AnimatePresence>
-      </div>
+      {days.length <= 1 ? (
+        <MergedDayTimeline
+          entries={entriesByDay.get(days[0] ?? '') ?? []}
+          onShowSeatMap={onShowSeatMap}
+        />
+      ) : (
+        days.map((d) => {
+          const entries = entriesByDay.get(d) ?? []
+          return (
+            <DayCard
+              key={d}
+              label={dayLabel(d)}
+              day={d}
+              count={entries.length}
+              defaultOpen={d >= currentDay}
+              isCurrent={d === currentDay}
+              isPast={d < currentDay}
+            >
+              <MergedDayTimeline
+                entries={entries}
+                onShowSeatMap={onShowSeatMap}
+              />
+            </DayCard>
+          )
+        })
+      )}
     </section>
   )
 }

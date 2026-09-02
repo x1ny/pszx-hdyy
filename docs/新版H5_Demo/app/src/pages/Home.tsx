@@ -6,6 +6,7 @@ import { copyText } from '@/lib/actions'
 import EventHero from '@/components/EventHero'
 import ScheduleTabs from '@/components/ScheduleTabs'
 import MapOverlay from '@/components/MapOverlay'
+import KeyGate from '@/components/KeyGate'
 import { SkeletonCard } from '@/components/shared'
 import { ToastProvider } from '@/components/Toast'
 import { useToast } from '@/lib/toast-context'
@@ -164,10 +165,22 @@ function ItineraryView({ data }: { data: ItineraryData }) {
   )
 }
 
+const UNLOCK_KEY = 'itinerary-unlocked'
+
+function readUnlocked(): boolean {
+  try {
+    return sessionStorage.getItem(UNLOCK_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 export default function Home() {
+  const [unlocked, setUnlocked] = useState(readUnlocked)
   const [state, setState] = useState<LoadState>({ phase: 'loading' })
 
   useEffect(() => {
+    if (!unlocked) return
     let cancelled = false
     fetchItinerary(getToken())
       .then((data) => !cancelled && setState({ phase: 'ready', data }))
@@ -182,14 +195,24 @@ export default function Home() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [unlocked])
+
+  const handleUnlock = () => {
+    try {
+      sessionStorage.setItem(UNLOCK_KEY, '1')
+    } catch {
+      /* private mode — gate simply re-appears on next launch */
+    }
+    setUnlocked(true)
+  }
 
   return (
     <ToastProvider>
-      {state.phase === 'loading' && <SkeletonScreen />}
-      {state.phase === 'ready' && <ItineraryView data={state.data} />}
-      {state.phase === 'invalid' && <InvalidState message={state.message} />}
-      {state.phase === 'error' && <ErrorState message={state.message} />}
+      {!unlocked && <KeyGate onUnlock={handleUnlock} />}
+      {unlocked && state.phase === 'loading' && <SkeletonScreen />}
+      {unlocked && state.phase === 'ready' && <ItineraryView data={state.data} />}
+      {unlocked && state.phase === 'invalid' && <InvalidState message={state.message} />}
+      {unlocked && state.phase === 'error' && <ErrorState message={state.message} />}
     </ToastProvider>
   )
 }

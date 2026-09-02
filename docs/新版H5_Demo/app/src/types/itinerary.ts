@@ -84,15 +84,19 @@ export interface AgendaItem {
       omit it — walking there needs no map. */
   geo?: GeoPoint
   zone?: string
-  /** Seat/admission note, e.g. "12排08座" / "凭胸卡入场". */
+  /** Seat/admission note, e.g. "12排08座" / "6排11-15座" (range) /
+      "凭胸卡入场". */
   seat?: string
-  /** Bound car transfer id — rendered as a collapsible 用车安排 block
-      under this session in the agenda timeline. */
+  /** Bound car transfer id (informational link to the transfer row). */
   carId?: string
   /** Optional per-session remark for guest action items, e.g. "需上台发言"
       / "建议更换运动服装" — rendered as an attention block under the
       session. Absent/empty → not rendered. */
   note?: string
+  /** Group seating note for guests whose party has no link access, e.g.
+      "您的团体成员座位安排在 5排03-05座、6排01-03座" — rendered as a
+      caption directly under the seat pill. Absent/empty → not rendered. */
+  groupSeatNote?: string
   status: AgendaStatus
 }
 

@@ -53,6 +53,16 @@ export function getToken(): string {
   return new URLSearchParams(window.location.search).get('k') ?? ''
 }
 
+/** Demo access key for the gate screen. In production this check happens
+    server-side when exchanging the key for the itinerary token. */
+export const DEMO_ACCESS_KEY = '13860681818'
+
+/** Mock key verification — async to mirror the real network exchange. */
+export async function verifyAccessKey(key: string): Promise<boolean> {
+  await new Promise((r) => setTimeout(r, 350))
+  return key.replace(/\D/g, '') === DEMO_ACCESS_KEY
+}
+
 export async function fetchItinerary(token: string): Promise<ItineraryData> {
   const raw = API_ENDPOINT ? await requestRemote(API_ENDPOINT, token) : await requestMock(token)
   return normalizeItinerary(raw)
@@ -152,6 +162,7 @@ function normalizeItinerary(raw: unknown): ItineraryData {
         ...(asString(item.seat) ? { seat: asString(item.seat) } : {}),
         ...(asString(item.carId) ? { carId: asString(item.carId) } : {}),
         ...(asString(item.note) ? { note: asString(item.note) } : {}),
+        ...(asString(item.groupSeatNote) ? { groupSeatNote: asString(item.groupSeatNote) } : {}),
         status: deriveStatus(date, item.start, item.end, item.status),
       }
     })
@@ -320,7 +331,7 @@ function deriveStatus(
 const MOCK_DATA: ItineraryData = {
   user: { name: '陈默', greeting: '专属行程' },
   event: {
-    title: '2025 海丝国际时尚周 · 开幕式暨品牌发布盛典',
+    title: '2025 海丝国际时尚周',
     dateText: '2025年6月18日–20日 · 共3天',
     timeRange: '09:00–17:30',
     city: '泉州',
@@ -391,7 +402,8 @@ const MOCK_DATA: ItineraryData = {
       title: '海丝时尚趋势工作坊',
       venue: '二层论坛厅 2',
       zone: 'C区',
-      seat: '6排11座',
+      // seat as a range — not every admission is a fixed seat
+      seat: '6排11-15座',
       note: '含面料体验环节，建议穿着轻便运动服装',
       status: 'finished',
     },
@@ -414,6 +426,9 @@ const MOCK_DATA: ItineraryData = {
       venue: '主体育馆 · 副舞台',
       zone: 'A区',
       seat: '5排02座',
+      // this guest can view the share link, but their party members can't —
+      // carry the party's seats as a caption under the seat pill
+      groupSeatNote: '您的团体成员座位安排在 5排03-05座、6排01-03座',
       note: '开场前 20 分钟请入座完毕，秀间谢绝走动',
       status: 'upcoming',
     },
@@ -464,31 +479,32 @@ const MOCK_DATA: ItineraryData = {
     },
   ],
   transfers: [
-    // Day 1 — arrival: early flight in, airport pickup to the venue
+    // 出发日 (day before the event) — evening flight in, night at the hotel
     {
       id: 'air-mf8501',
       type: 'air',
       no: 'MF8501',
-      depTime: '06:10',
-      arrTime: '08:55',
+      depTime: '19:30',
+      arrTime: '22:05',
       depStation: '北京首都 T2',
       arrStation: '泉州晋江国际机场',
       seat: '经济舱 32C',
       gate: '登机口 B12',
-      sortTime: '20250618T061000',
+      sortTime: '20250617T193000',
     },
+    // Day 1 — morning pickup from the hotel to the venue
     {
       id: 'car-shuttle',
       type: 'car',
       title: '活动接驳专车 · 往体育馆',
-      useTime: '09:10 发车',
+      useTime: '08:10 发车',
       plate: '闽C·D8866',
       driver: '王师傅',
       phone: '13806051234',
-      meetPoint: '晋江机场 T1 到达层 · 6号门',
-      durationMin: 40,
-      geo: { lat: 24.8008, lng: 118.5896, name: '泉州晋江国际机场' },
-      sortTime: '20250618T091000',
+      meetPoint: '泉州悦华酒店大堂',
+      durationMin: 20,
+      geo: { lat: 24.907, lng: 118.585, name: '泉州悦华酒店' },
+      sortTime: '20250618T081000',
     },
     // Day 2 — evening off-site night tour shuttle
     {
