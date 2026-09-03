@@ -143,9 +143,24 @@ export const SetActivityRegistrationEnabledInput = z.object({
 });
 
 export const ListActivitiesInput = PageInput.extend({
-  // 活动没有独立一级菜单，列表永远在某个项目详情页下打开，projectId 必填。
-  projectId: id,
+  /**
+   * `projectId` 可选：同一个接口服务两个入口。
+   *
+   * 项目详情页的活动列表永远带 projectId（只看这个项目下的活动）；一级菜单
+   * 「活动管理」跨项目看全部活动，不传 projectId 就是"全部项目"，传了就退化成
+   * 按项目筛。两个入口的筛选项、投影、分页完全一样，没有理由拆成两条接口——
+   * 真拆了，以后加一个筛选条件就得记得改两处。
+   */
+  projectId: id.optional(),
   name: filter,
   activityType: ActivityTypeEnum.optional(),
   publishStatus: PublishStatusEnum.optional(),
-});
+  // 日期筛选的取值和语义跟 ListProjectsInput 一致：传日期字符串，服务端按
+  // 业务时区算整日边界，不把浏览器本地日期当 UTC 时刻。
+  startTime: z.iso.date().optional(),
+  endTime: z.iso.date().optional(),
+}).refine(
+  (value) =>
+    !value.startTime || !value.endTime || value.startTime <= value.endTime,
+  { message: "结束时间不能早于开始时间", path: ["endTime"] },
+);

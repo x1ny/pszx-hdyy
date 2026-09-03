@@ -14,6 +14,7 @@ import {
   segmentMemberConflictQueryOptions,
   segmentMemberKeys,
 } from "#/features/member/relation-queries.ts";
+import { activityDetailQueryOptions } from "#/features/project/queries";
 import { isOpenTodo } from "#/features/resource/labels.ts";
 import {
   type ResourceDemand,
@@ -30,7 +31,6 @@ import { Button } from "#/shared/components/ui/button.tsx";
 import { Checkbox } from "#/shared/components/ui/checkbox.tsx";
 import { Skeleton } from "#/shared/components/ui/skeleton.tsx";
 import { cn } from "#/shared/lib/utils.ts";
-import { activityDetailQueryOptions } from "../-queries";
 import { seatingKeys, seatingPlansQueryOptions } from "../-venue-queries";
 import { AgendaLineDialog } from "./-components/agenda-line-dialog";
 import { AgendaTimeline } from "./-components/agenda-timeline";

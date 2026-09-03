@@ -17,6 +17,11 @@ export type SeedFn = (db: SeedDb, ctx: SeedContext) => Promise<void>;
 export const DEMO = {
   projectId: 1,
   activityId: 1,
+  // 第二个项目只有活动、没有下游数据，存在的理由是让一级菜单「活动管理」
+  // 那一页真的跨得到两个项目——只有一个项目时，「所属项目」这一列和那个
+  // 筛选框看上去都是对的，实际上什么都没验证到。
+  secondProjectId: 2,
+  secondProjectActivityIds: { launch: 3, closing: 4 },
   mainLineId: 1,
   parallelLineId: 2,
   segmentIds: { opening: 1, forum: 2, negotiation: 3 },

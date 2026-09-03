@@ -3,24 +3,45 @@ import {
   createFileRoute,
   Link,
   Outlet,
+  retainSearchParams,
   useMatchRoute,
 } from "@tanstack/react-router";
 import { ArrowLeftIcon } from "lucide-react";
-import { Badge } from "#/shared/components/ui/badge.tsx";
-import { buttonVariants } from "#/shared/components/ui/button.tsx";
-import { Skeleton } from "#/shared/components/ui/skeleton.tsx";
-import { cn } from "#/shared/lib/utils.ts";
-import { activityDetailQueryOptions } from "./-queries";
+import { z } from "zod";
+import { activityDetailQueryOptions } from "#/features/project/queries";
 import {
   ACTIVITY_TYPE_LABELS,
   formatDateTime,
   PUBLISH_STATUS_CHIP,
   PUBLISH_STATUS_LABELS,
-} from "./-utils";
+} from "#/features/project/utils";
+import { Badge } from "#/shared/components/ui/badge.tsx";
+import { buttonVariants } from "#/shared/components/ui/button.tsx";
+import { Skeleton } from "#/shared/components/ui/skeleton.tsx";
+import { cn } from "#/shared/lib/utils.ts";
+
+/**
+ * 活动详情有两个入口：项目详情页的「活动列表」标签页，和一级菜单「活动管理」。
+ * URL 只有一条（活动永远挂在项目下），所以"从哪来"没法从路径读出来，用一个
+ * search param 带着走——刷新、收藏、把链接发给别人都还原得回来，比读
+ * history.state 或者猜 referrer 靠谱。
+ *
+ * 注意这是 URL 上的 `?from=`，不是 `<Link>` 那个用于相对导航的 `from` 属性，
+ * 两者同名但没关系。
+ *
+ * 缺省（项目详情那个入口不传）就是回项目详情，保持原来的行为。
+ */
+const ActivityDetailSearchSchema = z.object({
+  from: z.literal("activity").optional().catch(undefined),
+});
 
 export const Route = createFileRoute(
   "/_authenticated/project/$projectId_/activity/$activityId",
 )({
+  validateSearch: ActivityDetailSearchSchema,
+  // 标签页之间跳转时把 from 带上：人还在这个活动里，"返回"该去哪儿不该因为
+  // 从「活动概览」切到「议程」就变了。各标签页自己的筛选参数不受影响。
+  search: { middlewares: [retainSearchParams(["from"])] },
   loader: ({ context, params }) => {
     const activityId = Number(params.activityId);
     return context.queryClient.ensureQueryData(
@@ -94,6 +115,7 @@ function ActivityDetailLayout() {
   const { projectId: projectIdParam, activityId: activityIdParam } =
     Route.useParams();
   const activityId = Number(activityIdParam);
+  const { from } = Route.useSearch();
   const matchRoute = useMatchRoute();
 
   const activityQuery = useQuery(activityDetailQueryOptions(activityId));
@@ -106,17 +128,30 @@ function ActivityDetailLayout() {
 
   return (
     <div className="flex flex-1 flex-col gap-4">
-      <Link
-        to="/project/$projectId"
-        params={{ projectId: projectIdParam }}
-        className={cn(
-          buttonVariants({ variant: "ghost", size: "sm" }),
-          "-ml-2 w-fit",
-        )}
-      >
-        <ArrowLeftIcon data-icon="inline-start" />
-        返回项目详情
-      </Link>
+      {from === "activity" ? (
+        <Link
+          to="/activity"
+          className={cn(
+            buttonVariants({ variant: "ghost", size: "sm" }),
+            "-ml-2 w-fit",
+          )}
+        >
+          <ArrowLeftIcon data-icon="inline-start" />
+          返回活动管理
+        </Link>
+      ) : (
+        <Link
+          to="/project/$projectId"
+          params={{ projectId: projectIdParam }}
+          className={cn(
+            buttonVariants({ variant: "ghost", size: "sm" }),
+            "-ml-2 w-fit",
+          )}
+        >
+          <ArrowLeftIcon data-icon="inline-start" />
+          返回项目详情
+        </Link>
+      )}
 
       <div className="flex flex-wrap items-start gap-4">
         <div className="flex flex-col gap-1">

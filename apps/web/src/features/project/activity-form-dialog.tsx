@@ -25,21 +25,29 @@ import {
   SelectValue,
 } from "#/shared/components/ui/select.tsx";
 import { Textarea } from "#/shared/components/ui/textarea.tsx";
-import type { Activity, ActivityFormValues } from "../-queries";
+import type {
+  ActivityFormSource,
+  ActivityFormValues,
+  ProjectOption,
+} from "./queries";
 import {
   ACTIVITY_TYPE_LABELS,
   ACTIVITY_TYPE_VALUES,
   PUBLISH_STATUS_LABELS,
   PUBLISH_STATUS_VALUES,
   toDateTimeLocalValue,
-} from "../-utils";
+} from "./utils";
 
 // 镜像 apps/server/src/modules/project/validation.ts 的 ActivityFields，
 // 原因和边界见 supplier-form-dialog.tsx 顶部的同一段说明。
-// **没有 projectId**：活动永远从项目详情页创建，projectId 由外层传入，
-// 不是这份表单里用户能改的一个字段。
+//
+// projectId 在这里是**可空**的，因为它的必填性取决于入口：从项目详情页新增时
+// 项目来自路径，表单里不出现这个字段；从一级菜单「活动管理」新增时没有路径上
+// 下文，必须让用户自己选。下面的 activityFormSchema() 按入口再包一层必填校验，
+// 不在这里写死。
 const ActivityFormSchema = z
   .object({
+    projectId: z.number().int().positive().nullable(),
     activityType: z.enum(ACTIVITY_TYPE_VALUES),
     name: z.string().trim().min(1, "活动名称不能为空").max(255, "活动名称过长"),
     location: z.string().trim().max(255, "地点过长"),
@@ -65,8 +73,25 @@ const ActivityFormSchema = z
 
 type ActivityFormState = z.infer<typeof ActivityFormSchema>;
 
-/** 表单往外交的形状：跟 ActivityFormValues 一样，就是少了 projectId。 */
-export type ActivityFormSubmitValues = Omit<ActivityFormValues, "projectId">;
+/**
+ * 传了 projectOptions（跨项目入口）时，"所属项目"是必填项；没传时这个字段
+ * 根本不渲染，也就没有校验的必要。
+ */
+const activityFormSchema = (requireProject: boolean) =>
+  requireProject
+    ? ActivityFormSchema.refine((value) => value.projectId !== null, {
+        message: "请选择所属项目",
+        path: ["projectId"],
+      })
+    : ActivityFormSchema;
+
+/**
+ * 表单往外交的形状：跟 ActivityFormValues 一样，只是 projectId 可选——
+ * 项目详情页的入口不收集它（由调用方从路径补上），活动管理页的入口才收集。
+ */
+export type ActivityFormSubmitValues = Omit<ActivityFormValues, "projectId"> & {
+  projectId?: number;
+};
 
 function RequiredMark() {
   return (
@@ -80,7 +105,12 @@ function RequiredMark() {
 type ActivityFormDialogProps = {
   open: boolean;
   /** 传了就是编辑，没传就是新增。 */
-  activity?: Activity;
+  activity?: ActivityFormSource;
+  /**
+   * 传了就多渲染一个「所属项目」下拉（跨项目的活动管理页），提交时带回
+   * projectId；不传就是项目详情页那个入口，项目来自路径。
+   */
+  projectOptions?: ProjectOption[];
   submitting: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: ActivityFormSubmitValues) => void;
@@ -89,6 +119,7 @@ type ActivityFormDialogProps = {
 export function ActivityFormDialog({
   open,
   activity,
+  projectOptions,
   submitting,
   onOpenChange,
   onSubmit,
@@ -106,6 +137,7 @@ export function ActivityFormDialog({
         <ActivityForm
           key={activity?.id ?? "new"}
           activity={activity}
+          projectOptions={projectOptions}
           submitting={submitting}
           onCancel={() => onOpenChange(false)}
           onSubmit={onSubmit}
@@ -117,16 +149,21 @@ export function ActivityFormDialog({
 
 function ActivityForm({
   activity,
+  projectOptions,
   submitting,
   onCancel,
   onSubmit,
 }: {
-  activity?: Activity;
+  activity?: ActivityFormSource;
+  projectOptions?: ProjectOption[];
   submitting: boolean;
   onCancel: () => void;
   onSubmit: (values: ActivityFormSubmitValues) => void;
 }) {
+  const schema = activityFormSchema(!!projectOptions);
+
   const defaultValues: ActivityFormState = {
+    projectId: activity?.projectId ?? null,
     activityType: activity?.activityType ?? "standalone",
     name: activity?.name ?? "",
     location: activity?.location ?? "",
@@ -145,9 +182,10 @@ function ActivityForm({
 
   const form = useForm({
     defaultValues,
-    validators: { onChange: ActivityFormSchema, onSubmit: ActivityFormSchema },
+    validators: { onChange: schema, onSubmit: schema },
     onSubmit: ({ value }) =>
       onSubmit({
+        projectId: value.projectId ?? undefined,
         activityType: value.activityType,
         name: value.name,
         location: value.location || undefined,
@@ -176,6 +214,48 @@ function ActivityForm({
     >
       <DialogBody className="flex flex-col gap-4">
         <div className="grid gap-4 sm:grid-cols-2">
+          {projectOptions && (
+            <form.Field name="projectId">
+              {(field) => (
+                <Field className="sm:col-span-2">
+                  <FieldLabel>
+                    所属项目
+                    <RequiredMark />
+                  </FieldLabel>
+                  <Select
+                    items={projectOptions.map((option) => ({
+                      value: option.id,
+                      label: option.name,
+                    }))}
+                    value={field.state.value}
+                    // 活动不支持"改到另一个项目下"（后端 UpdateActivityInput
+                    // 里就没有 projectId），编辑时只读展示，不给假的可编辑感。
+                    disabled={!!activity}
+                    onValueChange={(value) =>
+                      field.handleChange(value as number | null)
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="请选择所属项目" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {projectOptions.map((option) => (
+                        <SelectItem key={option.id} value={option.id}>
+                          {option.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldError
+                    errors={
+                      field.state.meta.isTouched ? field.state.meta.errors : []
+                    }
+                  />
+                </Field>
+              )}
+            </form.Field>
+          )}
+
           <form.Field name="name">
             {(field) => (
               <Field className="sm:col-span-2">

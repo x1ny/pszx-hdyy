@@ -2,23 +2,39 @@ import { activity, project } from "../modules/project/schema";
 import { DEMO, type SeedFn } from "./context";
 
 export const seed: SeedFn = async (db, { userId }) => {
-  await db.insert(project).values({
-    id: DEMO.projectId,
-    name: "2026 秋季时尚产业周",
-    location: "杭州市萧山区",
-    startTime: new Date("2026-09-10T09:00:00+08:00"),
-    endTime: new Date("2026-09-14T18:00:00+08:00"),
-    totalBudget: "1200000.00",
-    hostOrg: "杭州市时尚产业促进会",
-    organizerOrg: "萧山区商务局",
-    supportOrg: "浙江省服装行业协会",
-    guidingOrg: "杭州市商务局",
-    description:
-      "开发用演示项目：下挂一个活动、两条议程线、三个环节和一批人员。",
-    publishStatus: "published",
-    createdBy: userId,
-    updatedBy: userId,
-  });
+  await db.insert(project).values([
+    {
+      id: DEMO.projectId,
+      name: "2026 秋季时尚产业周",
+      location: "杭州市萧山区",
+      startTime: new Date("2026-09-10T09:00:00+08:00"),
+      endTime: new Date("2026-09-14T18:00:00+08:00"),
+      totalBudget: "1200000.00",
+      hostOrg: "杭州市时尚产业促进会",
+      organizerOrg: "萧山区商务局",
+      supportOrg: "浙江省服装行业协会",
+      guidingOrg: "杭州市商务局",
+      description:
+        "开发用演示项目：下挂一个活动、两条议程线、三个环节和一批人员。",
+      publishStatus: "published",
+      createdBy: userId,
+      updatedBy: userId,
+    },
+    {
+      id: DEMO.secondProjectId,
+      name: "2026 春季新品发布周",
+      location: "上海市黄浦区",
+      startTime: new Date("2026-03-18T09:00:00+08:00"),
+      endTime: new Date("2026-03-20T18:00:00+08:00"),
+      totalBudget: "800000.00",
+      hostOrg: "上海时装周组委会",
+      description:
+        "第二个演示项目：只挂两个活动、没有议程和人员，用来验证跨项目的活动列表。",
+      publishStatus: "draft",
+      createdBy: userId,
+      updatedBy: userId,
+    },
+  ]);
 
   await db.insert(activity).values([
     {
@@ -50,6 +66,35 @@ export const seed: SeedFn = async (db, { userId }) => {
       totalBudget: "160000.00",
       description: "第二个活动，用来验证活动列表和项目下的活动数统计。",
       publishStatus: "draft",
+      createdBy: userId,
+      updatedBy: userId,
+    },
+    {
+      id: DEMO.secondProjectActivityIds.launch,
+      projectId: DEMO.secondProjectId,
+      activityType: "standalone",
+      name: "春季新品发布会",
+      location: "上海展览中心 中央大厅",
+      startTime: new Date("2026-03-18T19:00:00+08:00"),
+      endTime: new Date("2026-03-18T21:30:00+08:00"),
+      totalBudget: "320000.00",
+      description:
+        "第二个项目下的活动，用来验证「活动管理」的跨项目列表和筛选。",
+      publishStatus: "published",
+      createdBy: userId,
+      updatedBy: userId,
+    },
+    {
+      id: DEMO.secondProjectActivityIds.closing,
+      projectId: DEMO.secondProjectId,
+      activityType: "affiliated",
+      name: "买手对接闭门会",
+      location: "上海展览中心 东二厅",
+      startTime: new Date("2026-03-20T14:00:00+08:00"),
+      endTime: new Date("2026-03-20T17:00:00+08:00"),
+      totalBudget: "90000.00",
+      description: "同上，另一种活动类型，让活动类型筛选也有得筛。",
+      publishStatus: "delisted",
       createdBy: userId,
       updatedBy: userId,
     },

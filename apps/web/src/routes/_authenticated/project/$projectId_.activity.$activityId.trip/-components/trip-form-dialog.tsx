@@ -1,6 +1,7 @@
 import { useForm } from "@tanstack/react-form";
 import { Loader2Icon } from "lucide-react";
 import { z } from "zod";
+import { toDateTimeLocalValue } from "#/features/project/utils";
 import type {
   Trip,
   TripFormValues,
@@ -41,7 +42,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "#/shared/components/ui/select.tsx";
-import { toDateTimeLocalValue } from "../../-utils";
 
 const TripFormSchema = z
   .object({

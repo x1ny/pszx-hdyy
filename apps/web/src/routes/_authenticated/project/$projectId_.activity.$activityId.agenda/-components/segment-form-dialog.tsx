@@ -1,6 +1,7 @@
 import { useForm } from "@tanstack/react-form";
 import { Loader2Icon } from "lucide-react";
 import { z } from "zod";
+import { toDateTimeLocalValue } from "#/features/project/utils";
 import { Button } from "#/shared/components/ui/button.tsx";
 import { Checkbox } from "#/shared/components/ui/checkbox.tsx";
 import {
@@ -27,7 +28,6 @@ import {
   SelectValue,
 } from "#/shared/components/ui/select.tsx";
 import { Textarea } from "#/shared/components/ui/textarea.tsx";
-import { toDateTimeLocalValue } from "../../-utils";
 import type { AgendaLine, Segment } from "../-queries";
 import { lineLabel, SEGMENT_TYPE_LABELS, SEGMENT_TYPE_VALUES } from "../-utils";
 

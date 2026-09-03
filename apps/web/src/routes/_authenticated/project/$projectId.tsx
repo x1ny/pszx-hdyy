@@ -8,23 +8,23 @@ import {
 import { ArrowLeftIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Badge } from "#/shared/components/ui/badge.tsx";
-import { Button, buttonVariants } from "#/shared/components/ui/button.tsx";
-import { Skeleton } from "#/shared/components/ui/skeleton.tsx";
-import { cn } from "#/shared/lib/utils.ts";
-import { ProjectFormDialog } from "./-components/project-form-dialog";
 import {
   type ProjectFormValues,
   projectDetailQueryOptions,
   projectKeys,
   updateProject,
-} from "./-queries";
+} from "#/features/project/queries";
 import {
   formatBudget,
   formatDateTime,
   PUBLISH_STATUS_CHIP,
   PUBLISH_STATUS_LABELS,
-} from "./-utils";
+} from "#/features/project/utils";
+import { Badge } from "#/shared/components/ui/badge.tsx";
+import { Button, buttonVariants } from "#/shared/components/ui/button.tsx";
+import { Skeleton } from "#/shared/components/ui/skeleton.tsx";
+import { cn } from "#/shared/lib/utils.ts";
+import { ProjectFormDialog } from "./-components/project-form-dialog";
 
 /**
  * 项目详情是**布局**，不是页面：上半部分的项目信息卡在所有标签页之间常驻，

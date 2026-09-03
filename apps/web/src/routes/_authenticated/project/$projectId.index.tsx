@@ -1,18 +1,39 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  CalendarIcon,
-  PlusIcon,
-  SearchIcon,
-} from "lucide-react";
+import { CalendarIcon, PlusIcon, SearchIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
+import {
+  ActivityFormDialog,
+  type ActivityFormSubmitValues,
+} from "#/features/project/activity-form-dialog";
+import {
+  type Activity,
+  type ActivityType,
+  activityKeys,
+  activityListQueryOptions,
+  createActivity,
+  deleteActivity,
+  type ProjectPublishStatus,
+  setActivityPublishStatus,
+  updateActivity,
+} from "#/features/project/queries";
+import {
+  ACTIVITY_TYPE_LABELS,
+  ACTIVITY_TYPE_VALUES,
+  formatBudget,
+  formatDateTime,
+  PUBLISH_STATUS_CHIP,
+  PUBLISH_STATUS_LABELS,
+  PUBLISH_STATUS_VALUES,
+} from "#/features/project/utils";
 import {
   FilterActions,
   FilterBar,
   isSameFilter,
 } from "#/shared/components/filter-bar.tsx";
+import { StatusSelect } from "#/shared/components/status-select.tsx";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,10 +44,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "#/shared/components/ui/alert-dialog.tsx";
-import {
-  Button,
-  buttonVariants,
-} from "#/shared/components/ui/button.tsx";
+import { Button, buttonVariants } from "#/shared/components/ui/button.tsx";
 import {
   Empty,
   EmptyDescription,
@@ -52,31 +70,6 @@ import {
   TableRow,
 } from "#/shared/components/ui/table.tsx";
 import { cn } from "#/shared/lib/utils.ts";
-import {
-  ActivityFormDialog,
-  type ActivityFormSubmitValues,
-} from "./-components/activity-form-dialog";
-import { StatusSelect } from "./list";
-import {
-  type Activity,
-  type ActivityType,
-  type ProjectPublishStatus,
-  activityKeys,
-  activityListQueryOptions,
-  createActivity,
-  deleteActivity,
-  setActivityPublishStatus,
-  updateActivity,
-} from "./-queries";
-import {
-  ACTIVITY_TYPE_LABELS,
-  ACTIVITY_TYPE_VALUES,
-  formatBudget,
-  formatDateTime,
-  PUBLISH_STATUS_CHIP,
-  PUBLISH_STATUS_LABELS,
-  PUBLISH_STATUS_VALUES,
-} from "./-utils";
 
 const ActivitySearchSchema = z.object({
   name: z.string().optional().catch(undefined),
@@ -99,7 +92,10 @@ export const Route = createFileRoute("/_authenticated/project/$projectId/")({
   loaderDeps: ({ search }) => search,
   loader: ({ context, params, deps }) =>
     context.queryClient.ensureQueryData(
-      activityListQueryOptions({ ...deps, projectId: Number(params.projectId) }),
+      activityListQueryOptions({
+        ...deps,
+        projectId: Number(params.projectId),
+      }),
     ),
   component: ProjectActivityListPage,
 });
@@ -130,9 +126,8 @@ function ProjectActivityListPage() {
   const queryClient = useQueryClient();
 
   const [nameInput, setNameInput] = useState(search.name ?? "");
-  const [activityTypeInput, setActivityTypeInput] = useState<ActivityType | null>(
-    search.activityType ?? null,
-  );
+  const [activityTypeInput, setActivityTypeInput] =
+    useState<ActivityType | null>(search.activityType ?? null);
   const [publishStatusInput, setPublishStatusInput] =
     useState<ProjectPublishStatus | null>(search.publishStatus ?? null);
   const [activityFormOpen, setActivityFormOpen] = useState(false);
@@ -222,136 +217,136 @@ function ProjectActivityListPage() {
 
   return (
     <>
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h2 className="font-semibold text-lg tracking-tight">活动列表</h2>
-          <p className="text-muted-foreground text-sm">
-            这个项目下的所有活动。环节、场地、资源、排位等能力还没有建设，
-            这里先只维护活动的基础信息和上下架状态。
-          </p>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="font-semibold text-lg tracking-tight">活动列表</h2>
+            <p className="text-muted-foreground text-sm">
+              这个项目下的所有活动。环节、场地、资源、排位等能力还没有建设，
+              这里先只维护活动的基础信息和上下架状态。
+            </p>
+          </div>
+          <Button
+            onClick={() => {
+              setEditingActivity(undefined);
+              setActivityFormOpen(true);
+            }}
+          >
+            <PlusIcon />
+            新增活动
+          </Button>
         </div>
-        <Button
-          onClick={() => {
-            setEditingActivity(undefined);
-            setActivityFormOpen(true);
-          }}
-        >
-          <PlusIcon />
-          新增活动
-        </Button>
-      </div>
 
-      <FilterBar
-        onSubmit={() =>
-          applyFilter({
-            name: nameInput.trim() || undefined,
-            activityType: activityTypeInput ?? undefined,
-            publishStatus: publishStatusInput ?? undefined,
-          })
-        }
-      >
-        <div className="relative">
-          <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="w-56 pl-8"
-            placeholder="搜索活动名称"
-            value={nameInput}
-            onChange={(event) => setNameInput(event.target.value)}
+        <FilterBar
+          onSubmit={() =>
+            applyFilter({
+              name: nameInput.trim() || undefined,
+              activityType: activityTypeInput ?? undefined,
+              publishStatus: publishStatusInput ?? undefined,
+            })
+          }
+        >
+          <div className="relative">
+            <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="w-56 pl-8"
+              placeholder="搜索活动名称"
+              value={nameInput}
+              onChange={(event) => setNameInput(event.target.value)}
+            />
+          </div>
+
+          <Select
+            items={ACTIVITY_TYPE_FILTER_ITEMS}
+            value={activityTypeInput}
+            onValueChange={(value) =>
+              setActivityTypeInput(value as ActivityType | null)
+            }
+          >
+            <SelectTrigger className="w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ACTIVITY_TYPE_FILTER_ITEMS.map((item) => (
+                <SelectItem key={item.value ?? "all"} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            items={PUBLISH_STATUS_FILTER_ITEMS}
+            value={publishStatusInput}
+            onValueChange={(value) =>
+              setPublishStatusInput(value as ProjectPublishStatus | null)
+            }
+          >
+            <SelectTrigger className="w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PUBLISH_STATUS_FILTER_ITEMS.map((item) => (
+                <SelectItem key={item.value ?? "all"} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <FilterActions
+            onReset={() => {
+              setNameInput("");
+              setActivityTypeInput(null);
+              setPublishStatusInput(null);
+              navigate({ search: { page: 1, pageSize: search.pageSize } });
+            }}
           />
-        </div>
+        </FilterBar>
 
-        <Select
-          items={ACTIVITY_TYPE_FILTER_ITEMS}
-          value={activityTypeInput}
-          onValueChange={(value) =>
-            setActivityTypeInput(value as ActivityType | null)
-          }
-        >
-          <SelectTrigger className="w-36">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {ACTIVITY_TYPE_FILTER_ITEMS.map((item) => (
-              <SelectItem key={item.value ?? "all"} value={item.value}>
-                {item.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          items={PUBLISH_STATUS_FILTER_ITEMS}
-          value={publishStatusInput}
-          onValueChange={(value) =>
-            setPublishStatusInput(value as ProjectPublishStatus | null)
-          }
-        >
-          <SelectTrigger className="w-36">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PUBLISH_STATUS_FILTER_ITEMS.map((item) => (
-              <SelectItem key={item.value ?? "all"} value={item.value}>
-                {item.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <FilterActions
-          onReset={() => {
-            setNameInput("");
-            setActivityTypeInput(null);
-            setPublishStatusInput(null);
-            navigate({ search: { page: 1, pageSize: search.pageSize } });
-          }}
-        />
-      </FilterBar>
-
-      <div className="rounded-lg border bg-card shadow-sm">
-        <Table>
-          <TableHeader className="bg-muted/60">
-            <TableRow className="hover:bg-transparent">
-              <TableHead className="min-w-40">活动名称</TableHead>
-              <TableHead>类型</TableHead>
-              <TableHead>时间范围</TableHead>
-              <TableHead>预算</TableHead>
-              <TableHead>发布状态</TableHead>
-              <TableHead className="text-center">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {activityListQuery.isPending ? (
-              Array.from({ length: 3 }, (_, index) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
-                <TableRow key={index}>
-                  {Array.from({ length: 6 }, (_, cell) => (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: 同上
-                    <TableCell key={cell}>
-                      <Skeleton className="h-5 w-full" />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : list.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6}>
-                  <Empty className="border-0">
-                    <EmptyHeader>
-                      <EmptyMedia variant="icon">
-                        <CalendarIcon />
-                      </EmptyMedia>
-                      <EmptyTitle>还没有活动</EmptyTitle>
-                      <EmptyDescription>
-                        点击右上角"新增活动"创建这个项目下的第一场活动。
-                      </EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
-                </TableCell>
+        <div className="rounded-lg border bg-card shadow-sm">
+          <Table>
+            <TableHeader className="bg-muted/60">
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="min-w-40">活动名称</TableHead>
+                <TableHead>类型</TableHead>
+                <TableHead>时间范围</TableHead>
+                <TableHead>预算</TableHead>
+                <TableHead>发布状态</TableHead>
+                <TableHead className="text-center">操作</TableHead>
               </TableRow>
-            ) : (
-              list.map((activity) => (
+            </TableHeader>
+            <TableBody>
+              {activityListQuery.isPending ? (
+                Array.from({ length: 3 }, (_, index) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
+                  <TableRow key={index}>
+                    {Array.from({ length: 6 }, (_, cell) => (
+                      // biome-ignore lint/suspicious/noArrayIndexKey: 同上
+                      <TableCell key={cell}>
+                        <Skeleton className="h-5 w-full" />
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : list.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6}>
+                    <Empty className="border-0">
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <CalendarIcon />
+                        </EmptyMedia>
+                        <EmptyTitle>还没有活动</EmptyTitle>
+                        <EmptyDescription>
+                          点击右上角"新增活动"创建这个项目下的第一场活动。
+                        </EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                list.map((activity) => (
                   <TableRow key={activity.id}>
                     <TableCell className="font-medium">
                       <Link
@@ -435,65 +430,65 @@ function ProjectActivityListPage() {
                       </div>
                     </TableCell>
                   </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="text-muted-foreground text-sm">
-          第 {rangeStart}-{rangeEnd} 条 / 共 {total} 条
-        </span>
-        <div className="flex items-center gap-2">
-          <Select
-            items={PAGE_SIZE_OPTIONS.map((size) => ({
-              value: size,
-              label: `${size} 条/页`,
-            }))}
-            value={search.pageSize}
-            onValueChange={(value) =>
-              applyFilter({ pageSize: Number(value) })
-            }
-          >
-            <SelectTrigger size="sm" className="w-28">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PAGE_SIZE_OPTIONS.map((size) => (
-                <SelectItem key={size} value={size}>
-                  {size} 条/页
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!hasPrev}
-            onClick={() =>
-              navigate({
-                search: (prev) => ({ ...prev, page: prev.page - 1 }),
-              })
-            }
-          >
-            上一页
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!hasNext}
-            onClick={() =>
-              navigate({
-                search: (prev) => ({ ...prev, page: prev.page + 1 }),
-              })
-            }
-          >
-            下一页
-          </Button>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="text-muted-foreground text-sm">
+            第 {rangeStart}-{rangeEnd} 条 / 共 {total} 条
+          </span>
+          <div className="flex items-center gap-2">
+            <Select
+              items={PAGE_SIZE_OPTIONS.map((size) => ({
+                value: size,
+                label: `${size} 条/页`,
+              }))}
+              value={search.pageSize}
+              onValueChange={(value) =>
+                applyFilter({ pageSize: Number(value) })
+              }
+            >
+              <SelectTrigger size="sm" className="w-28">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <SelectItem key={size} value={size}>
+                    {size} 条/页
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!hasPrev}
+              onClick={() =>
+                navigate({
+                  search: (prev) => ({ ...prev, page: prev.page - 1 }),
+                })
+              }
+            >
+              上一页
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!hasNext}
+              onClick={() =>
+                navigate({
+                  search: (prev) => ({ ...prev, page: prev.page + 1 }),
+                })
+              }
+            >
+              下一页
+            </Button>
+          </div>
         </div>
       </div>
-    </div>
 
       <ActivityFormDialog
         open={activityFormOpen}
@@ -516,7 +511,8 @@ function ProjectActivityListPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>确认删除该活动？</AlertDialogTitle>
             <AlertDialogDescription>
-              「{pendingDelete?.name}」将被永久删除。已有议程、人员、资源或邀请函等业务数据引用的活动不能删除，
+              「{pendingDelete?.name}
+              」将被永久删除。已有议程、人员、资源或邀请函等业务数据引用的活动不能删除，
               请改为下架。
             </AlertDialogDescription>
           </AlertDialogHeader>

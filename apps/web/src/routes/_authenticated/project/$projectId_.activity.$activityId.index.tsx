@@ -2,6 +2,21 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
+import {
+  ActivityFormDialog,
+  type ActivityFormSubmitValues,
+} from "#/features/project/activity-form-dialog";
+import {
+  activityDetailQueryOptions,
+  activityKeys,
+  updateActivity,
+} from "#/features/project/queries";
+import {
+  ACTIVITY_TYPE_LABELS,
+  formatBudget,
+  formatDateTime,
+  PUBLISH_STATUS_LABELS,
+} from "#/features/project/utils";
 import { Button } from "#/shared/components/ui/button.tsx";
 import {
   Card,
@@ -10,26 +25,17 @@ import {
   CardHeader,
   CardTitle,
 } from "#/shared/components/ui/card.tsx";
-import {
-  ActivityFormDialog,
-  type ActivityFormSubmitValues,
-} from "./-components/activity-form-dialog";
-import {
-  activityDetailQueryOptions,
-  activityKeys,
-  updateActivity,
-} from "./-queries";
-import {
-  ACTIVITY_TYPE_LABELS,
-  formatBudget,
-  formatDateTime,
-  PUBLISH_STATUS_LABELS,
-} from "./-utils";
 
 const dayMs = 24 * 60 * 60 * 1000;
 
 /** "2 天" / "3 小时 30 分"。跨天的活动只说天数，当天的说时长。 */
-function duration({ startTime, endTime }: { startTime: string; endTime: string }) {
+function duration({
+  startTime,
+  endTime,
+}: {
+  startTime: string;
+  endTime: string;
+}) {
   const ms = new Date(endTime).getTime() - new Date(startTime).getTime();
   if (ms <= 0) return "-";
   if (ms >= dayMs) {
@@ -104,13 +110,17 @@ function ActivityOverviewTab() {
             <InfoRow label="发布状态">
               {PUBLISH_STATUS_LABELS[activity.publishStatus]}
             </InfoRow>
-            <InfoRow label="总预算">{formatBudget(activity.totalBudget)}</InfoRow>
+            <InfoRow label="总预算">
+              {formatBudget(activity.totalBudget)}
+            </InfoRow>
 
             <InfoRow label="活动地点">{activity.location || "-"}</InfoRow>
             <InfoRow label="开始时间">
               {formatDateTime(activity.startTime)}
             </InfoRow>
-            <InfoRow label="结束时间">{formatDateTime(activity.endTime)}</InfoRow>
+            <InfoRow label="结束时间">
+              {formatDateTime(activity.endTime)}
+            </InfoRow>
             <InfoRow label="活动时长">{duration(activity)}</InfoRow>
 
             <InfoRow label="主办单位">{activity.hostOrg || "-"}</InfoRow>

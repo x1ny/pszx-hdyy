@@ -8,6 +8,8 @@ import {
   activityMemberKeys,
   segmentMemberKeys,
 } from "#/features/member/relation-queries.ts";
+import { activityDetailQueryOptions } from "#/features/project/queries";
+import { formatDateTime } from "#/features/project/utils";
 import {
   createTrip,
   deleteTrip,
@@ -62,8 +64,6 @@ import {
   TableHeader,
   TableRow,
 } from "#/shared/components/ui/table.tsx";
-import { activityDetailQueryOptions } from "../-queries";
-import { formatDateTime } from "../-utils";
 import { TripBatchDialog } from "./-components/trip-batch-dialog";
 import {
   TripFormDialog,

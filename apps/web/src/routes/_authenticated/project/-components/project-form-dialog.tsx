@@ -1,6 +1,12 @@
 import { useForm } from "@tanstack/react-form";
 import { Loader2Icon } from "lucide-react";
 import { z } from "zod";
+import type { Project, ProjectFormValues } from "#/features/project/queries";
+import {
+  PUBLISH_STATUS_LABELS,
+  PUBLISH_STATUS_VALUES,
+  toDateTimeLocalValue,
+} from "#/features/project/utils";
 import { Button } from "#/shared/components/ui/button.tsx";
 import {
   Dialog,
@@ -25,12 +31,6 @@ import {
   SelectValue,
 } from "#/shared/components/ui/select.tsx";
 import { Textarea } from "#/shared/components/ui/textarea.tsx";
-import type { Project, ProjectFormValues } from "../-queries";
-import {
-  PUBLISH_STATUS_LABELS,
-  PUBLISH_STATUS_VALUES,
-  toDateTimeLocalValue,
-} from "../-utils";
 
 // 这份 schema 是 apps/server/src/modules/project/validation.ts 的 ProjectInput
 // 镜像，故意抄的——见 supplier-form-dialog.tsx 顶部同一段注释，原因和边界

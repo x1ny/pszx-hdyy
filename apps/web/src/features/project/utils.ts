@@ -1,4 +1,4 @@
-import type { ActivityType, ProjectPublishStatus } from "./-queries";
+import type { ActivityType, ProjectPublishStatus } from "./queries";
 
 // ---------------------------------------------------------------------------
 // 中文标签只存在于前端——服务端只管"这个字段允许哪些值"
@@ -42,9 +42,8 @@ const dateTimeFormat = new Intl.DateTimeFormat("zh-CN", {
 });
 
 /** 接口给的是 ISO 字符串（timestamptz 序列化的结果），按浏览器本地时区展示。 */
-export const formatDateTime = (
-  value: string | Date | null | undefined,
-) => (value ? dateTimeFormat.format(new Date(value)) : "-");
+export const formatDateTime = (value: string | Date | null | undefined) =>
+  value ? dateTimeFormat.format(new Date(value)) : "-";
 
 const currencyFormat = new Intl.NumberFormat("zh-CN", {
   style: "currency",

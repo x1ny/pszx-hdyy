@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedSplatRouteImport } from './routes/_authenticated/$'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedActivityIndexRouteImport } from './routes/_authenticated/activity/index'
 import { Route as AuthenticatedMemberIndexRouteImport } from './routes/_authenticated/member/index'
 import { Route as AuthenticatedProjectProjectIdRouteImport } from './routes/_authenticated/project/$projectId'
 import { Route as AuthenticatedProjectListRouteImport } from './routes/_authenticated/project/list'
@@ -66,6 +67,12 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedActivityIndexRoute =
+  AuthenticatedActivityIndexRouteImport.update({
+    id: '/activity/',
+    path: '/activity/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedMemberIndexRoute =
   AuthenticatedMemberIndexRouteImport.update({
     id: '/member/',
@@ -259,6 +266,7 @@ export interface FileRoutesByFullPath {
   '/project/list': typeof AuthenticatedProjectListRoute
   '/system/role': typeof AuthenticatedSystemRoleRoute
   '/system/user': typeof AuthenticatedSystemUserRoute
+  '/activity/': typeof AuthenticatedActivityIndexRoute
   '/member/': typeof AuthenticatedMemberIndexRoute
   '/supplier/': typeof AuthenticatedSupplierIndexRoute
   '/venue/': typeof AuthenticatedVenueIndexRoute
@@ -291,6 +299,7 @@ export interface FileRoutesByTo {
   '/project/list': typeof AuthenticatedProjectListRoute
   '/system/role': typeof AuthenticatedSystemRoleRoute
   '/system/user': typeof AuthenticatedSystemUserRoute
+  '/activity': typeof AuthenticatedActivityIndexRoute
   '/member': typeof AuthenticatedMemberIndexRoute
   '/supplier': typeof AuthenticatedSupplierIndexRoute
   '/venue': typeof AuthenticatedVenueIndexRoute
@@ -325,6 +334,7 @@ export interface FileRoutesById {
   '/_authenticated/project/list': typeof AuthenticatedProjectListRoute
   '/_authenticated/system/role': typeof AuthenticatedSystemRoleRoute
   '/_authenticated/system/user': typeof AuthenticatedSystemUserRoute
+  '/_authenticated/activity/': typeof AuthenticatedActivityIndexRoute
   '/_authenticated/member/': typeof AuthenticatedMemberIndexRoute
   '/_authenticated/supplier/': typeof AuthenticatedSupplierIndexRoute
   '/_authenticated/venue/': typeof AuthenticatedVenueIndexRoute
@@ -360,6 +370,7 @@ export interface FileRouteTypes {
     | '/project/list'
     | '/system/role'
     | '/system/user'
+    | '/activity/'
     | '/member/'
     | '/supplier/'
     | '/venue/'
@@ -392,6 +403,7 @@ export interface FileRouteTypes {
     | '/project/list'
     | '/system/role'
     | '/system/user'
+    | '/activity'
     | '/member'
     | '/supplier'
     | '/venue'
@@ -425,6 +437,7 @@ export interface FileRouteTypes {
     | '/_authenticated/project/list'
     | '/_authenticated/system/role'
     | '/_authenticated/system/user'
+    | '/_authenticated/activity/'
     | '/_authenticated/member/'
     | '/_authenticated/supplier/'
     | '/_authenticated/venue/'
@@ -491,6 +504,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/activity/': {
+      id: '/_authenticated/activity/'
+      path: '/activity'
+      fullPath: '/activity/'
+      preLoaderRoute: typeof AuthenticatedActivityIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/member/': {
@@ -764,6 +784,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedProjectListRoute: typeof AuthenticatedProjectListRoute
   AuthenticatedSystemRoleRoute: typeof AuthenticatedSystemRoleRoute
   AuthenticatedSystemUserRoute: typeof AuthenticatedSystemUserRoute
+  AuthenticatedActivityIndexRoute: typeof AuthenticatedActivityIndexRoute
   AuthenticatedMemberIndexRoute: typeof AuthenticatedMemberIndexRoute
   AuthenticatedSupplierIndexRoute: typeof AuthenticatedSupplierIndexRoute
   AuthenticatedVenueIndexRoute: typeof AuthenticatedVenueIndexRoute
@@ -781,6 +802,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedProjectListRoute: AuthenticatedProjectListRoute,
   AuthenticatedSystemRoleRoute: AuthenticatedSystemRoleRoute,
   AuthenticatedSystemUserRoute: AuthenticatedSystemUserRoute,
+  AuthenticatedActivityIndexRoute: AuthenticatedActivityIndexRoute,
   AuthenticatedMemberIndexRoute: AuthenticatedMemberIndexRoute,
   AuthenticatedSupplierIndexRoute: AuthenticatedSupplierIndexRoute,
   AuthenticatedVenueIndexRoute: AuthenticatedVenueIndexRoute,

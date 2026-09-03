@@ -18,6 +18,7 @@ import {
   projectMemberSnapshotQueryOptions,
   removeProjectMember,
 } from "#/features/member/relation-queries.ts";
+import { activityListQueryOptions } from "#/features/project/queries";
 import {
   FilterActions,
   FilterBar,
@@ -59,7 +60,6 @@ import {
   TableHeader,
   TableRow,
 } from "#/shared/components/ui/table.tsx";
-import { activityListQueryOptions } from "./-queries";
 
 const PROJECT_MEMBER_SOURCE_VALUES = ["activity", "import", "manual"] as const;
 type ProjectMemberSourceFilter = (typeof PROJECT_MEMBER_SOURCE_VALUES)[number];

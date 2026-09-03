@@ -1,6 +1,7 @@
 import type { LinkProps } from "@tanstack/react-router";
 import {
   Building2,
+  CalendarDays,
   FolderKanban,
   LayoutDashboard,
   type LucideIcon,
@@ -35,6 +36,15 @@ export const navMain: NavItem[] = [
     icon: FolderKanban,
     children: [{ title: "项目列表", to: "/project/list" }],
   },
+  /**
+   * 活动管理是一级菜单，同时项目详情下的「活动列表」标签页原样保留——同一份
+   * 数据的两个入口，对应两种真实的工作方式：筹备阶段按项目看，临场时按活动
+   * 名找（那时没人记得它挂在哪个项目下）。
+   *
+   * 它不套折叠分组，判据和下面场地/邀请函模板那两条一样：只有一项。活动详情
+   * 的各个配置页仍然只能从活动进，不进全局菜单——它们都需要活动上下文。
+   */
+  { title: "活动管理", icon: CalendarDays, to: "/activity" },
   { title: "供应商管理", icon: Truck, to: "/supplier" },
   { title: "人员管理", icon: UsersRound, to: "/member" },
   /**

@@ -1,6 +1,7 @@
 import { useForm } from "@tanstack/react-form";
 import { Loader2Icon } from "lucide-react";
 import { z } from "zod";
+import { toDateTimeLocalValue } from "#/features/project/utils";
 import {
   DEMAND_HANDLING_LABELS,
   RESOURCE_TYPE_ITEMS,
@@ -40,7 +41,6 @@ import {
   SelectValue,
 } from "#/shared/components/ui/select.tsx";
 import { Textarea } from "#/shared/components/ui/textarea.tsx";
-import { toDateTimeLocalValue } from "../../-utils";
 
 /**
  * 镜像 apps/server/src/modules/resource/validation.ts 的 ResourceFields。
@@ -130,7 +130,9 @@ export function ResourceFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{resource ? "修改资源安排" : "新增资源安排"}</DialogTitle>
+          <DialogTitle>
+            {resource ? "修改资源安排" : "新增资源安排"}
+          </DialogTitle>
           <DialogDescription>
             资源记录归属活动，不归属环节——一辆接站车可以同时服务多个环节的
             需求。关联需求项是可选的：全场午餐、嘉宾酒店这类活动通用资源不挂

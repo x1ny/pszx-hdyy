@@ -1,23 +1,29 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { FolderKanbanIcon, PlusIcon, SearchIcon } from "lucide-react";
+import { CalendarIcon, PlusIcon, SearchIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import {
-  createProject,
-  deleteProject,
-  type Project,
-  type ProjectFormValues,
-  type ProjectListItem,
+  ActivityFormDialog,
+  type ActivityFormSubmitValues,
+} from "#/features/project/activity-form-dialog";
+import {
+  type Activity,
+  type ActivityType,
+  activityKeys,
+  activityListQueryOptions,
+  createActivity,
+  deleteActivity,
   type ProjectPublishStatus,
   projectKeys,
-  projectListQueryOptions,
-  setProjectPublishStatus,
-  updateProject,
+  projectOptionsQueryOptions,
+  setActivityPublishStatus,
+  updateActivity,
 } from "#/features/project/queries";
 import {
-  formatBudget,
+  ACTIVITY_TYPE_LABELS,
+  ACTIVITY_TYPE_VALUES,
   formatDateTime,
   PUBLISH_STATUS_CHIP,
   PUBLISH_STATUS_LABELS,
@@ -70,11 +76,12 @@ import {
   TableRow,
 } from "#/shared/components/ui/table.tsx";
 import { cn } from "#/shared/lib/utils.ts";
-import { ProjectFormDialog } from "./-components/project-form-dialog";
 
 // 筛选条件放 URL，不放 useState——见 supplier/index.tsx 顶部的同一段说明。
-const ProjectSearchSchema = z.object({
+const ActivitySearchSchema = z.object({
   name: z.string().optional().catch(undefined),
+  projectId: z.number().int().positive().optional().catch(undefined),
+  activityType: z.enum(ACTIVITY_TYPE_VALUES).optional().catch(undefined),
   publishStatus: z.enum(PUBLISH_STATUS_VALUES).optional().catch(undefined),
   startTime: z.iso.date().optional().catch(undefined),
   endTime: z.iso.date().optional().catch(undefined),
@@ -82,13 +89,35 @@ const ProjectSearchSchema = z.object({
   pageSize: z.number().int().min(1).max(100).default(10).catch(10),
 });
 
-export const Route = createFileRoute("/_authenticated/project/list")({
-  validateSearch: ProjectSearchSchema,
+/**
+ * 一级菜单「活动管理」：跨项目的活动增删改查。
+ *
+ * 它和项目详情页的「活动列表」标签页（project/$projectId.index.tsx）是**同一份
+ * 数据的两个入口**，不是两套功能——同一条 /api/activity/list，同一个表单弹窗，
+ * 同一套发布状态控件。差别只有两处：这里多一个「所属项目」筛选和列，新增时
+ * 要自己选项目（那边的项目来自路径）。
+ *
+ * 两个入口都留着，是因为它们对应两种真实的工作方式：筹备一个项目时按项目看；
+ * 临到活动当天，运营记得的是活动名，不记得它挂在哪个项目下。
+ */
+export const Route = createFileRoute("/_authenticated/activity/")({
+  validateSearch: ActivitySearchSchema,
   loaderDeps: ({ search }) => search,
   loader: ({ context, deps }) =>
-    context.queryClient.ensureQueryData(projectListQueryOptions(deps)),
-  component: ProjectListPage,
+    Promise.all([
+      context.queryClient.ensureQueryData(activityListQueryOptions(deps)),
+      context.queryClient.ensureQueryData(projectOptionsQueryOptions()),
+    ]),
+  component: ActivityListPage,
 });
+
+const ACTIVITY_TYPE_FILTER_ITEMS = [
+  { value: null, label: "全部活动类型" },
+  ...ACTIVITY_TYPE_VALUES.map((value) => ({
+    value,
+    label: ACTIVITY_TYPE_LABELS[value],
+  })),
+];
 
 const PUBLISH_STATUS_FILTER_ITEMS = [
   { value: null, label: "全部" },
@@ -100,33 +129,59 @@ const PUBLISH_STATUS_FILTER_ITEMS = [
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50];
 
-function ProjectListPage() {
+function ActivityListPage() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const queryClient = useQueryClient();
 
-  const [keywordInput, setKeywordInput] = useState(search.name ?? "");
+  const [nameInput, setNameInput] = useState(search.name ?? "");
+  const [projectIdInput, setProjectIdInput] = useState<number | null>(
+    search.projectId ?? null,
+  );
+  const [activityTypeInput, setActivityTypeInput] =
+    useState<ActivityType | null>(search.activityType ?? null);
   const [publishStatusInput, setPublishStatusInput] =
     useState<ProjectPublishStatus | null>(search.publishStatus ?? null);
   const [startTimeInput, setStartTimeInput] = useState(search.startTime ?? "");
   const [endTimeInput, setEndTimeInput] = useState(search.endTime ?? "");
   const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<ProjectListItem>();
-  const [pendingDelete, setPendingDelete] = useState<ProjectListItem>();
+  const [editing, setEditing] = useState<Activity>();
+  const [pendingDelete, setPendingDelete] = useState<Activity>();
 
+  // URL 变了就把草稿拉回来对齐（后退、粘链接进来）。
   useEffect(() => {
-    setKeywordInput(search.name ?? "");
+    setNameInput(search.name ?? "");
+    setProjectIdInput(search.projectId ?? null);
+    setActivityTypeInput(search.activityType ?? null);
     setPublishStatusInput(search.publishStatus ?? null);
     setStartTimeInput(search.startTime ?? "");
     setEndTimeInput(search.endTime ?? "");
-  }, [search.name, search.publishStatus, search.startTime, search.endTime]);
+  }, [
+    search.name,
+    search.projectId,
+    search.activityType,
+    search.publishStatus,
+    search.startTime,
+    search.endTime,
+  ]);
 
-  const listQuery = useQuery(projectListQueryOptions(search));
+  const listQuery = useQuery(activityListQueryOptions(search));
+  const projectOptionsQuery = useQuery(projectOptionsQueryOptions());
+
   const list = listQuery.data?.list ?? [];
   const total = listQuery.data?.total ?? 0;
+  const projectOptions = projectOptionsQuery.data ?? [];
+
+  const projectFilterItems = [
+    { value: null, label: "全部" },
+    ...projectOptions.map((option) => ({
+      value: option.id,
+      label: option.name,
+    })),
+  ];
 
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: projectKeys.all });
+    queryClient.invalidateQueries({ queryKey: activityKeys.all });
 
   const applyFilter = (patch: Partial<typeof search>) => {
     const next = { ...search, ...patch, page: 1 };
@@ -137,27 +192,32 @@ function ProjectListPage() {
   };
 
   const saveMutation = useMutation({
-    mutationFn: (values: ProjectFormValues) =>
-      editing
-        ? updateProject({ ...values, id: editing.id })
-        : createProject(values),
+    mutationFn: ({ projectId, ...values }: ActivityFormSubmitValues) => {
+      if (editing) return updateActivity({ ...values, id: editing.id });
+      // 表单在传了 projectOptions 时把「所属项目」校验成必填，这里兜一次底：
+      // 类型上它仍是可选的（项目详情页那个入口不收集这个字段）。
+      if (!projectId) throw new Error("请选择所属项目");
+      return createActivity({ ...values, projectId });
+    },
     onSuccess: () => {
       toast.success(editing ? "修改成功" : "新增成功");
       setFormOpen(false);
       setEditing(undefined);
       invalidate();
+      // 项目列表那一列的「活动数」跟着变了，一起失效。
+      queryClient.invalidateQueries({ queryKey: projectKeys.all });
     },
     onError: (error) => toast.error(error.message),
   });
 
   const publishStatusMutation = useMutation({
     mutationFn: ({
-      project,
+      activity,
       publishStatus,
     }: {
-      project: Project;
-      publishStatus: ProjectPublishStatus;
-    }) => setProjectPublishStatus(project.id, publishStatus),
+      activity: Activity;
+      publishStatus: Activity["publishStatus"];
+    }) => setActivityPublishStatus(activity.id, publishStatus),
     onSuccess: () => {
       toast.success("发布状态已更新");
       invalidate();
@@ -166,14 +226,16 @@ function ProjectListPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (project: ProjectListItem) => deleteProject(project.id),
+    mutationFn: (activity: Activity) => deleteActivity(activity.id),
     onSuccess: () => {
       toast.success("删除成功");
       setPendingDelete(undefined);
+      // 删掉当前页最后一条时退回上一页，否则会停在一张空表上。
       if (list.length === 1 && search.page > 1) {
         navigate({ search: (prev) => ({ ...prev, page: prev.page - 1 }) });
       }
       invalidate();
+      queryClient.invalidateQueries({ queryKey: projectKeys.all });
     },
     onError: (error) => toast.error(error.message),
   });
@@ -188,12 +250,12 @@ function ProjectListPage() {
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <FolderKanbanIcon className="size-5" />
+            <CalendarIcon className="size-5" />
           </div>
           <div>
-            <h1 className="font-semibold text-xl tracking-tight">项目管理</h1>
+            <h1 className="font-semibold text-xl tracking-tight">活动管理</h1>
             <p className="text-muted-foreground text-sm">
-              一个项目下可以有多场活动，点进项目查看和管理它的活动列表。
+              跨项目查看所有活动，点击活动进入活动详情配置页。
             </p>
           </div>
         </div>
@@ -204,12 +266,11 @@ function ProjectListPage() {
           }}
         >
           <PlusIcon />
-          新增项目
+          新增活动
         </Button>
       </div>
 
-      {/* 这一页的筛选项多，排成两行的卡片而不是一条横栏：flex-col + items-stretch
-          把 FilterBar 默认的横排改成竖排，其余（边框/内边距/提交行为）照旧。 */}
+      {/* 筛选项多，排成两行的卡片而不是一条横栏——写法和项目列表一致。 */}
       <FilterBar
         className="flex-col items-stretch gap-4 p-4"
         onSubmit={() => {
@@ -218,7 +279,9 @@ function ProjectListPage() {
             return;
           }
           applyFilter({
-            name: keywordInput.trim() || undefined,
+            name: nameInput.trim() || undefined,
+            projectId: projectIdInput ?? undefined,
+            activityType: activityTypeInput ?? undefined,
             publishStatus: publishStatusInput ?? undefined,
             startTime: startTimeInput || undefined,
             endTime: endTimeInput || undefined,
@@ -229,7 +292,9 @@ function ProjectListPage() {
           <h2 className="font-semibold">查询条件</h2>
           <FilterActions
             onReset={() => {
-              setKeywordInput("");
+              setNameInput("");
+              setProjectIdInput(null);
+              setActivityTypeInput(null);
               setPublishStatusInput(null);
               setStartTimeInput("");
               setEndTimeInput("");
@@ -241,7 +306,7 @@ function ProjectListPage() {
         <FieldGroup className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Field className="gap-1.5">
             <FieldLabel
-              htmlFor="project-keyword"
+              htmlFor="activity-keyword"
               className="text-xs text-muted-foreground"
             >
               关键字
@@ -249,21 +314,75 @@ function ProjectListPage() {
             <div className="relative">
               <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                id="project-keyword"
+                id="activity-keyword"
                 className="pl-8"
                 placeholder="请输入关键字"
-                value={keywordInput}
-                onChange={(event) => setKeywordInput(event.target.value)}
+                value={nameInput}
+                onChange={(event) => setNameInput(event.target.value)}
               />
             </div>
           </Field>
 
           <Field className="gap-1.5">
             <FieldLabel
-              htmlFor="project-publish-status"
+              htmlFor="activity-project"
               className="text-xs text-muted-foreground"
             >
-              项目状态
+              所属项目
+            </FieldLabel>
+            <Select
+              items={projectFilterItems}
+              value={projectIdInput}
+              onValueChange={(value) =>
+                setProjectIdInput(value as number | null)
+              }
+            >
+              <SelectTrigger id="activity-project" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {projectFilterItems.map((item) => (
+                  <SelectItem key={item.value ?? "all"} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+
+          <Field className="gap-1.5">
+            <FieldLabel
+              htmlFor="activity-type"
+              className="text-xs text-muted-foreground"
+            >
+              活动类型
+            </FieldLabel>
+            <Select
+              items={ACTIVITY_TYPE_FILTER_ITEMS}
+              value={activityTypeInput}
+              onValueChange={(value) =>
+                setActivityTypeInput(value as ActivityType | null)
+              }
+            >
+              <SelectTrigger id="activity-type" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ACTIVITY_TYPE_FILTER_ITEMS.map((item) => (
+                  <SelectItem key={item.value ?? "all"} value={item.value}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+
+          <Field className="gap-1.5">
+            <FieldLabel
+              htmlFor="activity-publish-status"
+              className="text-xs text-muted-foreground"
+            >
+              发布状态
             </FieldLabel>
             <Select
               items={PUBLISH_STATUS_FILTER_ITEMS}
@@ -272,7 +391,7 @@ function ProjectListPage() {
                 setPublishStatusInput(value as ProjectPublishStatus | null)
               }
             >
-              <SelectTrigger id="project-publish-status" className="w-full">
+              <SelectTrigger id="activity-publish-status" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -287,13 +406,13 @@ function ProjectListPage() {
 
           <Field className="gap-1.5">
             <FieldLabel
-              htmlFor="project-start-time"
+              htmlFor="activity-start-time"
               className="text-xs text-muted-foreground"
             >
               开始时间
             </FieldLabel>
             <Input
-              id="project-start-time"
+              id="activity-start-time"
               type="date"
               value={startTimeInput}
               onChange={(event) => setStartTimeInput(event.target.value)}
@@ -302,13 +421,13 @@ function ProjectListPage() {
 
           <Field className="gap-1.5">
             <FieldLabel
-              htmlFor="project-end-time"
+              htmlFor="activity-end-time"
               className="text-xs text-muted-foreground"
             >
               结束时间
             </FieldLabel>
             <Input
-              id="project-end-time"
+              id="activity-end-time"
               type="date"
               value={endTimeInput}
               onChange={(event) => setEndTimeInput(event.target.value)}
@@ -321,11 +440,11 @@ function ProjectListPage() {
         <Table>
           <TableHeader className="bg-muted/60">
             <TableRow className="hover:bg-transparent">
-              <TableHead className="min-w-40">项目名称</TableHead>
-              <TableHead>项目地点</TableHead>
+              <TableHead className="min-w-40">活动名称</TableHead>
+              <TableHead>所属项目</TableHead>
+              <TableHead>活动类型</TableHead>
               <TableHead>时间范围</TableHead>
-              <TableHead>总预算</TableHead>
-              <TableHead className="text-center">活动数</TableHead>
+              <TableHead className="text-center">环节数</TableHead>
               <TableHead>发布状态</TableHead>
               <TableHead>创建时间</TableHead>
               <TableHead className="text-center">操作</TableHead>
@@ -350,67 +469,84 @@ function ProjectListPage() {
                   <Empty className="border-0">
                     <EmptyHeader>
                       <EmptyMedia variant="icon">
-                        <FolderKanbanIcon />
+                        <CalendarIcon />
                       </EmptyMedia>
-                      <EmptyTitle>没有匹配的项目</EmptyTitle>
+                      <EmptyTitle>没有匹配的活动</EmptyTitle>
                       <EmptyDescription>
-                        换个筛选条件，或者新增一个项目。
+                        换个筛选条件，或者新增一场活动。
                       </EmptyDescription>
                     </EmptyHeader>
                   </Empty>
                 </TableCell>
               </TableRow>
             ) : (
-              list.map((project) => (
-                <TableRow key={project.id}>
+              list.map((activity) => (
+                <TableRow key={activity.id}>
                   <TableCell className="font-medium">
                     <Link
-                      to="/project/$projectId"
-                      params={{ projectId: String(project.id) }}
+                      to="/project/$projectId/activity/$activityId"
+                      params={{
+                        projectId: String(activity.projectId),
+                        activityId: String(activity.id),
+                      }}
+                      // 告诉详情页"从活动管理进来的"，它据此把左上角的返回
+                      // 指回这里而不是项目详情（见那个文件里的 from 注释）。
+                      search={{ from: "activity" }}
                       className="text-primary hover:underline"
                     >
-                      {project.name}
+                      {activity.name}
                     </Link>
                   </TableCell>
-                  <TableCell>{project.location || "-"}</TableCell>
-                  <TableCell className="whitespace-nowrap text-muted-foreground">
-                    {project.startTime || project.endTime
-                      ? `${formatDateTime(project.startTime)} ~ ${formatDateTime(project.endTime)}`
-                      : "未排期"}
+                  <TableCell>
+                    <Link
+                      to="/project/$projectId"
+                      params={{ projectId: String(activity.projectId) }}
+                      className="hover:underline"
+                    >
+                      {activity.projectName}
+                    </Link>
                   </TableCell>
-                  <TableCell className="tabular-nums">
-                    {formatBudget(project.totalBudget)}
+                  <TableCell>
+                    {ACTIVITY_TYPE_LABELS[activity.activityType]}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-muted-foreground">
+                    {formatDateTime(activity.startTime)} ~{" "}
+                    {formatDateTime(activity.endTime)}
                   </TableCell>
                   <TableCell className="text-center tabular-nums">
-                    {project.activityCount}
+                    {activity.segmentCount}
                   </TableCell>
                   <TableCell>
                     <StatusSelect
-                      value={project.publishStatus}
+                      value={activity.publishStatus}
                       values={PUBLISH_STATUS_VALUES}
                       labels={PUBLISH_STATUS_LABELS}
                       chipClass={PUBLISH_STATUS_CHIP}
                       disabled={
                         publishStatusMutation.isPending &&
-                        publishStatusMutation.variables?.project.id ===
-                          project.id
+                        publishStatusMutation.variables?.activity.id ===
+                          activity.id
                       }
                       onChange={(value) =>
                         publishStatusMutation.mutate({
-                          project,
+                          activity,
                           publishStatus: value,
                         })
                       }
                     />
                   </TableCell>
                   <TableCell className="whitespace-nowrap text-muted-foreground">
-                    {formatDateTime(project.createdAt)}
+                    {formatDateTime(activity.createdAt)}
                   </TableCell>
                   <TableCell className="text-center whitespace-nowrap">
                     <div className="inline-flex items-center gap-1">
                       <Link
-                        to="/project/$projectId"
-                        params={{ projectId: String(project.id) }}
+                        to="/project/$projectId/activity/$activityId"
+                        params={{
+                          projectId: String(activity.projectId),
+                          activityId: String(activity.id),
+                        }}
+                        search={{ from: "activity" }}
                         className={cn(
                           buttonVariants({ variant: "ghost", size: "sm" }),
                           "text-primary hover:text-primary",
@@ -423,7 +559,7 @@ function ProjectListPage() {
                         size="sm"
                         className="text-primary hover:text-primary"
                         onClick={() => {
-                          setEditing(project);
+                          setEditing(activity);
                           setFormOpen(true);
                         }}
                       >
@@ -433,7 +569,7 @@ function ProjectListPage() {
                         variant="ghost"
                         size="sm"
                         className="text-destructive hover:text-destructive"
-                        onClick={() => setPendingDelete(project)}
+                        onClick={() => setPendingDelete(activity)}
                       >
                         删除
                       </Button>
@@ -493,9 +629,10 @@ function ProjectListPage() {
         </div>
       </div>
 
-      <ProjectFormDialog
+      <ActivityFormDialog
         open={formOpen}
-        project={editing}
+        activity={editing}
+        projectOptions={projectOptions}
         submitting={saveMutation.isPending}
         onOpenChange={(open) => {
           setFormOpen(open);
@@ -512,10 +649,10 @@ function ProjectListPage() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>确认删除该项目？</AlertDialogTitle>
+            <AlertDialogTitle>确认删除该活动？</AlertDialogTitle>
             <AlertDialogDescription>
               「{pendingDelete?.name}
-              」将被永久删除。已有活动或其他业务数据引用的项目不能删除，
+              」将被永久删除。已有议程、人员、资源或邀请函等业务数据引用的活动不能删除，
               请改为下架。
             </AlertDialogDescription>
           </AlertDialogHeader>

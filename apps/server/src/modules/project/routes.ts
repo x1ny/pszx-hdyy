@@ -1,9 +1,10 @@
-import { and, count, desc, eq, gte, ilike, lte } from "drizzle-orm";
+import { and, count, desc, eq, gte, ilike, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../../infra/db";
 import { toLimitOffset } from "../../shared/pagination";
 import { err, ok } from "../../shared/result";
 import { jsonBody } from "../../shared/validate";
+import { activitySegment } from "../agenda/schema";
 import { type AuthedVariables, requireUser } from "../auth";
 import { activity, project } from "./schema";
 import {
@@ -70,6 +71,31 @@ const activityFields = {
   updatedAt: activity.updatedAt,
 };
 
+/**
+ * 活动列表的读取投影，比 /get 多一个 segmentCount，也和它一样带 projectName。
+ *
+ * projectName 原先只在 /get 上，理由是"列表永远从项目详情点进来，项目名就在
+ * 标题里"。一级菜单「活动管理」跨项目看全部活动之后这条不成立了——那一屏上
+ * "属于哪个项目"是真的缺失信息。项目详情页的活动列表不渲染这一列，多查一个
+ * 名字换掉两条列表接口的分歧，划算。
+ *
+ * segmentCount 走相关子查询而不是 left join + group by：group by 得把上面
+ * activityFields 的每一列都抄进去（项目列表那边就是这么写的，18 行），以后加
+ * 一个字段就得记得同步一次。只统计 active 环节——作废在议程模块里等同于已删除。
+ */
+const activityListFields = {
+  ...activityFields,
+  projectName: sql<string>`(
+    select ${project.name} from ${project}
+    where ${eq(project.id, activity.projectId)}
+  )`.as("project_name"),
+  segmentCount: sql<number>`(
+    select count(*)::int from ${activitySegment}
+    where ${eq(activitySegment.activityId, activity.id)}
+      and ${eq(activitySegment.status, "active")}
+  )`.as("segment_count"),
+};
+
 const projectNotFound = () =>
   err({ code: "NOT_FOUND" as const, message: "项目不存在" });
 
@@ -81,8 +107,7 @@ const isForeignKeyViolation = (error: unknown): boolean => {
   if (typeof error !== "object" || error === null) return false;
   const { code, cause } = error as { code?: unknown; cause?: unknown };
   return (
-    code === "23503" ||
-    (cause !== undefined && isForeignKeyViolation(cause))
+    code === "23503" || (cause !== undefined && isForeignKeyViolation(cause))
   );
 };
 
@@ -158,6 +183,21 @@ export const projectRoutes = new Hono<{ Variables: AuthedVariables }>()
       .where(eq(project.id, c.req.valid("json").id));
 
     return row ? c.json(ok(row)) : c.json(projectNotFound());
+  })
+
+  /**
+   * 仅供下拉选择的轻量项目选项，不返回预算、单位或审计时间。
+   *
+   * 不复用 /list：那条接口有分页上界（每页最多 100），而"所属项目"下拉要的是
+   * 全部项目，靠 pageSize 撑到某个大数字迟早会在第 101 个项目上静默截断。
+   */
+  .post("/options", async (c) => {
+    const list = await db
+      .select({ id: project.id, name: project.name })
+      .from(project)
+      .orderBy(desc(project.id));
+
+    return c.json(ok(list));
   })
 
   .post("/create", jsonBody(CreateProjectInput), async (c) => {
@@ -255,21 +295,34 @@ export const activityRoutes = new Hono<{ Variables: AuthedVariables }>()
   .use(requireUser)
 
   .post("/list", jsonBody(ListActivitiesInput), async (c) => {
-    const { projectId, name, activityType, publishStatus, page, pageSize } =
-      c.req.valid("json");
+    const {
+      projectId,
+      name,
+      activityType,
+      publishStatus,
+      startTime,
+      endTime,
+      page,
+      pageSize,
+    } = c.req.valid("json");
 
     const where = and(
-      eq(activity.projectId, projectId),
+      // 不传 projectId 就是跨项目看全部（一级菜单「活动管理」）。
+      projectId ? eq(activity.projectId, projectId) : undefined,
       name ? ilike(activity.name, `%${name}%`) : undefined,
       activityType ? eq(activity.activityType, activityType) : undefined,
       publishStatus ? eq(activity.publishStatus, publishStatus) : undefined,
+      startTime
+        ? gte(activity.startTime, startOfFilterDay(startTime))
+        : undefined,
+      endTime ? lte(activity.endTime, endOfFilterDay(endTime)) : undefined,
     );
 
     const { limit, offset } = toLimitOffset({ page, pageSize });
 
     const [list, totalRows] = await Promise.all([
       db
-        .select(activityFields)
+        .select(activityListFields)
         .from(activity)
         .where(where)
         .orderBy(desc(activity.id))

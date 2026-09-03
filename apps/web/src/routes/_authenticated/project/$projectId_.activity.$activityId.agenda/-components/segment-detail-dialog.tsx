@@ -1,3 +1,4 @@
+import { formatDateTime } from "#/features/project/utils";
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import {
@@ -10,7 +11,6 @@ import {
   DialogTitle,
 } from "#/shared/components/ui/dialog.tsx";
 import { cn } from "#/shared/lib/utils.ts";
-import { formatDateTime } from "../../-utils";
 import type { PlanStatus } from "../../-venue-queries";
 import { PLAN_STATUS_LABELS } from "../../-venue-utils";
 import type { AgendaLine, Segment } from "../-queries";
