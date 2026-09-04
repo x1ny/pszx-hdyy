@@ -95,6 +95,8 @@ docker run -d -p 80:80 -p 81:81 -e DATABASE_URL=postgresql://user:pass@db:5432/p
 | `WEB_DIST_DIR` | 否 | `/app/web` | 置空则 80 端口只跑 API，不托管管理端 |
 | `H5_PORT` | 否 | `81` | h5 端口 |
 | `H5_DIST_DIR` | 否 | `/app/h5` | **置空则整个 h5 端口不启动**（只有它设了才 listen 第二个端口） |
+| `SKIP_MIGRATIONS` | 否 | `0` | 设为 `1` 跳过启动时的数据库迁移。应急用，正常部署不要设 |
+| `MIGRATIONS_DIR` | 否 | `/app/drizzle` | 迁移 SQL 的位置，基本不需要改 |
 
 \* `APP_URL` 和 `BETTER_AUTH_URL`/`WEB_ORIGIN` 二选一，都不给容器起不来。
 
@@ -103,14 +105,24 @@ docker run -d -p 80:80 -p 81:81 -e DATABASE_URL=postgresql://user:pass@db:5432/p
 `/app/data/files` 是上传文件的落盘位置，写的是容器本地磁盘。**不挂卷的话每次
 重新部署已上传的文件全部丢失**。Rancher 上要挂 PVC，`docker run` 要带 `-v`。
 
-### 数据库迁移不在容器里做
+### 数据库迁移在容器启动时自动执行
 
-镜像里没有 drizzle-kit，entrypoint 也不碰数据库。schema 变更由人在部署前执行：
+entrypoint 在 `exec` 应用之前跑一次 `/app/migrate.js`，把 `/app/drizzle` 下的迁移
+SQL 应用到 `DATABASE_URL` 指向的库。**部署前不需要人手做任何 schema 操作。**
 
-```bash
-bun run db:push
-```
+- 幂等：没有待执行的迁移就空转返回。
+- 并发安全：用 Postgres 的 advisory lock 串行化，多副本同时启动会自动排队
+  （drizzle 的 migrator 自己一把锁都没有，那把锁是我们加的）。
+- 失败即拒绝启动：entrypoint 是 `set -eu`，迁移失败容器就起不来。这是有意的 ——
+  schema 没就位却把应用放出去服务，故障会以「某个页面偶尔 500」的形式出现。
+- 应急阀门：`SKIP_MIGRATIONS=1` 可以跳过这一步。
 
-这是刻意的选择 —— 容器启动时自动 `push` 会为了对齐 schema 而删列改类型，且没有
-任何审计记录。等哪天需要自动化了，先 `bun run db:generate` 把迁移落成 SQL 文件
-纳入仓库，再让 entrypoint 跑 `drizzle-kit migrate`。
+镜像里**仍然没有 drizzle-kit**：`migrate.js` 只内联了 drizzle-orm 的 migrator 和 pg
+（281 KB），运行阶段依然零 node_modules。
+
+**已有数据的库第一次接入时需要先打基线**（否则会从 `0000` 开始建表并报
+`relation already exists`）。测试环境属于这种情况，步骤见
+[docs/database-migrations.md](../docs/database-migrations.md) 第 6 节。
+
+滚动发布、回滚、并行分支的坑，同一份文档里都有。一条硬规矩先记住：
+**迁移只做加法**，删列改类型必须拆成两次发版。

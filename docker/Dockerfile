@@ -61,9 +61,15 @@ ENV NODE_ENV=production \
     WEB_DIST_DIR=/app/web \
     H5_PORT=81 \
     H5_DIST_DIR=/app/h5 \
-    FILE_STORAGE_DIR=/app/data/files
+    FILE_STORAGE_DIR=/app/data/files \
+    MIGRATIONS_DIR=/app/drizzle
 
 COPY --from=builder /app/apps/server/dist/server.js ./server.js
+# 迁移入口和迁移 SQL。entrypoint 在启动应用前跑一次（见 docs/database-migrations.md）。
+# migrate.js 只内联了 drizzle-orm 的 migrator 和 pg —— **drizzle-kit 不进镜像**，
+# 运行阶段仍然零 node_modules。
+COPY --from=builder /app/apps/server/dist/migrate.js ./migrate.js
+COPY --from=builder /app/apps/server/drizzle ./drizzle
 COPY --from=builder /app/apps/web/dist ./web
 COPY --from=builder /app/apps/h5/dist ./h5
 COPY docker/docker-entrypoint.sh /docker-entrypoint.sh

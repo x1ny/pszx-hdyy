@@ -75,13 +75,13 @@ apps/server    Hono + Better Auth + Drizzle（端口 8787）
 | --- | --- |
 | 安装依赖 | `bun install` |
 | 起开发环境（临时库，默认） | `bun run dev`——每个 worktree 一个一次性 tmpfs 容器，自动建表 + 灌种子，退出即销毁 |
-| 起开发环境（持久库） | `bun run dev:persist`——连 docker-compose 那个库，不建表也不灌种子 |
+| 起开发环境（持久库） | `bun run dev:persist`——连 docker-compose 那个库，只跑迁移，不灌种子 |
 | 生产构建 | `bun run build` → `apps/web/dist/` + `apps/h5/dist/`（两份静态资源）+ `apps/server/dist/server.js`（bun build 打的单文件） |
 | 类型检查（全部包） | `bun run typecheck` |
 | 测试 | `bun run test` |
 | Lint + 格式检查（收尾默认） | `bunx biome check <本次修改文件...>`（不要加 `--write`） |
 | 全仓 Lint + 格式化（会写文件） | `bun run check`（仅在明确需要全仓修复且工作树干净时） |
-| 数据库推送 / 迁移 | `bun run db:push` / `db:generate` / `db:migrate` / `db:studio` |
+| 数据库迁移 | `bun run db:generate` / `db:migrate` / `db:check` / `db:baseline` / `db:studio`。**没有 `db:push` 了**，理由和完整流程见 [docs/database-migrations.md](docs/database-migrations.md) |
 | 重新生成路由树 | `bun run --filter '@repo/web' generate-routes`（h5 换成 `@repo/h5`） |
 | 回收垃圾容器 / 卷 / 已合入的分支 | `bun run prune`（只列不删）→ `bun run prune --yes` |
 | 添加 shadcn 组件 | 在 `apps/web` 下 `bunx shadcn@latest add <name>`。**`apps/h5` 不用 shadcn**，理由见上面「仓库结构」 |
@@ -101,13 +101,13 @@ apps/server    Hono + Better Auth + Drizzle（端口 8787）
 
 ## 开发调试
 
-**默认的 `bun run dev` 起的是一次性数据库**：每个 worktree 一个 tmpfs 容器、随机端口，自动建表 + 灌种子（约 3 秒），Ctrl-C 就销毁——多个 worktree 并行不会互相踩数据。要看积累的真实数据用 `bun run dev:persist`（连 docker-compose 那个持久库，**不建表也不灌种子**，schema 同步靠你手动 `db:push`）。
+**默认的 `bun run dev` 起的是一次性数据库**：每个 worktree 一个 tmpfs 容器、随机端口，自动建表 + 灌种子（约 3 秒），Ctrl-C 就销毁——多个 worktree 并行不会互相踩数据。要看积累的真实数据用 `bun run dev:persist`（连 docker-compose 那个持久库，**只跑迁移、不灌种子**——它和生产走同一份 `migrate.ts`，正好预演生产的迁移路径）。
 
 **登录直接访问 `/api/dev/login`**：一次 GET 就进登录态（种子账号 `dev@example.com`），带 `?redirect=/project/1` 可直接落到指定页面。它走 Better Auth **完整的真实认证链路**（真 session、真 cookie、照常过 `sessionMiddleware`），所以守卫和会话相关的坑照样暴露得出来。只在 `DEV_AUTH_BYPASS=1` 时存在，生产形态下带着这个开关启动会直接拒绝启动。**可以自行用浏览器登录、点页面、走真实操作来调试，不用每次问。**
 
 **要连"正在跑的那个"临时库**（`db:studio`、排查脚本）：已经配好了——`bun run dev` 把真实连接串写进 gitignored 的 `apps/server/.dev-db.env`，db 系列脚本按 `.env` → `.dev-db.env` 顺序读，后者覆盖前者。**别手写 `localhost:5432`**，那是持久库，你会在另一个库里看到一堆真实数据，然后得出完全错误的结论。
 
-**种子在 `apps/server/src/dev-seed/`**，数字前缀决定执行顺序，固定 ID 在 `context.ts`。可直接导航：`/project/1`、`/project/1/activity/1/agenda`（**刻意埋了一处人员时间冲突**）、`/project/1/activity/1/seating/1`（50 座位 / 50 候选人）、`/member`（51 人）、`/venue`、`/supplier`。**改了 schema 就顺手改种子**——一律用 typed insert，字段改了 `typecheck` 直接报错；新增模块加一个带数字前缀的文件即可（序号留了间隔，**不用改任何已有文件**），种子只对空库负责，不需要幂等逻辑。
+**种子在 `apps/server/src/dev-seed/`**，数字前缀决定执行顺序，固定 ID 在 `context.ts`。可直接导航：`/project/1`、`/project/1/activity/1/agenda`（**刻意埋了一处人员时间冲突**）、`/project/1/activity/1/seating/1`（50 座位 / 50 候选人）、`/member`（51 人）、`/venue`、`/supplier`。**改了 schema 就顺手 `bun run db:generate` 生成迁移**（`bun run test` 会拦住漏生成的），**并顺手改种子**——一律用 typed insert，字段改了 `typecheck` 直接报错；新增模块加一个带数字前缀的文件即可（序号留了间隔，**不用改任何已有文件**），种子只对空库负责，不需要幂等逻辑。
 
 ## 提交与合并：线性历史是强制的
 

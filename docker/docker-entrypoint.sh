@@ -54,7 +54,18 @@ echo "  H5_DIST_DIR:      ${H5_DIST_DIR:-(unset, 不起 h5 端口)}"
 echo "  FILE_STORAGE_DIR: $FILE_STORAGE_DIR"
 echo "  DATABASE_URL:     $safe_database_url"
 
-# 数据库迁移不在这里做，是有意的：schema 变更由人在部署前执行
-# （bun run db:push），理由见 docker/README.md。
+# 迁移在启动应用之前跑一次。它是幂等的（没有待执行的迁移就空转返回），并且用
+# Postgres 的 advisory lock 串行化 —— 多副本同时启动时会自动排队，而不是各跑
+# 一遍。drizzle 的 migrator 自己一把锁都没有，那把锁在 src/migrate.ts 里。
+#
+# 文件头是 set -eu，所以**迁移失败 = 容器起不来**，这是有意的：schema 没就位
+# 就把应用放出去服务，故障会以「某个页面偶尔 500」的形式出现，难查十倍。
+#
+# 完整方案（含并发、滚动发布、回滚、baseline）见 docs/database-migrations.md。
+if [ "${SKIP_MIGRATIONS:-0}" = "1" ]; then
+  echo "  MIGRATIONS:       skipped (SKIP_MIGRATIONS=1)"
+else
+  bun run /app/migrate.js
+fi
 
 exec bun run /app/server.js

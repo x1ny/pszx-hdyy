@@ -1,7 +1,8 @@
 import { pathToFileURL } from "node:url";
-import { pushSchema } from "drizzle-kit/api";
 import { sql } from "drizzle-orm";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { db } from "../infra/db";
+import { MIGRATIONS_DIR, pendingStatements } from "../schema-diff";
 import type { SeedContext, SeedFn } from "./context";
 
 // 把一个**空库**准备成可用的开发库：建表 → 依次跑种子 → 重置序列。
@@ -48,37 +49,34 @@ async function assertConnectedToExpectedDatabase() {
   }
 }
 
-async function buildSchema() {
-  // Glob 而不是一个个手写 import：新增 modules/<名>/schema.ts 不用动这里，
-  // 和 drizzle.config.ts 里 schema 那条 glob 是同一个理由。
-  const glob = new Bun.Glob("*/schema.ts");
-  const modulesDir = new URL("../modules/", import.meta.url);
-  const schema: Record<string, unknown> = {};
+/**
+ * 建表，两段：
+ *
+ *   1. **迁移文件**负责已经定稿的部分 —— 和生产跑的是同一批 SQL，所以生产会
+ *      遇到的问题（外键顺序、默认值、类型）在这里就能遇到。
+ *   2. **快照差异**负责你正在改、还没生成迁移的那部分（不连库算出来，直接执行）。
+ *
+ * 刻意**不**做成「没生成迁移就拒绝启动」：改 schema 的过程中一小时可能动十次，
+ * 每次都逼着生成一个迁移文件、最后还得手工合并，那只会让人绕过整套机制。
+ * 真正的硬关卡是 src/schema-drift.test.ts —— 它不连库、跑在 `bun run test` 里，
+ * 拦的是「提交」而不是「调试」。
+ *
+ * 返回还没生成迁移的语句，交给调用方打警告。
+ */
+async function prepareSchema() {
+  await migrate(db, { migrationsFolder: MIGRATIONS_DIR });
 
-  for await (const relativePath of glob.scan({
-    cwd: Bun.fileURLToPath(modulesDir),
-  })) {
-    const moduleUrl = new URL(relativePath.replaceAll("\\", "/"), modulesDir);
-    for (const [name, value] of Object.entries(await import(moduleUrl.href))) {
-      schema[name] = value;
-    }
+  // 补齐用的是**快照对比**算出来的语句，不是 pushSchema —— 理由见
+  // src/schema-diff.ts 顶部（push 会对复合约束报一堆假差异，这个库有 17 个）。
+  // 顺带的好处：这里执行的语句和 `bun run test` 拦下来的语句是同一批，
+  // 警告说什么，测试就报什么。
+  const statements = await pendingStatements();
+
+  for (const statement of statements) {
+    await db.execute(sql.raw(statement));
   }
 
-  return schema;
-}
-
-async function pushTables() {
-  const schema = await buildSchema();
-  // drizzle-kit/api 的入参类型比这里能构造的对象窄一档（它想要 kit 内部那份
-  // schema 表示）。**必须走 API 不能 spawn CLI**：`drizzle-kit push` 的 CLI
-  // 在非交互环境下会卡住然后 exit 1，且不打印任何原因。
-  const { apply, statementsToExecute } = await pushSchema(
-    schema as never,
-    db as never,
-  );
-  await apply();
-
-  return statementsToExecute.length;
+  return statements;
 }
 
 /**
@@ -178,12 +176,28 @@ async function runSeeds() {
 
 const startedAt = Date.now();
 await assertConnectedToExpectedDatabase();
-const statementCount = await pushTables();
+const unmigrated = await prepareSchema();
 const seededFiles = await runSeeds();
 await resyncIdentitySequences();
 
 console.log(
-  `[dev] 数据库就位：${statementCount} 条建表语句，${seededFiles.length} 个种子文件（${Date.now() - startedAt}ms）`,
+  `[dev] 数据库就位：${seededFiles.length} 个种子文件（${Date.now() - startedAt}ms）`,
 );
+
+// 警告而不是失败（理由见 prepareSchema）。但要够显眼：漏生成迁移的代价是
+// 生产缺表，而本地一切正常。
+if (unmigrated.length > 0) {
+  console.warn(
+    [
+      "",
+      `⚠ [dev] 有 ${unmigrated.length} 处 schema 改动还没生成迁移，本次已直接补进临时库：`,
+      ...unmigrated.map((statement) => `    ${statement}`),
+      "",
+      "  提交前跑 `bun run db:generate`，否则这些改动不会进生产。",
+      "  （`bun run test` 会拦住你，见 src/schema-drift.test.ts）",
+      "",
+    ].join("\n"),
+  );
+}
 
 process.exit(0);

@@ -7,7 +7,7 @@ import { findAvailablePort, readPort } from "./ports";
 // 开发环境的唯一入口，两条路径：
 //
 //   bun run dev            临时库：一次性 tmpfs 容器 + 建表 + 灌种子，退出即销毁
-//   bun run dev:persist    持久库：docker-compose 那个容器，schema 和种子一概不碰
+//   bun run dev:persist    持久库：docker-compose 那个容器，只跑迁移，不灌种子
 //
 // 分成两条是因为多 worktree 并行开发时共用一个库会互相踩数据。默认走临时库，
 // 需要看积累下来的真实数据时再显式用 dev:persist。
@@ -72,6 +72,38 @@ async function startPersistentDb() {
 
   if ((await proc.exited) !== 0) {
     throw new Error("docker compose up -d 失败，持久库没起来");
+  }
+}
+
+/**
+ * 持久库的 schema 同步：**只跑迁移**，不 push、不灌种子。
+ *
+ * 跑的是 src/migrate.ts —— 和生产容器 entrypoint 里同一份代码。持久库有累积的
+ * 真实数据，形态最接近生产，正好用来预演生产的迁移路径：迁移在这里能跑通，
+ * 在生产大概率也能。
+ *
+ * 见 docs/database-migrations.md 7.2。
+ */
+async function migratePersistentDb(envPath: string) {
+  const proc = Bun.spawn(
+    [
+      process.execPath,
+      `--env-file=${envPath}`,
+      "run",
+      "apps/server/src/migrate.ts",
+    ],
+    { cwd: repoRoot, stdout: "inherit", stderr: "inherit" },
+  );
+
+  if ((await proc.exited) !== 0) {
+    throw new Error(
+      [
+        "持久库迁移失败，dev:persist 不启动。",
+        "  · 报 relation already exists：这个库是 db:push 建的、还没接进迁移体系。",
+        "    先 `bun run db:check` 确认结构一致，再 `bun run db:baseline` 打基线",
+        "    （docs/database-migrations.md 第 6 节）。",
+      ].join("\n"),
+    );
   }
 }
 
@@ -217,7 +249,8 @@ let stopDatabase: (() => Promise<void>) | undefined;
 
 if (usePersistentDb) {
   await startPersistentDb();
-  console.log("[dev] 使用持久库（docker-compose），不建表也不灌种子");
+  await migratePersistentDb(envPath);
+  console.log("[dev] 使用持久库（docker-compose），只跑迁移，不 push 也不灌种子");
 } else {
   const database = await startEphemeralPostgres(repoRoot);
   databaseUrl = database.url;

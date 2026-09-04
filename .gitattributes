@@ -4,3 +4,9 @@
 
 # git 钩子同理，而且它们没有扩展名，上面那条 *.sh 覆盖不到。
 .githooks/* text eol=lf
+
+# 迁移 SQL 的 hash 是按文件字节算的（drizzle 的 readMigrationFiles 里
+# sha256(整个文件)）。CRLF/LF 不一致会让同一份迁移在 Windows 和容器里算出不同
+# hash —— 不会导致重复执行（判断看的是 created_at），但会让审计记录对不上。
+# 本仓库 core.autocrlf=true，不写这行必然发生。
+apps/server/drizzle/**/*.sql text eol=lf
