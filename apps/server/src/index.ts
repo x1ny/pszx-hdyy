@@ -13,6 +13,8 @@ import {
 } from "./modules/auth";
 import { exampleRoutes } from "./modules/example/routes";
 import { fileRoutes } from "./modules/file/routes";
+import { h5Routes } from "./modules/h5/routes";
+import { h5AccessRoutes } from "./modules/h5/routes.access";
 import { invitationRoutes } from "./modules/invitation/routes";
 import { memberRoutes } from "./modules/member/routes";
 import { memberImportRoutes } from "./modules/member/routes.import";
@@ -176,7 +178,16 @@ export const routes = app
   .route("/api/seating", seatingRoutes)
   // 只读的配置完整性视图，没有自己的表——它把环节、人员、资源几个模块的
   // 现状聚合成一张体检表。放在最后注册，因为它依赖上面所有模块。
-  .route("/api/activityConfig", activityConfigRoutes);
+  .route("/api/activityConfig", activityConfigRoutes)
+  // h5 公众端。**和上面所有模块是两套身份体系**：这里认的是手机号 cookie，
+  // 不是 Better Auth 的 session，`requireUser` 一次都不出现（见 modules/h5/auth.ts）。
+  //
+  // 两个前缀不是随手拆的：/api/h5 整个挂着 requireH5Member，前缀即作用域，
+  // 新增 h5 接口默认就受保护；而提交手机号那一个接口**必须**能在未验证时调用，
+  // 所以只能另占一个前缀。反过来把它塞进 /api/h5 再单独摘守卫，就等于把
+  // "哪条路由有守卫" 从前缀规则退化成逐条记忆。
+  .route("/api/h5Access", h5AccessRoutes)
+  .route("/api/h5", h5Routes);
 
 // Catches anything a handler didn't turn into a `code`, i.e. a real crash —
 // the one case where the response legitimately isn't a business outcome.

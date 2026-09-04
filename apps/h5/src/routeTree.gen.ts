@@ -10,43 +10,53 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ItineraryIndexRouteImport } from './routes/itinerary/index'
+import { Route as AActivityIdIndexRouteImport } from './routes/a/$activityId/index'
+import { Route as AActivityIdPhoneRouteImport } from './routes/a/$activityId/phone'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ItineraryIndexRoute = ItineraryIndexRouteImport.update({
-  id: '/itinerary/',
-  path: '/itinerary/',
+const AActivityIdIndexRoute = AActivityIdIndexRouteImport.update({
+  id: '/a/$activityId/',
+  path: '/a/$activityId/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AActivityIdPhoneRoute = AActivityIdPhoneRouteImport.update({
+  id: '/a/$activityId/phone',
+  path: '/a/$activityId/phone',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/itinerary/': typeof ItineraryIndexRoute
+  '/a/$activityId/phone': typeof AActivityIdPhoneRoute
+  '/a/$activityId/': typeof AActivityIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/itinerary': typeof ItineraryIndexRoute
+  '/a/$activityId/phone': typeof AActivityIdPhoneRoute
+  '/a/$activityId': typeof AActivityIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/itinerary/': typeof ItineraryIndexRoute
+  '/a/$activityId/phone': typeof AActivityIdPhoneRoute
+  '/a/$activityId/': typeof AActivityIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/itinerary/'
+  fullPaths: '/' | '/a/$activityId/phone' | '/a/$activityId/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/itinerary'
-  id: '__root__' | '/' | '/itinerary/'
+  to: '/' | '/a/$activityId/phone' | '/a/$activityId'
+  id: '__root__' | '/' | '/a/$activityId/phone' | '/a/$activityId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ItineraryIndexRoute: typeof ItineraryIndexRoute
+  AActivityIdPhoneRoute: typeof AActivityIdPhoneRoute
+  AActivityIdIndexRoute: typeof AActivityIdIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -58,11 +68,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/itinerary/': {
-      id: '/itinerary/'
-      path: '/itinerary'
-      fullPath: '/itinerary/'
-      preLoaderRoute: typeof ItineraryIndexRouteImport
+    '/a/$activityId/': {
+      id: '/a/$activityId/'
+      path: '/a/$activityId'
+      fullPath: '/a/$activityId/'
+      preLoaderRoute: typeof AActivityIdIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/a/$activityId/phone': {
+      id: '/a/$activityId/phone'
+      path: '/a/$activityId/phone'
+      fullPath: '/a/$activityId/phone'
+      preLoaderRoute: typeof AActivityIdPhoneRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -70,7 +87,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ItineraryIndexRoute: ItineraryIndexRoute,
+  AActivityIdPhoneRoute: AActivityIdPhoneRoute,
+  AActivityIdIndexRoute: AActivityIdIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

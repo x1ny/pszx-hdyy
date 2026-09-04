@@ -1,7 +1,7 @@
 import { Collapsible } from "@base-ui/react/collapsible";
 import type { ReactNode } from "react";
 import { cn } from "#/shared/lib/utils";
-import { parseDay } from "../-utils";
+import { parseDayKey } from "../-utils";
 import { Icon } from "./icon";
 
 /**
@@ -28,7 +28,7 @@ export function DayCard({
   isPast: boolean;
   children: ReactNode;
 }) {
-  const parts = parseDay(day);
+  const parts = parseDayKey(day);
 
   return (
     <Collapsible.Root

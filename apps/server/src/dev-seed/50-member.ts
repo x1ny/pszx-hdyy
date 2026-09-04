@@ -112,6 +112,24 @@ const NATIVE_PLACES = [
 const FOREIGN_INDEX = 19;
 const CROSS_SEGMENT_MEMBER_INDEX = 2;
 
+/**
+ * 刻意让两个人共用一个手机号（刘洋 index 3 / 陈静 index 4）。
+ *
+ * 主档上 mobile **没有唯一约束**（schema 注释里的 R-002 写死了"手机号不唯一"，
+ * 还为此留了 mergedIntoId 合并列），所以重号是预期会发生的，最常见的就是同事
+ * 或家属共用一个联系电话。h5 的口径是取 `activity_member.id` 最小的那条 ——
+ * 用这个号进 h5 永远看到刘洋的行程，陈静看不到自己的。
+ *
+ * 不埋这一对，那条分支在本地一次都跑不到，只会在真实活动当天第一次出现。
+ */
+const SHARED_MOBILE_PRIMARY = 3;
+const SHARED_MOBILE_TWIN = 4;
+
+const mobileAt = (index: number) =>
+  `138${String(
+    10000000 + (index === SHARED_MOBILE_TWIN ? SHARED_MOBILE_PRIMARY : index),
+  ).padStart(8, "0")}`;
+
 const organizationIdAt = (index: number): number | null =>
   index < 7
     ? DEMO.organizationIds.fashionAssociation
@@ -165,7 +183,7 @@ export const seed: SeedFn = async (db, { userId }) => {
           }),
       idType: "身份证" as const,
       idNumber: `3301${String(19850101 + index).padStart(8, "0")}${String(index + 1).padStart(4, "0")}`,
-      mobile: `138${String(10000000 + index).padStart(8, "0")}`,
+      mobile: mobileAt(index),
       email: `member${index + 1}@example.com`,
       language: "中文",
       status:

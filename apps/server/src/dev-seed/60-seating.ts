@@ -88,10 +88,16 @@ export const seed: SeedFn = async (db, { userId }) => {
     segmentId: DEMO.segmentIds.forum,
     activityId: DEMO.activityId,
     activityVenueZoneId: DEMO.mainActivityVenueZoneId,
-    status: "pending",
+    // 已确认，不是 pending —— **h5 的行程页只显示 confirmed 方案的座位**
+    // （modules/h5/routes.ts 里那段口径）。留 pending 的话本地一打开 h5 就是
+    // 「座位待安排」，那块根本调不了。管理端的排位流程不受影响：确认态同样
+    // 可以改、可以驳回，只是多点一步。
+    status: "confirmed",
     version: 0,
     savedBy: userId,
     savedAt: new Date("2026-08-31T10:00:00+08:00"),
+    confirmedBy: userId,
+    confirmedAt: new Date("2026-08-31T10:05:00+08:00"),
   });
 
   await db.insert(segmentSeatingLayout).values({

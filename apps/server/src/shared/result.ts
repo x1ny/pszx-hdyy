@@ -10,6 +10,12 @@ export type ApiError =
   // "保存失败" 用户找不到是哪一格错了。单字段接口不用填，前端也不必处理。
   | { code: "VALIDATION_ERROR"; message: string; path?: string }
   | { code: "NOT_FOUND"; message: string }
+  // h5 公众端未通过手机号校验。**刻意和 UNAUTHORIZED 分开**，不是为了区分
+  // 措辞，是因为它要多带一个 `maskedMobile`：cookie 是 HttpOnly 的，前端读不到
+  // 自己当前用的是哪个号，"当前 138****8888 不在本活动名单，请换一个号码"
+  // 这句话只能由服务端给。把这个字段挂到管理端也在用的 UNAUTHORIZED 上，
+  // 等于让每个后台接口的错误类型都多一个它永远不会填的字段。
+  | { code: "H5_UNAUTHORIZED"; message: string; maskedMobile?: string }
   | { code: "INTERNAL_ERROR"; message: string };
 
 export type ApiOk<T> = { code: "OK"; data: T };
