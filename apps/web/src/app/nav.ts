@@ -2,12 +2,12 @@ import type { LinkProps } from "@tanstack/react-router";
 import {
   Building2,
   CalendarDays,
-  FolderKanban,
-  LayoutDashboard,
+  Folder,
+  LayoutGrid,
   type LucideIcon,
-  MailIcon,
+  Mail,
+  MapPin,
   Settings,
-  Truck,
   UsersRound,
 } from "lucide-react";
 
@@ -30,10 +30,10 @@ export type NavItem =
  * 真正的权限校验必须在服务端每个接口里各自完成——前端菜单不是安全边界。
  */
 export const navMain: NavItem[] = [
-  { title: "工作台", icon: LayoutDashboard, to: "/dashboard" },
+  { title: "工作台", icon: LayoutGrid, to: "/dashboard" },
   {
     title: "项目管理",
-    icon: FolderKanban,
+    icon: Folder,
     children: [{ title: "项目列表", to: "/project/list" }],
   },
   /**
@@ -45,7 +45,7 @@ export const navMain: NavItem[] = [
    * 的各个配置页仍然只能从活动进，不进全局菜单——它们都需要活动上下文。
    */
   { title: "活动管理", icon: CalendarDays, to: "/activity" },
-  { title: "供应商管理", icon: Truck, to: "/supplier" },
+  { title: "供应商管理", icon: Building2, to: "/supplier" },
   { title: "人员管理", icon: UsersRound, to: "/member" },
   /**
    * 场地是**唯一**进全局菜单的排位相关页面，而且不套折叠分组。
@@ -56,7 +56,7 @@ export const navMain: NavItem[] = [
    * 一样（模板留全局、生成和记录进活动详情）。理由记在
    * docs/场地排位底层设计.md §2.1。
    */
-  { title: "场地管理", icon: Building2, to: "/venue" },
+  { title: "场地管理", icon: MapPin, to: "/venue" },
   /**
    * 只剩模板一项，所以不套折叠分组。
    *
@@ -66,7 +66,7 @@ export const navMain: NavItem[] = [
    *
    * 模板留在全局：三份真实模板是按发函主体（联盟/商会/专班）分的，不按活动分。
    */
-  { title: "邀请函模板", icon: MailIcon, to: "/invitation/template" },
+  { title: "邀请函模板", icon: Mail, to: "/invitation/template" },
   {
     title: "系统管理",
     icon: Settings,

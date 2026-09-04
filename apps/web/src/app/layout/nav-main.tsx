@@ -1,6 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
+import { type NavItem, navMain } from "#/app/nav.ts";
 import {
   Collapsible,
   CollapsibleContent,
@@ -15,7 +16,6 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "#/shared/components/ui/sidebar.tsx";
-import { type NavItem, navMain } from "#/app/nav.ts";
 
 export function NavMain() {
   const pathname = useRouterState({
@@ -23,8 +23,8 @@ export function NavMain() {
   });
 
   return (
-    <SidebarGroup>
-      <SidebarMenu>
+    <SidebarGroup className="p-[6px_10px]">
+      <SidebarMenu className="gap-0">
         {navMain.map((item) =>
           "children" in item ? (
             <NavGroup key={item.title} item={item} pathname={pathname} />
@@ -32,7 +32,12 @@ export function NavMain() {
             <SidebarMenuItem key={item.title}>
               <SidebarMenuButton
                 tooltip={item.title}
-                isActive={pathname === item.to}
+                isActive={
+                  pathname === item.to ||
+                  pathname.startsWith(`${item.to}/`) ||
+                  (item.title === "活动管理" && pathname.includes("/activity/"))
+                }
+                className="h-[39px] gap-2.5 rounded-md px-3 text-[14px]"
                 render={<Link to={item.to} />}
               >
                 <item.icon />
@@ -53,8 +58,13 @@ function NavGroup({
   item: Extract<NavItem, { children: unknown }>;
   pathname: string;
 }) {
-  const hasActiveChild = item.children.some((child) => child.to === pathname);
-  const [open, setOpen] = useState(hasActiveChild);
+  const hasActiveChild = item.children.some(
+    (child) => pathname === child.to || pathname.startsWith(`${child.to}/`),
+  );
+  // 参考界面默认展开「项目管理」，项目详情页也保留这个入口；它们不应把
+  // 父菜单染成 active。用户手动收起后，仍由 Collapsible 自己保留这个选择。
+  const isProjectMenu = item.title === "项目管理";
+  const [open, setOpen] = useState(hasActiveChild || isProjectMenu);
 
   // 必须受控：hasActiveChild 会随路由变化，而 Base UI 的非受控 Collapsible 在
   // 初始化后再改 defaultOpen 会告警且不生效。这里只负责"路由进到本组就展开"，
@@ -72,7 +82,11 @@ function NavGroup({
     >
       <CollapsibleTrigger
         render={
-          <SidebarMenuButton tooltip={item.title} isActive={hasActiveChild} />
+          <SidebarMenuButton
+            tooltip={item.title}
+            isActive={hasActiveChild}
+            className="h-[39px] gap-2.5 rounded-md px-3 text-[14px]"
+          />
         }
       >
         <item.icon />
@@ -80,11 +94,12 @@ function NavGroup({
         <ChevronRight className="ml-auto transition-transform duration-200 group-data-open/collapsible:rotate-90" />
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <SidebarMenuSub>
+        <SidebarMenuSub className="mx-0 mb-0.5 translate-x-0 gap-0 border-0 px-0 py-0.5">
           {item.children.map((child) => (
             <SidebarMenuSubItem key={child.to}>
               <SidebarMenuSubButton
                 isActive={pathname === child.to}
+                className="h-[38px] translate-x-0 rounded-md px-3 pl-[34px] text-[13.5px]"
                 render={<Link to={child.to} />}
               >
                 <span>{child.title}</span>
