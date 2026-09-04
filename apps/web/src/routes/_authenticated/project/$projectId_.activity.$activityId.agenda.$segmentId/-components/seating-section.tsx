@@ -30,7 +30,7 @@ import { SectionCard } from "./section-card";
  * JPEG 用的，拿来做只读预览正合适：不用把排位页那套画布交互（选中、拖拽、
  * 团体批量）搬过来，也就不会出现"两个页面上同一个方案长得不一样"。
  *
- * 「去修改」跳走前会先保存整页——那个拦截在页面层做（useBlocker），不在这里。
+ * 「去修改」跳走前由页面层拦截，可选择保存整页或直接前往（useBlocker），不在这里。
  */
 export function SeatingSection({
   enabled,

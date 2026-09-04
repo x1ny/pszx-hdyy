@@ -499,7 +499,7 @@ function SegmentConfigPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* 离开拦截：先保存再走，而不是"你的改动会丢失，确定吗" */}
+      {/* 离开拦截：可选择先保存再走，也可直接放弃改动前往目标页面。 */}
       <AlertDialog
         open={blocker.status === "blocked"}
         onOpenChange={(open) => {
@@ -510,7 +510,7 @@ function SegmentConfigPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>还有未保存的改动</AlertDialogTitle>
             <AlertDialogDescription>
-              离开前需要先保存当前页面。保存成功后会继续前往目标页面。
+              保存成功后会继续前往目标页面；直接前往会放弃当前未保存的改动。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -521,6 +521,14 @@ function SegmentConfigPage() {
             >
               留在本页
             </AlertDialogCancel>
+            <AlertDialogAction
+              variant="outline"
+              onClick={() => {
+                if (blocker.status === "blocked") blocker.proceed();
+              }}
+            >
+              直接前往
+            </AlertDialogAction>
             <AlertDialogAction
               onClick={() => {
                 if (blocker.status !== "blocked") return;
