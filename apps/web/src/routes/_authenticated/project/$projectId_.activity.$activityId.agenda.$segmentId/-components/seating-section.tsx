@@ -75,6 +75,8 @@ export function SeatingSection({
         assignments: bundle.assignments,
       }),
       title: bundle.plan.segmentName ?? "排位预览",
+      showTitle: false,
+      showZoneNames: false,
     }).svg;
   }, [planQuery.data]);
 

@@ -192,6 +192,20 @@ describe("seating plan JPEG export", () => {
     expect(raster.height).toBe(raster.logicalHeight * 2);
   });
 
+  it("支持预览隐藏顶部标题和区域名称", () => {
+    const { svg } = buildSeatingPlanSvg({
+      ...jpegInput,
+      showTitle: false,
+      showZoneNames: false,
+    });
+
+    expect(svg).not.toContain(
+      '<text x="64" y="84" font-size="22" font-weight="700"',
+    );
+    expect(svg).not.toContain("主会场 &amp; 嘉宾区</text>");
+    expect(svg).toContain('data-export-zone-id="zone-rect"');
+  });
+
   it("按最大边长和像素面积自动降采样，低于可读阈值时给中文错误", () => {
     const downsampled = planSeatingPlanRaster({ width: 5000, height: 2000 });
     expect(downsampled).toMatchObject({ downsampled: true });

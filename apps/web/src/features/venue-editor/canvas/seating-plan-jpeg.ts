@@ -51,6 +51,10 @@ export type SeatingPlanSvgInput = {
   seatStatus?: ReadonlyMap<string, SeatingPlanExportSeatStatus>;
   title: string;
   subtitle?: string;
+  /** 静态图是否显示顶部标题；默认显示。 */
+  showTitle?: boolean;
+  /** 静态图是否显示画布区域名称；默认显示。 */
+  showZoneNames?: boolean;
 };
 
 export type SeatingPlanJpegInput = SeatingPlanSvgInput & {
@@ -196,7 +200,11 @@ export function planSeatingPlanRaster(
   };
 }
 
-function renderZone(zone: CanvasZone, planScale: number): string {
+function renderZone(
+  zone: CanvasZone,
+  planScale: number,
+  showName: boolean,
+): string {
   const shape = zone.shape;
   const fill = exportColor(zone.fill, "#E2E8F0");
   const stroke = exportColor(zone.stroke, EXPORT_COLORS.border);
@@ -219,9 +227,13 @@ function renderZone(zone: CanvasZone, planScale: number): string {
     geometry = `<rect x="${finiteNumber(shape.x)}" y="${finiteNumber(shape.y)}" width="${finiteNumber(shape.width)}" height="${finiteNumber(shape.height)}" ${common}/>`;
   }
 
+  const name = showName
+    ? `<text x="${finiteNumber(shape.x + 12 / planScale)}" y="${finiteNumber(shape.y + 22 / planScale)}" font-size="${finiteNumber(14 / planScale)}" font-weight="650" fill="${EXPORT_COLORS.foreground}">${escapeXml(zone.name)}</text>`
+    : "";
+
   return `<g data-export-zone-id="${escapeXml(zone.externalId)}">
     ${geometry}
-    <text x="${finiteNumber(shape.x + 12 / planScale)}" y="${finiteNumber(shape.y + 22 / planScale)}" font-size="${finiteNumber(14 / planScale)}" font-weight="650" fill="${EXPORT_COLORS.foreground}">${escapeXml(zone.name)}</text>
+    ${name}
   </g>`;
 }
 
@@ -373,6 +385,9 @@ export function buildSeatingPlanSvg(
 ): SeatingPlanSvgDocument {
   assertPositiveFinite(input.doc.world.width, "画布宽度");
   assertPositiveFinite(input.doc.world.height, "画布高度");
+  const showTitle = input.showTitle ?? true;
+  const showZoneNames = input.showZoneNames ?? true;
+  const trimmedSubtitle = input.subtitle?.trim();
 
   /**
    * 纸面按"姓名写得下"反推，而不是死死按 1:1 铺。
@@ -403,7 +418,8 @@ export function buildSeatingPlanSvg(
   const contentWidth = Math.max(MIN_CONTENT_WIDTH, worldWidth);
   const logicalWidth = contentWidth + PAGE_PADDING * 2;
   const worldX = PAGE_PADDING + (contentWidth - worldWidth) / 2;
-  const worldY = PAGE_PADDING + HEADER_HEIGHT;
+  const headerHeight = showTitle || trimmedSubtitle ? HEADER_HEIGHT : 0;
+  const worldY = PAGE_PADDING + headerHeight;
   const organizations = organizationSeatLegend(
     input.seatStatus?.values()
       ? [...input.seatStatus.values()].map((status) => status.occupant)
@@ -425,7 +441,7 @@ export function buildSeatingPlanSvg(
     input.doc.zones.map((zone) => [zone.externalId, zone]),
   );
   const zones = input.doc.zones
-    .map((zone) => renderZone(zone, planScale))
+    .map((zone) => renderZone(zone, planScale, showZoneNames))
     .join("\n");
   const seats = input.doc.seats
     .flatMap((seat) => {
@@ -454,15 +470,18 @@ export function buildSeatingPlanSvg(
       ),
     )
     .join("\n");
-  const subtitle = input.subtitle?.trim()
-    ? `<text x="${PAGE_PADDING}" y="${PAGE_PADDING + 42}" font-size="13" fill="${EXPORT_COLORS.mutedForeground}">${escapeXml(input.subtitle.trim())}</text>`
+  const title = showTitle
+    ? `<text x="${PAGE_PADDING}" y="${PAGE_PADDING + 20}" font-size="22" font-weight="700" fill="${EXPORT_COLORS.foreground}">${escapeXml(input.title)}</text>`
+    : "";
+  const subtitle = trimmedSubtitle
+    ? `<text x="${PAGE_PADDING}" y="${PAGE_PADDING + 42}" font-size="13" fill="${EXPORT_COLORS.mutedForeground}">${escapeXml(trimmedSubtitle)}</text>`
     : "";
 
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${raster.width}" height="${raster.height}" viewBox="0 0 ${finiteNumber(logicalWidth)} ${finiteNumber(logicalHeight)}" role="img" aria-label="${escapeXml(input.title)}">
   <style>text { font-family: ${EXPORT_FONT_FAMILY}; }</style>
   <rect data-export-background="true" x="0" y="0" width="${finiteNumber(logicalWidth)}" height="${finiteNumber(logicalHeight)}" fill="${EXPORT_COLORS.background}"/>
-  <text x="${PAGE_PADDING}" y="${PAGE_PADDING + 20}" font-size="22" font-weight="700" fill="${EXPORT_COLORS.foreground}">${escapeXml(input.title)}</text>
+  ${title}
   ${subtitle}
   <g data-export-world="true" transform="translate(${finiteNumber(worldX)} ${finiteNumber(worldY)})">
     <rect x="0" y="0" width="${finiteNumber(worldWidth)}" height="${finiteNumber(worldHeight)}" fill="${EXPORT_COLORS.background}" stroke="${EXPORT_COLORS.border}" stroke-width="1.5"/>
