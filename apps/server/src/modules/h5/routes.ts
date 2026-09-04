@@ -210,7 +210,7 @@ export const h5Routes = new Hono<{ Variables: H5Variables }>()
    * 多写几个 loading 态，拿不到任何好处。
    */
   .post("/getItinerary", jsonBody(GetItineraryInput), async (c) => {
-    const { activityId } = c.req.valid("json");
+    const activityId = c.get("h5Activity").id;
     const me = c.get("h5Member");
 
     const [activityRow] = await db

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { Share2Icon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -9,6 +10,7 @@ import {
 import {
   activityDetailQueryOptions,
   activityKeys,
+  shareActivityItinerary,
   updateActivity,
 } from "#/features/project/queries";
 import {
@@ -25,6 +27,7 @@ import {
   CardHeader,
   CardTitle,
 } from "#/shared/components/ui/card.tsx";
+import { copyText } from "./-activity-overview-utils";
 
 const dayMs = 24 * 60 * 60 * 1000;
 
@@ -74,6 +77,18 @@ function ActivityOverviewTab() {
     onError: (error) => toast.error(error.message),
   });
 
+  const shareMutation = useMutation({
+    mutationFn: () => shareActivityItinerary(activityId),
+    onSuccess: async ({ url }) => {
+      if (await copyText(url)) {
+        toast.success("行程链接已复制");
+      } else {
+        toast.error("链接已生成，但复制失败，请重试");
+      }
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   if (!activity) return null;
 
   return (
@@ -81,7 +96,16 @@ function ActivityOverviewTab() {
       <Card size="sm">
         <CardHeader>
           <CardTitle>活动基础信息</CardTitle>
-          <CardAction>
+          <CardAction className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={shareMutation.isPending}
+              onClick={() => shareMutation.mutate()}
+            >
+              <Share2Icon data-icon="inline-start" />
+              {shareMutation.isPending ? "正在生成..." : "分享行程链接"}
+            </Button>
             <Button
               variant="outline"
               size="sm"

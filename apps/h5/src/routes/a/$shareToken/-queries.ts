@@ -21,14 +21,14 @@ export type Car = Itinerary["cars"][number];
 
 export const itineraryKeys = {
   all: ["itinerary"] as const,
-  detail: (activityId: number) => [...itineraryKeys.all, activityId] as const,
+  detail: (shareToken: string) => [...itineraryKeys.all, shareToken] as const,
 };
 
-export const itineraryQueryOptions = (activityId: number) =>
+export const itineraryQueryOptions = (shareToken: string) =>
   queryOptions({
-    queryKey: itineraryKeys.detail(activityId),
+    queryKey: itineraryKeys.detail(shareToken),
     queryFn: () =>
-      unwrap(api.api.h5.getItinerary.$post({ json: { activityId } })),
+      unwrap(api.api.h5.getItinerary.$post({ json: { shareToken } })),
     /**
      * 不重试。**这个请求同时承担路由守卫的职责**（`beforeLoad` 拿它的
      * H5_UNAUTHORIZED 决定跳不跳手机号页），重试三次只会让没验证过的用户
@@ -38,5 +38,5 @@ export const itineraryQueryOptions = (activityId: number) =>
   });
 
 /** 提交手机号。成功后服务端下发 7 天的 HttpOnly cookie，前端不碰它。 */
-export const submitPhone = (activityId: number, mobile: string) =>
-  unwrap(api.api.h5Access.submitPhone.$post({ json: { activityId, mobile } }));
+export const submitPhone = (shareToken: string, mobile: string) =>
+  unwrap(api.api.h5Access.submitPhone.$post({ json: { shareToken, mobile } }));

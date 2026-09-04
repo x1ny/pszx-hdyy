@@ -21,6 +21,10 @@
 `trustedOrigins` 不用加域名、`VITE_API_URL` 不用设（前端走
 `window.location.origin`），所以**同一个镜像能跑遍所有环境**。
 
+管理端生成「分享行程链接」是一个例外：它需要知道另一个公网域名，因此在运行时
+设置 `H5_URL`。由服务端拼完整链接，而不是用 `VITE_*` 写进管理端构建产物，仍能
+保持同一个镜像跨环境复用。
+
 线上把两个端口分别挂到两个域名下（管理端 / h5 各一个），前端的 `base` 和路由
 `basepath` 因此都保持 `/`，不需要任何路径前缀处理。
 
@@ -76,7 +80,7 @@ bun run deploy:test
 ## 容器运行
 
 ```bash
-docker run -d -p 80:80 -p 81:81 -e DATABASE_URL=postgresql://user:pass@db:5432/pszx_hdyy -e BETTER_AUTH_SECRET=$(openssl rand -base64 32) -e APP_URL=https://hdyy.example.com -v pszx-hdyy-files:/app/data/files pszx-hdyy:dev
+docker run -d -p 80:80 -p 81:81 -e DATABASE_URL=postgresql://user:pass@db:5432/pszx_hdyy -e BETTER_AUTH_SECRET=$(openssl rand -base64 32) -e APP_URL=https://hdyy.example.com -e H5_URL=https://h5.hdyy.example.com -v pszx-hdyy-files:/app/data/files pszx-hdyy:dev
 ```
 
 ### 环境变量
@@ -86,6 +90,7 @@ docker run -d -p 80:80 -p 81:81 -e DATABASE_URL=postgresql://user:pass@db:5432/p
 | `DATABASE_URL` | 是 | — | Postgres 连接串。缺失时容器直接退出 |
 | `BETTER_AUTH_SECRET` | 是 | — | `openssl rand -base64 32`。缺失时容器直接退出 |
 | `APP_URL` | 是* | — | **管理端**在浏览器里的访问地址。entrypoint 用它派生下面两个。h5 不需要配，它和自己的 API 同源，前端直接用 `window.location.origin` |
+| `H5_URL` | 是 | — | H5 的**公网绝对地址**，例如 `https://h5.hdyy.example.com`。管理端的「分享行程链接」接口用它生成 `/a/<token>`；不是 H5 调 API 的地址 |
 | `BETTER_AUTH_URL` | 是* | 由 `APP_URL` 派生 | 单独设会覆盖派生值 |
 | `WEB_ORIGIN` | 是* | 由 `APP_URL` 派生 | 同上 |
 | `BETTER_AUTH_SESSION_EXPIRES_IN_SECONDS` | 否 | `604800`（7 天） | 会话有效期，单位秒；测试环境设为 `28800` 即 8 小时 |

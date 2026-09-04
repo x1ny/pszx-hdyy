@@ -15,6 +15,13 @@
       "when": 1788509737069,
       "tag": "0001_lowly_cyclops",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788515237445,
+      "tag": "0002_wet_hiroim",
+      "breakpoints": true
     }
   ]
 }

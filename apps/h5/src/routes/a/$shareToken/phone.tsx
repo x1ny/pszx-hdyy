@@ -6,7 +6,7 @@ import { cn } from "#/shared/lib/utils";
 import { Icon } from "./-components/icon";
 import { itineraryKeys, submitPhone } from "./-queries";
 
-export const Route = createFileRoute("/a/$activityId/phone")({
+export const Route = createFileRoute("/a/$shareToken/phone")({
   component: PhonePage,
 });
 
@@ -24,7 +24,7 @@ export const Route = createFileRoute("/a/$activityId/phone")({
  * cookie 已经没了，那时也预填不出来，代价基本是零。
  */
 function PhonePage() {
-  const { activityId } = Route.useParams();
+  const { shareToken } = Route.useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -43,7 +43,7 @@ function PhonePage() {
    * 个人信息，不该出现在会被转发、被浏览器历史记录下来的地址里。
    */
   const lastError = queryClient.getQueryState(
-    itineraryKeys.detail(Number(activityId)),
+    itineraryKeys.detail(shareToken),
   )?.error;
   const staleMobile =
     lastError instanceof ApiError ? lastError.maskedMobile : undefined;
@@ -55,13 +55,13 @@ function PhonePage() {
     setSubmitting(true);
     setFailure("");
     try {
-      await submitPhone(Number(activityId), mobile);
+      await submitPhone(shareToken, mobile);
       // 缓存里存着守卫那次失败。必须**删掉**而不是 invalidate —— 留着的话
       // 行程页的 loader 会先撞见这条失败记录。
       queryClient.removeQueries({
-        queryKey: itineraryKeys.detail(Number(activityId)),
+        queryKey: itineraryKeys.detail(shareToken),
       });
-      await navigate({ to: "/a/$activityId", params: { activityId } });
+      await navigate({ to: "/a/$shareToken", params: { shareToken } });
     } catch (error) {
       const message =
         error instanceof ApiError ? error.message : "网络异常，请重试";

@@ -154,6 +154,7 @@ async function startAppProcesses(envPath: string, databaseUrl?: string) {
     new Set([serverPort, webPort]),
   );
   const webOrigin = `http://localhost:${webPort}`;
+  const h5Origin = `http://localhost:${h5Port}`;
 
   if (serverPort !== requestedServerPort) {
     console.log(
@@ -179,6 +180,9 @@ async function startAppProcesses(envPath: string, databaseUrl?: string) {
     SERVER_HOST: DEV_SERVER_HOST,
     WEB_PORT: String(webPort),
     H5_PORT: String(h5Port),
+    // 管理端生成的是 H5 的绝对分享链接；端口漂移时同样要同步，不能让链接还
+    // 指向 .env 里的默认 3001。
+    H5_URL: h5Origin,
     // WEB_ORIGIN / BETTER_AUTH_URL 只跟**管理端**走：Better Auth 服务的是管理端
     // 那套邮箱密码登录，h5 是另一套身份体系，不进 trustedOrigins。
     WEB_ORIGIN: webOrigin,
@@ -235,9 +239,7 @@ async function startAppProcesses(envPath: string, databaseUrl?: string) {
 
   // 两条路径都挂着免密入口，所以两条都要提示。持久库里未必有种子账号，
   // 那种情况下这个入口会返回一段说明为什么失败的文案，而不是静默 404。
-  console.log(
-    `[dev] 管理端 ${webOrigin}，免密登录 ${webOrigin}/api/dev/login`,
-  );
+  console.log(`[dev] 管理端 ${webOrigin}，免密登录 ${webOrigin}/api/dev/login`);
   console.log(`[dev] h5 http://localhost:${h5Port}`);
 
   return [serverProcess, webProcess, h5Process];
@@ -250,7 +252,9 @@ let stopDatabase: (() => Promise<void>) | undefined;
 if (usePersistentDb) {
   await startPersistentDb();
   await migratePersistentDb(envPath);
-  console.log("[dev] 使用持久库（docker-compose），只跑迁移，不 push 也不灌种子");
+  console.log(
+    "[dev] 使用持久库（docker-compose），只跑迁移，不 push 也不灌种子",
+  );
 } else {
   const database = await startEphemeralPostgres(repoRoot);
   databaseUrl = database.url;

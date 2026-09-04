@@ -1,12 +1,24 @@
-import { and, count, desc, eq, gte, ilike, lte, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  gte,
+  ilike,
+  isNull,
+  lte,
+  sql,
+} from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../../infra/db";
+import { getH5BaseUrl } from "../../infra/h5-url";
 import { toLimitOffset } from "../../shared/pagination";
 import { err, ok } from "../../shared/result";
 import { jsonBody } from "../../shared/validate";
 import { activitySegment } from "../agenda/schema";
 import { type AuthedVariables, requireUser } from "../auth";
 import { activity, project } from "./schema";
+import { createItineraryShareToken } from "./share-token";
 import {
   ActivityIdInput,
   CreateActivityInput,
@@ -111,8 +123,69 @@ const isForeignKeyViolation = (error: unknown): boolean => {
   );
 };
 
+/** Drizzle 可能把 Postgres 的唯一约束错误包在 cause 里，需要递归检查。 */
+const isUniqueViolation = (error: unknown): boolean => {
+  if (typeof error !== "object" || error === null) return false;
+  const { code, cause } = error as { code?: unknown; cause?: unknown };
+  return code === "23505" || (cause !== undefined && isUniqueViolation(cause));
+};
+
 const activityNotFound = () =>
   err({ code: "NOT_FOUND" as const, message: "活动不存在" });
+
+/**
+ * 返回已有分享 token，或仅在首次分享时原子地写入一个新的。
+ *
+ * 不用「读到 null 就直接 update」：两个管理员同时点分享时，后到的请求会被
+ * `isNull` 条件挡住，再读到先到请求写下的同一个 token。唯一索引处理极低概率
+ * 的跨活动碰撞；单条 SQL 失败不会污染后续重试。
+ */
+async function getOrCreateItineraryShareToken(
+  activityId: number,
+  userId: string,
+): Promise<string | null> {
+  const [existing] = await db
+    .select({ token: activity.itineraryShareToken })
+    .from(activity)
+    .where(eq(activity.id, activityId));
+
+  if (!existing) return null;
+  if (existing.token) return existing.token;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const [created] = await db
+        .update(activity)
+        .set({
+          itineraryShareToken: createItineraryShareToken(),
+          updatedBy: userId,
+        })
+        .where(
+          and(
+            eq(activity.id, activityId),
+            isNull(activity.itineraryShareToken),
+          ),
+        )
+        .returning({ token: activity.itineraryShareToken });
+
+      if (created?.token) return created.token;
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error;
+    }
+
+    // 没有更新到通常意味着并发请求已先写入；每条语句使用新的 Read Committed
+    // 快照，因此这里能读到对方已经提交的稳定 token。
+    const [raced] = await db
+      .select({ token: activity.itineraryShareToken })
+      .from(activity)
+      .where(eq(activity.id, activityId));
+
+    if (!raced) return null;
+    if (raced.token) return raced.token;
+  }
+
+  throw new Error("生成行程分享链接失败，请重试");
+}
 
 // 项目平台的日期筛选按中国大陆业务时区计算整日边界，而不是按运行容器的
 // 时区解析 YYYY-MM-DD，避免部署环境时区变化导致日期筛选偏移一天。
@@ -349,6 +422,30 @@ export const activityRoutes = new Hono<{ Variables: AuthedVariables }>()
       .where(eq(activity.id, c.req.valid("json").id));
 
     return row ? c.json(ok(row)) : c.json(activityNotFound());
+  })
+
+  /**
+   * 取得活动的 H5 行程分享链接。
+   *
+   * 老活动首次调用会生成并保存一个 12 位随机 token；以后始终返回同一链接，
+   * 不在浏览器路径里暴露连续的活动 id。H5 的公开域名由运行时 `H5_URL` 配置，
+   * 让同一个管理端镜像能部署到不同环境。
+   */
+  .post("/shareItinerary", jsonBody(ActivityIdInput), async (c) => {
+    // 先校验配置再写库：部署漏配时不应留下一个用户根本拿不到的 token。
+    const h5BaseUrl = getH5BaseUrl();
+    const token = await getOrCreateItineraryShareToken(
+      c.req.valid("json").id,
+      c.get("authedUser").id,
+    );
+
+    if (!token) return c.json(activityNotFound());
+
+    return c.json(
+      ok({
+        url: new URL(`/a/${token}`, h5BaseUrl.origin).toString(),
+      }),
+    );
   })
 
   .post("/create", jsonBody(CreateActivityInput), async (c) => {

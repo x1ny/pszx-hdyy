@@ -10,53 +10,53 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AActivityIdIndexRouteImport } from './routes/a/$activityId/index'
-import { Route as AActivityIdPhoneRouteImport } from './routes/a/$activityId/phone'
+import { Route as AShareTokenIndexRouteImport } from './routes/a/$shareToken/index'
+import { Route as AShareTokenPhoneRouteImport } from './routes/a/$shareToken/phone'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AActivityIdIndexRoute = AActivityIdIndexRouteImport.update({
-  id: '/a/$activityId/',
-  path: '/a/$activityId/',
+const AShareTokenIndexRoute = AShareTokenIndexRouteImport.update({
+  id: '/a/$shareToken/',
+  path: '/a/$shareToken/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AActivityIdPhoneRoute = AActivityIdPhoneRouteImport.update({
-  id: '/a/$activityId/phone',
-  path: '/a/$activityId/phone',
+const AShareTokenPhoneRoute = AShareTokenPhoneRouteImport.update({
+  id: '/a/$shareToken/phone',
+  path: '/a/$shareToken/phone',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/a/$activityId/phone': typeof AActivityIdPhoneRoute
-  '/a/$activityId/': typeof AActivityIdIndexRoute
+  '/a/$shareToken/phone': typeof AShareTokenPhoneRoute
+  '/a/$shareToken/': typeof AShareTokenIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/a/$activityId/phone': typeof AActivityIdPhoneRoute
-  '/a/$activityId': typeof AActivityIdIndexRoute
+  '/a/$shareToken/phone': typeof AShareTokenPhoneRoute
+  '/a/$shareToken': typeof AShareTokenIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/a/$activityId/phone': typeof AActivityIdPhoneRoute
-  '/a/$activityId/': typeof AActivityIdIndexRoute
+  '/a/$shareToken/phone': typeof AShareTokenPhoneRoute
+  '/a/$shareToken/': typeof AShareTokenIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/a/$activityId/phone' | '/a/$activityId/'
+  fullPaths: '/' | '/a/$shareToken/phone' | '/a/$shareToken/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/a/$activityId/phone' | '/a/$activityId'
-  id: '__root__' | '/' | '/a/$activityId/phone' | '/a/$activityId/'
+  to: '/' | '/a/$shareToken/phone' | '/a/$shareToken'
+  id: '__root__' | '/' | '/a/$shareToken/phone' | '/a/$shareToken/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AActivityIdPhoneRoute: typeof AActivityIdPhoneRoute
-  AActivityIdIndexRoute: typeof AActivityIdIndexRoute
+  AShareTokenPhoneRoute: typeof AShareTokenPhoneRoute
+  AShareTokenIndexRoute: typeof AShareTokenIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -68,18 +68,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/a/$activityId/': {
-      id: '/a/$activityId/'
-      path: '/a/$activityId'
-      fullPath: '/a/$activityId/'
-      preLoaderRoute: typeof AActivityIdIndexRouteImport
+    '/a/$shareToken/': {
+      id: '/a/$shareToken/'
+      path: '/a/$shareToken'
+      fullPath: '/a/$shareToken/'
+      preLoaderRoute: typeof AShareTokenIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/a/$activityId/phone': {
-      id: '/a/$activityId/phone'
-      path: '/a/$activityId/phone'
-      fullPath: '/a/$activityId/phone'
-      preLoaderRoute: typeof AActivityIdPhoneRouteImport
+    '/a/$shareToken/phone': {
+      id: '/a/$shareToken/phone'
+      path: '/a/$shareToken/phone'
+      fullPath: '/a/$shareToken/phone'
+      preLoaderRoute: typeof AShareTokenPhoneRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -87,8 +87,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AActivityIdPhoneRoute: AActivityIdPhoneRoute,
-  AActivityIdIndexRoute: AActivityIdIndexRoute,
+  AShareTokenPhoneRoute: AShareTokenPhoneRoute,
+  AShareTokenIndexRoute: AShareTokenIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

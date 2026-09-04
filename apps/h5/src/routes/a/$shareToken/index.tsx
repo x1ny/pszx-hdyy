@@ -26,31 +26,33 @@ import { itineraryQueryOptions } from "./-queries";
  * 本身就是判断。而且它顺带保证了前端守卫和服务端守卫永远同一个口径 ——
  * 前端不可能因为自己那份判断写歪了而放行一个服务端会拒绝的人。
  */
-export const Route = createFileRoute("/a/$activityId/")({
+export const Route = createFileRoute("/a/$shareToken/")({
   loader: async ({ context, params }) => {
-    const activityId = Number(params.activityId);
-    // `/a/abc` 这类乱填的路径。不去请求接口，直接 404。
-    if (!Number.isInteger(activityId) || activityId <= 0) throw notFound();
+    const { shareToken } = params;
 
     try {
       await context.queryClient.ensureQueryData(
-        itineraryQueryOptions(activityId),
+        itineraryQueryOptions(shareToken),
       );
     } catch (error) {
       // redirect 是靠 throw 实现的，被 catch 接住就失效了 —— 现在 try 块里只有
       // 一个请求、不会抛 redirect，但重构时很容易往里加东西，先挡住。
       if (isRedirect(error)) throw error;
 
+      if (error instanceof ApiError && error.code === "NOT_FOUND") {
+        throw notFound();
+      }
+
       if (error instanceof ApiError && error.code === H5_UNAUTHORIZED) {
         throw redirect({
-          to: "/a/$activityId/phone",
-          params: { activityId: params.activityId },
+          to: "/a/$shareToken/phone",
+          params: { shareToken },
         });
       }
       throw error;
     }
 
-    return { activityId };
+    return { shareToken };
   },
   component: ItineraryPage,
   errorComponent: () => (
@@ -69,8 +71,8 @@ export const Route = createFileRoute("/a/$activityId/")({
  * 头图卡下方留一道很脏的接缝。
  */
 function ItineraryPage() {
-  const { activityId } = Route.useLoaderData();
-  const { data } = useSuspenseQuery(itineraryQueryOptions(activityId));
+  const { shareToken } = Route.useLoaderData();
+  const { data } = useSuspenseQuery(itineraryQueryOptions(shareToken));
 
   return (
     <ToastLayer>

@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { maskMobile, resolveActivityMemberQuery } from "./auth";
+import {
+  maskMobile,
+  resolveActivityMemberQuery,
+  resolveH5ActivityQuery,
+} from "./auth";
 import {
   itineraryCarsQuery,
   itineraryContactQuery,
@@ -39,6 +43,16 @@ describe("resolveActivityMemberQuery —— 手机号换人员", () => {
     // 要命，而且只在共用电话的那几户身上出现。
     expect(rendered.sql).toContain('order by "activity_member"."id" asc');
     expect(rendered.sql).toContain("limit");
+  });
+});
+
+describe("resolveH5ActivityQuery —— 分享 token 换活动", () => {
+  const rendered = resolveH5ActivityQuery("Z1rj6i-L0_qA").toSQL();
+
+  test("只按数据库里的短分享 token 查活动，不读取连续 id", () => {
+    expect(rendered.sql).toContain('"activity"."itinerary_share_token" =');
+    expect(rendered.params).toContain("Z1rj6i-L0_qA");
+    expect(rendered.sql).not.toContain('"activity"."id" =');
   });
 });
 

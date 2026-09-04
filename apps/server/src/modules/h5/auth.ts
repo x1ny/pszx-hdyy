@@ -5,6 +5,7 @@ import { createMiddleware } from "hono/factory";
 import { db } from "../../infra/db";
 import { err } from "../../shared/result";
 import { activityMember, member } from "../member/schema";
+import { activity } from "../project/schema";
 
 /**
  * h5 公众端的身份。**这不是 Better Auth，两套身份体系完全独立。**
@@ -34,7 +35,13 @@ export type H5Member = {
   name: string;
 };
 
-export type H5Variables = { h5Member: H5Member };
+/** 由公开分享 token 解析出的活动上下文；内部 id 不会回传给浏览器。 */
+export type H5Activity = { id: number };
+
+export type H5Variables = {
+  h5Activity: H5Activity;
+  h5Member: H5Member;
+};
 
 /** `138****8888`。和管理端 member/-utils.ts 的 maskPhone 同一个形状。 */
 export const maskMobile = (mobile: string) =>
@@ -98,20 +105,41 @@ export async function resolveActivityMember(
 }
 
 /**
- * body 里的 activityId。
+ * 分享 token → 活动。
+ *
+ * 一个 token 只对应一个活动（数据库唯一索引兜底），而旧活动的 token 为 null；
+ * 管理端第一次分享时才补齐，所以这里查不到就是失效或尚未生成的链接。
+ */
+export const resolveH5ActivityQuery = (shareToken: string) =>
+  db
+    .select({ id: activity.id })
+    .from(activity)
+    .where(eq(activity.itineraryShareToken, shareToken))
+    .limit(1);
+
+export async function resolveH5Activity(
+  shareToken: string,
+): Promise<H5Activity | null> {
+  const [row] = await resolveH5ActivityQuery(shareToken);
+  return row ?? null;
+}
+
+/**
+ * body 里的 shareToken。
  *
  * `HonoRequest` 缓存解析后的 body，所以这里读一次不影响后面 `zValidator`
- * 再读一次 —— 两者拿到同一个对象。这份依赖是有意的：把 activityId 的解析
- * 收在中间件里，业务 handler 才不需要各自再写一遍"这个人是不是这个活动的"。
+ * 再读一次 —— 两者拿到同一个对象。这份依赖是有意的：把活动解析收在中间件里，
+ * 业务 handler 才不需要各自再写一遍"这个人是不是这个活动的"。
  * 万一缓存行为变了，表现是**每个 h5 请求都失败**，响亮且立刻发现。
  */
-async function readActivityId(c: Context): Promise<number | null> {
+async function readShareToken(c: Context): Promise<string | null> {
   const body = (await c.req.json().catch(() => null)) as {
-    activityId?: unknown;
+    shareToken?: unknown;
   } | null;
-  const raw = body?.activityId;
-  const id = typeof raw === "string" ? Number(raw) : raw;
-  return typeof id === "number" && Number.isInteger(id) && id > 0 ? id : null;
+  const raw = body?.shareToken;
+  if (typeof raw !== "string") return null;
+  const token = raw.trim();
+  return token && token.length <= 64 ? token : null;
 }
 
 /**
@@ -124,6 +152,19 @@ async function readActivityId(c: Context): Promise<number | null> {
  */
 export const requireH5Member = createMiddleware<{ Variables: H5Variables }>(
   async (c, next) => {
+    const shareToken = await readShareToken(c);
+    if (shareToken === null) {
+      return c.json(err({ code: "VALIDATION_ERROR", message: "缺少分享标识" }));
+    }
+
+    // 先查链接再看 cookie：失效链接应当是 404，而不是先把人送去输手机号。
+    const h5Activity = await resolveH5Activity(shareToken);
+    if (!h5Activity) {
+      return c.json(
+        err({ code: "NOT_FOUND", message: "活动不存在或链接已失效" }),
+      );
+    }
+
     const mobile = getCookie(c, H5_COOKIE_NAME);
     if (!mobile) {
       return c.json(
@@ -131,14 +172,7 @@ export const requireH5Member = createMiddleware<{ Variables: H5Variables }>(
       );
     }
 
-    const activityId = await readActivityId(c);
-    if (activityId === null) {
-      return c.json(
-        err({ code: "VALIDATION_ERROR", message: "缺少 activityId" }),
-      );
-    }
-
-    const found = await resolveActivityMember(activityId, mobile);
+    const found = await resolveActivityMember(h5Activity.id, mobile);
     if (!found) {
       // 回传脱敏号码，前端才能把话说具体："当前 138****8888 不在本活动名单"。
       // 前端读不到 HttpOnly cookie，这句话只能由服务端给。
@@ -151,6 +185,7 @@ export const requireH5Member = createMiddleware<{ Variables: H5Variables }>(
       );
     }
 
+    c.set("h5Activity", h5Activity);
     c.set("h5Member", found);
     await next();
   },

@@ -1,10 +1,7 @@
-import { eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { db } from "../../infra/db";
 import { err, ok } from "../../shared/result";
 import { jsonBody } from "../../shared/validate";
-import { activity } from "../project/schema";
-import { resolveActivityMember, setH5Cookie } from "./auth";
+import { resolveActivityMember, resolveH5Activity, setH5Cookie } from "./auth";
 import { SubmitPhoneInput } from "./validation";
 
 /**
@@ -22,23 +19,21 @@ export const h5AccessRoutes = new Hono()
    * 给前端做过渡文案用的，页面稍后会从行程接口再拿一次权威值。
    */
   .post("/submitPhone", jsonBody(SubmitPhoneInput), async (c) => {
-    const { activityId, mobile } = c.req.valid("json");
+    const { shareToken, mobile } = c.req.valid("json");
 
-    // 这里**没有** publishStatus / displayEnabled 的过滤，是产品决定的：活动
-    // id 是连续自增的，换个数字就能试出未发布活动的存在。代价是管理端那个
-    // "H5 展示"开关（activity.display_enabled）目前没有任何读取方 —— 运营关掉
-    // 它，h5 照常展示。这不是漏了，要收紧就在下面这个 where 里加条件。
-    const [found] = await db
-      .select({ id: activity.id })
-      .from(activity)
-      .where(eq(activity.id, activityId))
-      .limit(1);
+    // 这里**没有** publishStatus / displayEnabled 的过滤，是产品决定的：随机
+    // 分享 token 只是隐藏连续 id 的公开地址，不替代展示开关。代价是管理端的
+    // "H5 展示"开关目前没有任何读取方 —— 运营关掉它，已分享的链接照常展示。
+    // 这不是漏了；要收紧就在 resolveH5Activity 的查询里加条件。
+    const found = await resolveH5Activity(shareToken);
 
     if (!found) {
-      return c.json(err({ code: "NOT_FOUND", message: "活动不存在或已结束" }));
+      return c.json(
+        err({ code: "NOT_FOUND", message: "活动不存在或链接已失效" }),
+      );
     }
 
-    const memberRow = await resolveActivityMember(activityId, mobile);
+    const memberRow = await resolveActivityMember(found.id, mobile);
     if (!memberRow) {
       // 号不存在 / 不在本活动 / 已被禁用，一律同一句话。区分了会把"这个号在不在
       // 系统里"变成可探测信号，而三种情况对用户的下一步动作完全一样（找主办方）。

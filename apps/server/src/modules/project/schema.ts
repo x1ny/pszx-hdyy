@@ -151,6 +151,11 @@ export const activity = pgTable(
       .notNull()
       .default(false),
 
+    // 对外分享路径不能泄露连续的 activity id。旧数据保持 null；第一次点击
+    // 「分享行程链接」时才由服务端补一个稳定 token，之后始终复用同一条链接。
+    // 这只是不可枚举的公开地址，不替代未来 H5 身份体系的权限校验。
+    itineraryShareToken: text("itinerary_share_token"),
+
     createdBy: text("created_by").references(() => user.id, {
       onDelete: "set null",
     }),
@@ -182,6 +187,12 @@ export const activity = pgTable(
     // project_id。(id) 已是主键，再加 (id, project_id) 近乎零成本。
     // 同 activity_agenda_line 的 uk_agenda_line_id_activity。
     unique("uk_activity_id_project").on(table.id, table.projectId),
+
+    // Postgres 的 unique index 允许多行 NULL，所以存量活动可以继续没有 token；
+    // 一旦首次分享生成了值，数据库负责保证它不会指向两个活动。
+    uniqueIndex("uk_activity_itinerary_share_token").on(
+      table.itineraryShareToken,
+    ),
   ],
 );
 

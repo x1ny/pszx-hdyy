@@ -155,6 +155,10 @@ export const createActivity = (values: ActivityFormValues) =>
 export const updateActivity = (values: UpdateActivityValues) =>
   unwrap(api.api.activity.update.$post({ json: values }));
 
+/** 首次调用会由服务端为存量活动补齐并持久化短分享 token。 */
+export const shareActivityItinerary = (id: number) =>
+  unwrap(api.api.activity.shareItinerary.$post({ json: { id } }));
+
 export const deleteActivity = (id: number) =>
   unwrap(api.api.activity.delete.$post({ json: { id } }));
 
