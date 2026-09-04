@@ -303,3 +303,51 @@ export function seatRenderSpec(screenPitchPx: number): SeatRenderSpec {
  */
 export const scaleForPitch = (worldPitch: number, targetPitchPx: number) =>
   worldPitch > 0 ? targetPitchPx / worldPitch : 1;
+
+/**
+ * 把一个排位方案的座位和分配翻译成画布/导出图认识的 `seatStatus`。
+ *
+ * 抽出来是因为有了第二个消费方：环节配置页要在页面里嵌一张**只读**的座位图。
+ * 两边各写一遍的话，"停用的位置画不画成灰的""团体占位用哪个颜色"这类判断迟早
+ * 分叉，然后同一个方案在两个页面上长得不一样。
+ */
+export function buildPlanSeatStatus(input: {
+  seats: readonly {
+    id: number;
+    externalId: string;
+    enabled: boolean;
+  }[];
+  assignments: readonly {
+    segmentSeatId: number;
+    occupantType: SeatOccupantVisualInput["occupantType"];
+    memberName: SeatOccupantVisualInput["memberName"];
+    organizationId: SeatOccupantVisualInput["organizationId"];
+    organizationName: SeatOccupantVisualInput["organizationName"];
+  }[];
+}): ReadonlyMap<string, { occupant?: SeatOccupantVisual; disabled?: boolean }> {
+  const bySeatId = new Map(
+    input.assignments.map((row) => [row.segmentSeatId, row]),
+  );
+
+  const map = new Map<
+    string,
+    { occupant?: SeatOccupantVisual; disabled?: boolean }
+  >();
+
+  for (const seat of input.seats) {
+    const assignment = bySeatId.get(seat.id);
+    map.set(seat.externalId, {
+      occupant: assignment
+        ? buildSeatOccupantVisual({
+            occupantType: assignment.occupantType,
+            memberName: assignment.memberName,
+            organizationId: assignment.organizationId,
+            organizationName: assignment.organizationName,
+          })
+        : undefined,
+      disabled: !seat.enabled,
+    });
+  }
+
+  return map;
+}

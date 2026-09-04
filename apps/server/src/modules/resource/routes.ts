@@ -7,7 +7,6 @@ import {
   exists,
   ilike,
   inArray,
-  notInArray,
   or,
   sql,
 } from "drizzle-orm";
@@ -20,13 +19,19 @@ import { activitySegment } from "../agenda/schema";
 import { type AuthedVariables, requireUser } from "../auth";
 import { activityMember, member } from "../member/schema";
 import {
+  checkDemandsLinkable,
+  demandFields,
+  lockWritableSegment,
+  replaceDemandLinks,
+  replaceSegmentDemands,
+  resourceFields,
+} from "./demands";
+import {
   activityResource,
   deriveDemandStatus,
   resourceDemandLink,
   resourceMemberBinding,
-  RESOURCE_TYPE_LABELS,
   segmentResourceDemand,
-  type ResourceType,
 } from "./schema";
 import {
   activeResourceCount,
@@ -47,9 +52,6 @@ import {
   UpdateResourceInput,
 } from "./validation";
 
-/** 事务句柄。drizzle 没导出这个类型，从 db.transaction 的回调参数上取。 */
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
 const validationError = (message: string) =>
   err({ code: "VALIDATION_ERROR" as const, message });
 
@@ -59,17 +61,6 @@ const notFound = (what: string) =>
 // ---------------------------------------------------------------------------
 // 环节资源需求项
 // ---------------------------------------------------------------------------
-
-const demandFields = {
-  id: segmentResourceDemand.id,
-  activityId: segmentResourceDemand.activityId,
-  segmentId: segmentResourceDemand.segmentId,
-  resourceType: segmentResourceDemand.resourceType,
-  handling: segmentResourceDemand.handling,
-  description: segmentResourceDemand.description,
-  estimatedCount: segmentResourceDemand.estimatedCount,
-  ownerName: segmentResourceDemand.ownerName,
-};
 
 export const resourceDemandRoutes = new Hono<{ Variables: AuthedVariables }>()
   .use(requireUser)
@@ -134,81 +125,29 @@ export const resourceDemandRoutes = new Hono<{ Variables: AuthedVariables }>()
       // activityId 不从入参取——它必须等于环节自己的 activity_id，
       // 让前端传等于给了它传错的机会（表上的复合外键会挡住，但报出来是
       // 一条 Postgres 约束错误）。
-      const [segment] = await tx
-        .select({
-          activityId: activitySegment.activityId,
-          status: activitySegment.status,
-        })
-        .from(activitySegment)
-        .where(eq(activitySegment.id, segmentId))
-        // 锁住环节这一行：整体替换是"先删后插"，两个并发请求交叉执行会
-        // 互相删掉对方刚插入的行。锁在环节粒度，不同环节互不阻塞。
-        .for("update");
-
-      if (!segment) return { kind: "notFound" as const };
-
-      // 作废环节不再接受新的资源需求声明。文档 §8.2 对环节作废的定义是
-      // "不再进入新排位"，同一口径下也不该再产生新的资源待办——它的需求项
-      // 本来就被 isOpenTodo 过滤在待办之外，改了也是死数据。
       //
-      // 前端已经把作废行的"资源需求"按钮藏掉了，这里再挡一次：UI 只是不给
-      // 入口，不是约束。
-      if (segment.status === "voided") {
-        return {
-          kind: "invalid" as const,
-          message: "环节已作废，不能再维护它的资源需求",
-        };
+      // 前端已经把作废行的"资源需求"按钮藏掉了，lockWritableSegment 里再挡
+      // 一次：UI 只是不给入口，不是约束。
+      const segment = await lockWritableSegment(tx, segmentId);
+      if (!segment.ok) {
+        return segment.message === null
+          ? { kind: "notFound" as const }
+          : { kind: "invalid" as const, message: segment.message };
       }
 
-      const keepTypes = demands.map((d) => d.resourceType);
-
-      // 先删：本次没提交的类型 = 用户在弹窗里关掉的需求。
-      // link 表上 fk_link_demand_activity 带 cascade，关联关系跟着走。
-      await tx.delete(segmentResourceDemand).where(
-        and(
-          eq(segmentResourceDemand.segmentId, segmentId),
-          keepTypes.length > 0
-            ? notInArray(segmentResourceDemand.resourceType, keepTypes)
-            : undefined,
-        ),
-      );
-
-      if (demands.length === 0) return { kind: "ok" as const, rows: [] };
-
-      // 再 upsert。冲突键就是矩阵那条唯一约束——重复保存同一个环节时走更新，
-      // 不会因为"已经有一条用车需求"而报错。
-      const rows = await tx
-        .insert(segmentResourceDemand)
-        .values(
-          demands.map((d) => ({
-            ...d,
-            segmentId,
-            activityId: segment.activityId,
-            createdBy: userId,
-            updatedBy: userId,
-          })),
-        )
-        .onConflictDoUpdate({
-          target: [
-            segmentResourceDemand.segmentId,
-            segmentResourceDemand.resourceType,
-          ],
-          set: {
-            handling: sql`excluded.handling`,
-            description: sql`excluded.description`,
-            estimatedCount: sql`excluded.estimated_count`,
-            ownerName: sql`excluded.owner_name`,
-            updatedBy: userId,
-            updatedAt: new Date(),
-          },
-        })
-        .returning(demandFields);
+      const rows = await replaceSegmentDemands(tx, {
+        segmentId,
+        activityId: segment.activityId,
+        demands,
+        userId,
+      });
 
       return { kind: "ok" as const, rows };
     });
 
     if (result.kind === "notFound") return c.json(notFound("环节"));
-    if (result.kind === "invalid") return c.json(validationError(result.message));
+    if (result.kind === "invalid")
+      return c.json(validationError(result.message));
     return c.json(ok({ list: result.rows }));
   });
 
@@ -216,115 +155,21 @@ export const resourceDemandRoutes = new Hono<{ Variables: AuthedVariables }>()
 // 活动级资源台账
 // ---------------------------------------------------------------------------
 
-const resourceFields = {
-  id: activityResource.id,
-  activityId: activityResource.activityId,
-  resourceType: activityResource.resourceType,
-  transportScene: activityResource.transportScene,
-  name: activityResource.name,
-  quantity: activityResource.quantity,
-  startTime: activityResource.startTime,
-  endTime: activityResource.endTime,
-  location: activityResource.location,
-  vehicleInfo: activityResource.vehicleInfo,
-  driverName: activityResource.driverName,
-  driverPhone: activityResource.driverPhone,
-  ownerName: activityResource.ownerName,
-  remark: activityResource.remark,
-  status: activityResource.status,
-  createdAt: activityResource.createdAt,
-  updatedAt: activityResource.updatedAt,
-};
-
-/**
- * 校验这批需求项可以被这条资源满足。三件事一起查：
- *
- * 1. **同属一个活动**。表上的复合外键已经保证了这点，但违反时抛的是一条
- *    Postgres 约束错误，会穿过 index.ts 的 onError 变成 500——用户看到
- *    "服务器内部错误"，而这本该是一句人话。
- * 2. **资源类型一致**。一条"用车"需求只能由用车记录满足。不校验的话，把一条
- *    物料记录关联到用车需求上，那条需求立刻变成"已配置"——完整性检查报的是
- *    绿灯，实际那个环节的车根本没人管。这是最隐蔽的一种脏数据：状态是对的
- *    形状，内容是错的。
- * 3. **处理要求必须是"落实安排"**。`record_only` 按定义就不产生台账记录，
- *    deriveDemandStatus 对它连关联数都不看，硬关联上去只会攒出一份查不到、
- *    用不上的死数据。
- *
- * **必须在任何写入之前调用**——`/update` 曾经把它放在 UPDATE 之后，校验失败
- * 时事务照常提交，用户收到一句错误提示，但名称、时间、车辆已经改掉了，
- * 而关联没换。半提交比彻底失败更难查。
- */
-async function checkDemandsLinkable(
-  tx: Tx,
-  activityId: number,
-  resourceType: ResourceType,
-  demandIds: readonly number[],
-): Promise<string | null> {
-  if (demandIds.length === 0) return null;
-
-  const rows = await tx
-    .select({
-      id: segmentResourceDemand.id,
-      resourceType: segmentResourceDemand.resourceType,
-      handling: segmentResourceDemand.handling,
-    })
-    .from(segmentResourceDemand)
-    .where(
-      and(
-        inArray(segmentResourceDemand.id, [...demandIds]),
-        eq(segmentResourceDemand.activityId, activityId),
-      ),
-    );
-
-  if (rows.length !== demandIds.length) {
-    return "所选的环节资源需求不存在或不属于当前活动";
-  }
-
-  const mismatched = rows.find((row) => row.resourceType !== resourceType);
-  if (mismatched) {
-    return `资源类型与所选需求不一致：该需求要的是${RESOURCE_TYPE_LABELS[mismatched.resourceType]}`;
-  }
-
-  const recordOnly = rows.find((row) => row.handling !== "arrange");
-  if (recordOnly) {
-    return "处理要求为「仅记录需求」的需求项不需要关联资源记录";
-  }
-
-  return null;
-}
-
-/** 整体替换一条资源记录关联的需求项。调用前须已通过 checkDemandsBelong。 */
-async function replaceDemandLinks(
-  tx: Tx,
-  resourceId: number,
-  activityId: number,
-  demandIds: readonly number[],
-  userId: string,
-) {
-  await tx
-    .delete(resourceDemandLink)
-    .where(eq(resourceDemandLink.resourceId, resourceId));
-
-  if (demandIds.length === 0) return;
-
-  await tx.insert(resourceDemandLink).values(
-    demandIds.map((demandId) => ({
-      demandId,
-      resourceId,
-      activityId,
-      createdBy: userId,
-    })),
-  );
-}
-
 export const activityResourceRoutes = new Hono<{
   Variables: AuthedVariables;
 }>()
   .use(requireUser)
 
   .post("/list", jsonBody(ListResourcesInput), async (c) => {
-    const { activityId, resourceType, transportScene, status, keyword, demandId, ...page } =
-      c.req.valid("json");
+    const {
+      activityId,
+      resourceType,
+      transportScene,
+      status,
+      keyword,
+      demandId,
+      ...page
+    } = c.req.valid("json");
 
     const keywordFilter = keyword
       ? or(
@@ -337,7 +182,9 @@ export const activityResourceRoutes = new Hono<{
 
     const where = and(
       eq(activityResource.activityId, activityId),
-      resourceType ? eq(activityResource.resourceType, resourceType) : undefined,
+      resourceType
+        ? eq(activityResource.resourceType, resourceType)
+        : undefined,
       transportScene
         ? eq(activityResource.transportScene, transportScene)
         : undefined,
@@ -366,7 +213,11 @@ export const activityResourceRoutes = new Hono<{
 
     const [list, [total]] = await Promise.all([
       db
-        .select({ ...resourceFields, linkedDemandCount, boundMemberCount: resourceMemberCount })
+        .select({
+          ...resourceFields,
+          linkedDemandCount,
+          boundMemberCount: resourceMemberCount,
+        })
         .from(activityResource)
         .where(where)
         // id DESC 而不是 updatedAt DESC：按更新时间排的话，编辑或作废会把
@@ -523,14 +374,21 @@ export const activityResourceRoutes = new Hono<{
           .where(eq(activityResource.id, id))
           .returning();
 
-        await replaceDemandLinks(tx, id, existing.activityId, demandIds, userId);
+        await replaceDemandLinks(
+          tx,
+          id,
+          existing.activityId,
+          demandIds,
+          userId,
+        );
 
         return { kind: "ok", row };
       },
     );
 
     if (result.kind === "notFound") return c.json(notFound("资源记录"));
-    if (result.kind === "invalid") return c.json(validationError(result.message));
+    if (result.kind === "invalid")
+      return c.json(validationError(result.message));
     return c.json(ok({ id: result.row.id }));
   })
 

@@ -1,5 +1,6 @@
 import { Loader2Icon, PlusIcon } from "lucide-react";
 import { useState } from "react";
+import type { AgendaLine, Segment } from "#/features/agenda/queries";
 import { Button } from "#/shared/components/ui/button.tsx";
 import {
   Dialog,
@@ -19,7 +20,6 @@ import {
   TableHeader,
   TableRow,
 } from "#/shared/components/ui/table.tsx";
-import type { AgendaLine, Segment } from "../-queries";
 
 /**
  * 议程线管理。刻意做得很薄：线只有名字和排序两个字段，用不着一套完整的

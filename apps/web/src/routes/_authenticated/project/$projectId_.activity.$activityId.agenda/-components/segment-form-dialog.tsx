@@ -1,6 +1,12 @@
 import { useForm } from "@tanstack/react-form";
 import { Loader2Icon } from "lucide-react";
 import { z } from "zod";
+import {
+  lineLabel,
+  SEGMENT_TYPE_LABELS,
+  SEGMENT_TYPE_VALUES,
+} from "#/features/agenda/labels";
+import type { AgendaLine, Segment } from "#/features/agenda/queries";
 import { toDateTimeLocalValue } from "#/features/project/utils";
 import { Button } from "#/shared/components/ui/button.tsx";
 import { Checkbox } from "#/shared/components/ui/checkbox.tsx";
@@ -28,8 +34,6 @@ import {
   SelectValue,
 } from "#/shared/components/ui/select.tsx";
 import { Textarea } from "#/shared/components/ui/textarea.tsx";
-import type { AgendaLine, Segment } from "../-queries";
-import { lineLabel, SEGMENT_TYPE_LABELS, SEGMENT_TYPE_VALUES } from "../-utils";
 
 // 镜像 apps/server/src/modules/agenda/validation.ts 的 SegmentFields，
 // 手抄一份的原因和边界见 supplier-form-dialog.tsx 顶部的说明。

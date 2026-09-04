@@ -1,3 +1,11 @@
+import {
+  lineLabel,
+  SEGMENT_STATUS_CHIP,
+  SEGMENT_STATUS_LABELS,
+  SEGMENT_TYPE_BADGE_CLASS,
+  SEGMENT_TYPE_LABELS,
+} from "#/features/agenda/labels";
+import type { AgendaLine, Segment } from "#/features/agenda/queries";
 import { formatDateTime } from "#/features/project/utils";
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
@@ -13,15 +21,7 @@ import {
 import { cn } from "#/shared/lib/utils.ts";
 import type { PlanStatus } from "../../-venue-queries";
 import { PLAN_STATUS_LABELS } from "../../-venue-utils";
-import type { AgendaLine, Segment } from "../-queries";
-import {
-  formatSegmentRange,
-  lineLabel,
-  SEGMENT_STATUS_CHIP,
-  SEGMENT_STATUS_LABELS,
-  SEGMENT_TYPE_BADGE_CLASS,
-  SEGMENT_TYPE_LABELS,
-} from "../-utils";
+import { formatSegmentRange } from "../-utils";
 
 const dayFormat = new Intl.DateTimeFormat("zh-CN", {
   year: "numeric",

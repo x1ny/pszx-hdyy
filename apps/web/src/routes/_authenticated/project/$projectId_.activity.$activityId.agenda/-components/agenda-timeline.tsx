@@ -1,4 +1,6 @@
 import { CalendarClockIcon } from "lucide-react";
+import { lineLabel, SEGMENT_TYPE_LABELS } from "#/features/agenda/labels";
+import type { Segment } from "#/features/agenda/queries";
 import type { ResourceDemand } from "#/features/resource/queries.ts";
 import {
   Empty,
@@ -9,11 +11,8 @@ import {
 } from "#/shared/components/ui/empty.tsx";
 import { cn } from "#/shared/lib/utils.ts";
 import type { PlanStatus } from "../../-venue-queries";
-import type { Segment } from "../-queries";
 import {
   formatTimelineBlockRange,
-  lineLabel,
-  SEGMENT_TYPE_LABELS,
   TIMELINE_PX_PER_MINUTE,
   type TimelineDay,
 } from "../-utils";

@@ -5,7 +5,10 @@
 // (zValidator's error hook) and uncaught exceptions (index.ts's onError).
 export type ApiError =
   | { code: "UNAUTHORIZED"; message: string }
-  | { code: "VALIDATION_ERROR"; message: string }
+  // `path` 是可选的字段定位，给**一次提交里含多个区块**的接口用（目前只有
+  // agenda 的 saveSegmentConfig）：环节配置页一屏四块、可能滚很长，一句
+  // "保存失败" 用户找不到是哪一格错了。单字段接口不用填，前端也不必处理。
+  | { code: "VALIDATION_ERROR"; message: string; path?: string }
   | { code: "NOT_FOUND"; message: string }
   | { code: "INTERNAL_ERROR"; message: string };
 

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import type { InferResponseType } from "hono/client";
 import { AlertCircleIcon, SearchIcon, UsersRoundIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FilterActions } from "#/shared/components/filter-bar.tsx";
@@ -49,6 +50,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "#/shared/components/ui/tabs.tsx";
+import type { ApiData, api } from "#/shared/lib/api";
 import { cn } from "#/shared/lib/utils.ts";
 import {
   getOrganizationConflictDetails,
@@ -77,6 +79,14 @@ export type PickerScope = {
   activityId?: number;
 };
 
+/**
+ * 候选列表的一行。草稿式调用方（环节配置页）确认后要用它把人显示在自己的
+ * 表格里，所以形状直接取候选接口的返回行，不另抄一份。
+ */
+export type PickedMember = ApiData<
+  InferResponseType<typeof api.api.member.candidates.$post>
+>["list"][number];
+
 export type OrganizationPickerConfig = {
   /** 由层级调用方明确说明会自动补齐哪些上层关系。 */
   hint: string;
@@ -104,6 +114,7 @@ export function MemberPickerDialog({
   organization,
   onOpenChange,
   onConfirm,
+  onConfirmRows,
   onCreateNew,
 }: {
   open: boolean;
@@ -119,6 +130,11 @@ export function MemberPickerDialog({
   organization?: OrganizationPickerConfig;
   onOpenChange: (open: boolean) => void;
   onConfirm: (memberIds: number[]) => void;
+  /**
+   * 草稿式调用方用这个：除了 id 还给整行，确认后能直接显示在自己的表格里。
+   * 和 onConfirm 一起触发，老调用方不受影响。
+   */
+  onConfirmRows?: (rows: PickedMember[]) => void;
   /** 传了就在普通选人模式底部提供“手动录入”出口。 */
   onCreateNew?: () => void;
 }) {
@@ -128,6 +144,9 @@ export function MemberPickerDialog({
   const [applied, setApplied] = useState("");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [selectedRows, setSelectedRows] = useState<Map<number, PickedMember>>(
+    new Map(),
+  );
 
   const [organizationId, setOrganizationId] = useState<number | null>(null);
   const [organizationKeyword, setOrganizationKeyword] = useState("");
@@ -150,6 +169,7 @@ export function MemberPickerDialog({
     setApplied("");
     setPage(1);
     setSelected(new Set());
+    setSelectedRows(new Map());
     setOrganizationId(null);
     setOrganizationKeyword("");
     setOrganizationApplied("");
@@ -286,15 +306,39 @@ export function MemberPickerDialog({
     excluded.has(candidate.id),
   ).length;
 
-  const toggle = (id: number) =>
+  /**
+   * 勾选时顺手把整行留下来。
+   *
+   * 只回 id 对"选完立刻提交"的调用方够用（服务端自己会查人），但草稿式的调用方
+   * （环节配置页）拿到 id 之后还要在表格里把人显示出来，而这时那一页候选可能
+   * 已经翻过去了——跨页选人时 `list` 里根本没有那几行。所以在勾选的当下就存，
+   * 那是唯一保证拿得到行数据的时机。
+   */
+  const remember = (
+    previous: Map<number, PickedMember>,
+    rows: readonly PickedMember[],
+    keep: boolean,
+  ) => {
+    const next = new Map(previous);
+    for (const row of rows) {
+      if (keep) next.set(row.id, row);
+      else next.delete(row.id);
+    }
+    return next;
+  };
+
+  const toggle = (candidate: PickedMember) => {
+    const picked = !selected.has(candidate.id);
     setSelected((previous) => {
       const next = new Set(previous);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (picked) next.add(candidate.id);
+      else next.delete(candidate.id);
       return next;
     });
+    setSelectedRows((previous) => remember(previous, [candidate], picked));
+  };
 
-  const togglePage = (checked: boolean) =>
+  const togglePage = (checked: boolean) => {
     setSelected((previous) => {
       const next = new Set(previous);
       for (const id of selectableIds) {
@@ -303,6 +347,14 @@ export function MemberPickerDialog({
       }
       return next;
     });
+    setSelectedRows((previous) =>
+      remember(
+        previous,
+        list.filter((row) => selectableIds.includes(row.id)),
+        checked,
+      ),
+    );
+  };
 
   const changeOrganization = (nextId: number | null) => {
     setOrganizationId(nextId);
@@ -488,14 +540,14 @@ export function MemberPickerDialog({
                             className={
                               already ? "opacity-50" : "cursor-pointer"
                             }
-                            onClick={() => !already && toggle(candidate.id)}
+                            onClick={() => !already && toggle(candidate)}
                           >
                             <TableCell>
                               <Checkbox
                                 checked={already || selected.has(candidate.id)}
                                 disabled={already}
                                 onCheckedChange={() => {
-                                  if (!already) toggle(candidate.id);
+                                  if (!already) toggle(candidate);
                                 }}
                                 onClick={(event) => event.stopPropagation()}
                               />
@@ -926,7 +978,15 @@ export function MemberPickerDialog({
               <Button
                 type="button"
                 disabled={selected.size === 0 || submitting}
-                onClick={() => onConfirm([...selected])}
+                onClick={() => {
+                  const ids = [...selected];
+                  onConfirmRows?.(
+                    ids
+                      .map((id) => selectedRows.get(id))
+                      .filter((row) => row !== undefined),
+                  );
+                  onConfirm(ids);
+                }}
               >
                 确定
               </Button>

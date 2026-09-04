@@ -132,6 +132,41 @@ export async function listSeatsBySegmentMember(
 }
 
 /**
+ * 同上，但一次问一批。
+ *
+ * 环节配置页是整页保存，一次提交里可能移除好几个人，逐个查等于把 N 次往返
+ * 塞进一个事务里。空数组直接短路——`inArray` 传空数组会生成 `in ()`，
+ * Postgres 直接语法错误。
+ */
+export async function listSeatsBySegmentMembers(
+  conn: Pick<typeof db, "select">,
+  segmentMemberIds: number[],
+) {
+  if (segmentMemberIds.length === 0) return [];
+
+  return conn
+    .select({
+      seatLabel: segmentSeat.label,
+      segmentName: activitySegment.name,
+    })
+    .from(seatAssignment)
+    .innerJoin(
+      segmentMember,
+      eq(segmentMember.id, seatAssignment.segmentMemberId),
+    )
+    .innerJoin(segmentSeat, eq(segmentSeat.id, seatAssignment.segmentSeatId))
+    .innerJoin(activitySegment, eq(activitySegment.id, segmentMember.segmentId))
+    .where(
+      and(
+        inArray(seatAssignment.segmentMemberId, segmentMemberIds),
+        eq(seatAssignment.occupantType, "person"),
+        live,
+      ),
+    )
+    .orderBy(asc(activitySegment.startTime));
+}
+
+/**
  * 要离开的环节人员若是其团体在该环节的最后一人，那个团体就不再处于环节范围。
  * 找出因此必须解除的**生效中**团体占位；被撤销的历史分配无需再参与范围校验。
  */

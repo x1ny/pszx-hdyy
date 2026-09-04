@@ -1,5 +1,13 @@
 import { CalendarClockIcon } from "lucide-react";
 import {
+  lineLabel,
+  SEGMENT_STATUS_CHIP,
+  SEGMENT_STATUS_LABELS,
+  SEGMENT_TYPE_BADGE_CLASS,
+  SEGMENT_TYPE_LABELS,
+} from "#/features/agenda/labels";
+import type { AgendaLine, Segment } from "#/features/agenda/queries";
+import {
   DEMAND_STATUS_CHIP,
   RESOURCE_TYPE_LABELS,
 } from "#/features/resource/labels.ts";
@@ -23,15 +31,7 @@ import {
 } from "#/shared/components/ui/table.tsx";
 import { cn } from "#/shared/lib/utils.ts";
 import type { PlanStatus } from "../../-venue-queries";
-import type { AgendaLine, Segment } from "../-queries";
-import {
-  formatSegmentRange,
-  lineLabel,
-  SEGMENT_STATUS_CHIP,
-  SEGMENT_STATUS_LABELS,
-  SEGMENT_TYPE_BADGE_CLASS,
-  SEGMENT_TYPE_LABELS,
-} from "../-utils";
+import { formatSegmentRange } from "../-utils";
 import { SegmentConfigIcons } from "./segment-config-icons";
 
 const dayFormat = new Intl.DateTimeFormat("zh-CN", {

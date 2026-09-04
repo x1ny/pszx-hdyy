@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AgendaLine, Segment } from "./-queries";
+import type { AgendaLine, Segment } from "#/features/agenda/queries";
 import {
   buildAgendaTimeline,
   buildSequenceLabels,

@@ -10,6 +10,19 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { lineLabel } from "#/features/agenda/labels";
+import {
+  type AgendaLine,
+  agendaKeys,
+  agendaQueryOptions,
+  createAgendaLine,
+  createSegment,
+  deleteAgendaLine,
+  type Segment,
+  setSegmentStatus,
+  updateAgendaLine,
+  updateSegment,
+} from "#/features/agenda/queries";
 import {
   segmentMemberConflictQueryOptions,
   segmentMemberKeys,
@@ -42,22 +55,9 @@ import {
 import { SegmentMembersDialog } from "./-components/segment-members-dialog";
 import { SegmentTable } from "./-components/segment-table";
 import {
-  type AgendaLine,
-  agendaKeys,
-  agendaQueryOptions,
-  createAgendaLine,
-  createSegment,
-  deleteAgendaLine,
-  type Segment,
-  setSegmentStatus,
-  updateAgendaLine,
-  updateSegment,
-} from "./-queries";
-import {
   buildAgendaTimeline,
   buildSequenceLabels,
   formatSegmentRange,
-  lineLabel,
 } from "./-utils";
 
 /**
@@ -311,6 +311,7 @@ function AgendaTab() {
     setEditing(segment);
     setFormOpen(true);
   };
+
 
   return (
     <div className="flex flex-col gap-4">

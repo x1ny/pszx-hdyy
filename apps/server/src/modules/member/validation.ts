@@ -138,7 +138,11 @@ const validateRegion = (
   }
 };
 
-const validateIdNumber = (
+/**
+ * 证件号格式校验。导出是给 agenda/validation.ts 的环节配置聚合入参用的——
+ * 那里的"手动录入"和这里的 AddNewSegmentMemberInput 是同一件事，规则必须同源。
+ */
+export const validateIdNumber = (
   value: { idType?: string | null; idNumber?: string | null },
   ctx: z.RefinementCtx,
 ) => {
@@ -294,7 +298,8 @@ const SegmentEntryOrigin = z
   .enum(["manual", "segment_reference"], { error: "录入渠道不正确" })
   .default("manual");
 
-const SegmentRoleEnum = z
+/** 空串收敛成 null（"请选择"那一项）。导出理由同 NewMemberFields。 */
+export const SegmentRoleEnum = z
   .enum(SEGMENT_MEMBER_ROLES, { error: "环节身份不正确" })
   .or(z.literal(""))
   .optional()
@@ -469,7 +474,7 @@ export const UpdateSegmentMemberInput = z.object({
  * 校验规则直接从 MemberFields 上 pick，不重写一份——手机号/证件号的正则只该
  * 有一个真相源，两处各写一遍迟早会漂移。
  */
-const NewMemberFields = MemberFields.pick({
+export const NewMemberFields = MemberFields.pick({
   name: true,
   gender: true,
   companyPosition: true,

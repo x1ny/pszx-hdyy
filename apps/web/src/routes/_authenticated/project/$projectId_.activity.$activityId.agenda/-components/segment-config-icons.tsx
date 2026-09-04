@@ -9,6 +9,7 @@ import {
   UsersRoundIcon,
   UtensilsIcon,
 } from "lucide-react";
+import type { Segment } from "#/features/agenda/queries";
 import {
   DEMAND_STATUS_LABELS,
   RESOURCE_TYPE_LABELS,
@@ -26,7 +27,6 @@ import {
 import { cn } from "#/shared/lib/utils.ts";
 import type { PlanStatus } from "../../-venue-queries";
 import { PLAN_STATUS_LABELS } from "../../-venue-utils";
-import type { Segment } from "../-queries";
 
 type ConfigIconItem = {
   key: string;
