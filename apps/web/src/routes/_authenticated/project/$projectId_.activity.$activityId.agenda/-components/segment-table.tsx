@@ -49,6 +49,7 @@ export function SegmentTable({
   pendingStatusId,
   onDetail,
   onEdit,
+  onConfigure,
   onToggleStatus,
   onManageDemands,
 }: {
@@ -64,6 +65,13 @@ export function SegmentTable({
   pendingStatusId?: number;
   onDetail: (segment: Segment) => void;
   onEdit: (segment: Segment) => void;
+  /**
+   * 新版环节配置页（基础信息 + 人员 + 资源 + 排位，整页原子保存）。
+   *
+   * 和左边那几个旧入口**并存**，不是替换：新版先给一部分人在真实数据上试，
+   * 稳定后再收敛到只剩这一个入口，把四个弹窗组件一起删掉。
+   */
+  onConfigure: (segment: Segment) => void;
   onToggleStatus: (segment: Segment) => void;
   onManageDemands: (segment: Segment) => void;
 }) {
@@ -212,6 +220,14 @@ export function SegmentTable({
                         onClick={() => onEdit(segment)}
                       >
                         修改
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-primary hover:text-primary"
+                        onClick={() => onConfigure(segment)}
+                      >
+                        新版配置
                       </Button>
                       {/* 作废环节不给配资源：它已经不在议程上了，配了也不
                           进待办（isOpenTodo 会把它过滤掉） */}

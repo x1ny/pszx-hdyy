@@ -312,6 +312,23 @@ function AgendaTab() {
     setFormOpen(true);
   };
 
+  /**
+   * 新版环节配置页（四块合一、整页原子保存）。
+   *
+   * 和上面那两个弹窗入口**并存**——新版先给一部分人在真实数据上试，稳定后再
+   * 把旧入口和四个弹窗组件一起删掉。两条路写的是同一批表、过同一套约束，所以
+   * 并存本身是安全的；真正的前提是新页面发的是"意图"而不是"目标状态"，
+   * 否则草稿放久了一保存就会覆盖别人在旧弹窗里做的改动（见 -draft.ts）。
+   */
+  const openConfigPage = (segmentId: string) =>
+    navigate({
+      to: "/project/$projectId/activity/$activityId/agenda/$segmentId",
+      params: {
+        projectId: projectIdParam,
+        activityId: activityIdParam,
+        segmentId,
+      },
+    });
 
   return (
     <div className="flex flex-col gap-4">
@@ -380,6 +397,10 @@ function AgendaTab() {
           )}
           <Button variant="outline" onClick={() => setLineDialogOpen(true)}>
             议程线管理
+          </Button>
+          <Button variant="outline" onClick={() => openConfigPage("new")}>
+            <PlusIcon />
+            新增环节（新版）
           </Button>
           <Button onClick={openCreate}>
             <PlusIcon />
@@ -452,6 +473,7 @@ function AgendaTab() {
           }
           onDetail={setDetail}
           onEdit={openEdit}
+          onConfigure={(segment) => openConfigPage(String(segment.id))}
           onToggleStatus={(segment) => statusMutation.mutate(segment)}
           onManageDemands={setDemandSegment}
         />

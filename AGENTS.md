@@ -43,6 +43,14 @@ Before editing files for a substantial task:
 
 **新模块记得在 `apps/server/src/dev-seed/` 加一个带数字前缀的种子文件**，不加的话新页面在临时库里永远是空的、没法调（见下面"开发调试"）。
 
+## 环节配置：新旧两套入口并存中
+
+环节现在有**两条编辑路径**，有意并存不是遗留：旧的四个弹窗，和新的单页 `agenda/$segmentId`（四块合一、整页原子保存）。两边写同一批表。
+
+**改之前必须知道**：新页面的人员/绑定发的是**增量意图**（`add`/`remove`/`unbindIds`）而非完整名单，改成"发目标状态"会让草稿一保存就静默覆盖别人在旧弹窗里的改动——这是两套入口能并存的唯一前提。另有两条写入顺序硬约束（环节先于人员、需求先于资源），写反不报错只出怪结果，见 `agenda/segment-config.ts` 顶部。
+
+背景、代价、**收敛旧入口时该删哪些文件**见 [docs/architecture-decisions.md](docs/architecture-decisions.md#环节配置合并为单页整页原子保存)。
+
 ## 仓库结构
 
 Bun workspaces monorepo，三个包：
