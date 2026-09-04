@@ -34,6 +34,7 @@ import { SeatingSection } from "./-components/seating-section";
 import {
   addManualMember,
   addNewResource,
+  addOrganizationMembers,
   addPickedMembers,
   bindMemberToResource,
   buildSavePayload,
@@ -349,6 +350,9 @@ function SegmentConfigPage() {
           })
         }
         onAddPicked={(rows) => update(addPickedMembers(draft, rows))}
+        onAddByOrganization={({ organizationId, rows }) =>
+          update(addOrganizationMembers(draft, organizationId, rows))
+        }
         onAddManual={(member) => update(addManualMember(draft, member))}
         onRemove={(key) => update(removeMember(draft, key))}
         onRoleChange={(key, role) => update(setMemberRole(draft, key, role))}
@@ -440,10 +444,7 @@ function SegmentConfigPage() {
         </div>
       </div>
 
-      <AlertDialog
-        open={cancelConfirmOpen}
-        onOpenChange={setCancelConfirmOpen}
-      >
+      <AlertDialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>确认取消编辑？</AlertDialogTitle>

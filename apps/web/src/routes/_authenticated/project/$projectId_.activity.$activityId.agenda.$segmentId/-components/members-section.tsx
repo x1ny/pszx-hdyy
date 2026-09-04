@@ -2,6 +2,7 @@ import { PlusIcon, UsersRoundIcon } from "lucide-react";
 import { useState } from "react";
 import {
   MemberPickerDialog,
+  type OrganizationPickerSelection,
   type PickedMember,
 } from "#/features/member/member-picker-dialog.tsx";
 import { MemberQuickCreateDialog } from "#/features/member/member-quick-create-dialog.tsx";
@@ -46,9 +47,8 @@ const ROLE_ITEMS = [
  * - **只有「环节身份」可编辑。** 来源 / 团体 / 负责人显示的是 COALESCE 之后的
  *   值（环节层没填就取活动层），标「继承」。环节级覆盖是少数情况，先不给入口，
  *   免得运营在两层之间反复横跳还搞不清哪个生效。
- * - **「按团体添加」不在这里。** 它的冲突检测（历史异团体快照）是服务端在
- *   写入事务里做的，草稿模式下没法预演；硬把它展开成一批个人会**绕过那道
- *   检查**。要按团体加，去活动人员页或旧的环节人员弹窗。
+ * - **「按团体添加」也走草稿。** 选择器复用环节人员弹窗已有的团体候选和批处理
+ *   规则，选中的人员先进入草稿，整页保存时再在同一个事务里做历史快照冲突检查。
  * - 选人和手动录入沿用现成的 MemberPickerDialog / MemberQuickCreateDialog，
  *   只是把"确认后立刻提交"换成"确认后进草稿"。
  */
@@ -59,6 +59,7 @@ export function MembersSection({
   activityId,
   onToggle,
   onAddPicked,
+  onAddByOrganization,
   onAddManual,
   onRemove,
   onRoleChange,
@@ -69,6 +70,7 @@ export function MembersSection({
   activityId: number;
   onToggle: (checked: boolean) => void;
   onAddPicked: (rows: PickedMember[]) => void;
+  onAddByOrganization: (selection: OrganizationPickerSelection) => void;
   onAddManual: (member: NewMemberDraft) => void;
   onRemove: (key: string) => void;
   onRoleChange: (key: string, role: SegmentRoleDraft) => void;
@@ -193,7 +195,7 @@ export function MembersSection({
       <MemberPickerDialog
         open={pickerOpen}
         title="选择环节人员"
-        description="选中的人会先进入草稿，点页面底部的保存才真正写入。"
+        description="可按人员或团体选择；选中的人会先进入草稿，点页面底部的保存才真正写入。"
         scopes={[
           { value: "activity", label: "活动人员库", activityId },
           { value: "project", label: "项目人员库", projectId },
@@ -202,6 +204,10 @@ export function MembersSection({
         excludeIds={members
           .map((row) => row.memberId)
           .filter((id): id is number => id !== null)}
+        organization={{
+          hint: "按团体添加会先进入草稿；保存时会按所选团体校验历史快照，并在同一事务中补齐活动 / 项目关系。",
+          onConfirmRows: onAddByOrganization,
+        }}
         onOpenChange={setPickerOpen}
         onConfirmRows={(rows) => {
           onAddPicked(rows);

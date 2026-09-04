@@ -80,6 +80,15 @@ export type MemberDraft = {
   savedRole: SegmentRoleDraft | null;
 };
 
+/**
+ * 新版配置页里一次“按团体添加”的草稿意图。人员行仍然单独留在 `members` 中，
+ * 这样运营可以继续逐人设置环节身份；保存时再由服务端按这个团体批次做快照校验。
+ */
+export type OrganizationMemberAddDraft = {
+  organizationId: number;
+  memberIds: number[];
+};
+
 /** 手动录入的表单态：全部字符串，空串表示没填，提交时收敛。 */
 export type NewMemberDraft = {
   name: string;
@@ -149,6 +158,7 @@ export type DemandDraft = {
 export type ConfigDraft = {
   base: BaseDraft;
   members: MemberDraft[];
+  memberAddsByOrganization: OrganizationMemberAddDraft[];
   /** 从已保存名单里移除的环节关系 id。 */
   removedRelationIds: number[];
   demands: DemandDraft[];
@@ -214,6 +224,7 @@ export function createEmptyDraft(defaults?: Partial<BaseDraft>): ConfigDraft {
       ...defaults,
     },
     members: [],
+    memberAddsByOrganization: [],
     removedRelationIds: [],
     demands: RESOURCE_TYPE_VALUES.map(emptyDemand),
     nextKey: 1,
@@ -277,6 +288,7 @@ export function draftFromConfig(
       seatingEnabled: config.segment.seatingEnabled,
     },
     members: config.members.map(toMemberDraft),
+    memberAddsByOrganization: [],
     removedRelationIds: [],
     demands: RESOURCE_TYPE_VALUES.map((resourceType) => {
       const saved = byType.get(resourceType);
@@ -324,11 +336,10 @@ export function draftFromConfig(
 const nextKey = (draft: ConfigDraft, prefix: string) =>
   [`${prefix}${draft.nextKey}`, draft.nextKey + 1] as const;
 
-/** 从人员库选人加进草稿。已在名单里的跳过——重复添加没有意义。 */
-export function addPickedMembers(
+const appendPickedMembers = (
   draft: ConfigDraft,
   rows: readonly PickedMember[],
-): ConfigDraft {
+): { draft: ConfigDraft; addedIds: number[] } => {
   const known = new Set(
     draft.members
       .map((row) => row.memberId)
@@ -337,9 +348,11 @@ export function addPickedMembers(
 
   let counter = draft.nextKey;
   const added: MemberDraft[] = [];
+  const addedIds: number[] = [];
   for (const row of rows) {
     if (known.has(row.id)) continue;
     known.add(row.id);
+    addedIds.push(row.id);
     added.push({
       key: `n${counter}`,
       relationId: null,
@@ -360,10 +373,52 @@ export function addPickedMembers(
   }
 
   return {
-    ...draft,
-    members: [...draft.members, ...added],
-    nextKey: counter,
+    draft: {
+      ...draft,
+      members: [...draft.members, ...added],
+      nextKey: counter,
+    },
+    addedIds,
   };
+};
+
+/** 从人员库选人加进草稿。已在名单里的跳过——重复添加没有意义。 */
+export function addPickedMembers(
+  draft: ConfigDraft,
+  rows: readonly PickedMember[],
+): ConfigDraft {
+  return appendPickedMembers(draft, rows).draft;
+}
+
+/**
+ * 按团体把选中的人员加入草稿，同时记住这批人的团体意图。
+ *
+ * 人员行和批次同时保留：前者供页面展示和设置环节身份，后者供保存时复用服务端
+ * 已有的团体快照冲突检查，避免把团体操作悄悄降级成普通逐人添加。
+ */
+export function addOrganizationMembers(
+  draft: ConfigDraft,
+  organizationId: number,
+  rows: readonly PickedMember[],
+): ConfigDraft {
+  const appended = appendPickedMembers(draft, rows);
+  if (appended.addedIds.length === 0) return appended.draft;
+
+  const existing = appended.draft.memberAddsByOrganization.find(
+    (batch) => batch.organizationId === organizationId,
+  );
+  const memberAddsByOrganization = existing
+    ? appended.draft.memberAddsByOrganization.map((batch) =>
+        batch.organizationId === organizationId
+          ? { ...batch, memberIds: [...batch.memberIds, ...appended.addedIds] }
+          : batch,
+      )
+    : [
+        ...appended.draft.memberAddsByOrganization,
+        { organizationId, memberIds: appended.addedIds },
+      ];
+
+  return { ...appended.draft, memberAddsByOrganization };
 }
 
 /** 手动录入一个新人。主档在保存时才建（ladder 保证"先主档后关系"）。 */
@@ -411,6 +466,17 @@ export function removeMember(draft: ConfigDraft, key: string): ConfigDraft {
   return {
     ...draft,
     members: draft.members.filter((row) => row.key !== key),
+    memberAddsByOrganization:
+      target.memberId === null
+        ? draft.memberAddsByOrganization
+        : draft.memberAddsByOrganization
+            .map((batch) => ({
+              ...batch,
+              memberIds: batch.memberIds.filter(
+                (memberId) => memberId !== target.memberId,
+              ),
+            }))
+            .filter((batch) => batch.memberIds.length > 0),
     removedRelationIds:
       target.relationId === null
         ? draft.removedRelationIds
@@ -720,6 +786,33 @@ export function buildSavePayload(input: {
         ? mainLineId
         : Number(base.lineKey);
 
+  const organizationMemberIds = new Set(
+    draft.memberAddsByOrganization.flatMap((batch) => batch.memberIds),
+  );
+  const memberById = new Map(
+    draft.members.flatMap((row) =>
+      row.memberId === null ? [] : [[row.memberId, row] as const],
+    ),
+  );
+  const addByOrganization = draft.memberAddsByOrganization.flatMap((batch) => {
+    const entries = [...new Set(batch.memberIds)].flatMap((memberId) => {
+      const row = memberById.get(memberId);
+      if (row?.relationId !== null && row?.relationId !== undefined) return [];
+      if (row?.memberId === null || row === undefined) return [];
+      return [
+        {
+          tempKey: row.key,
+          memberId: row.memberId,
+          segmentRole: row.segmentRole,
+        },
+      ];
+    });
+
+    return entries.length > 0
+      ? [{ organizationId: batch.organizationId, entries }]
+      : [];
+  });
+
   return {
     activityId,
     segmentId,
@@ -741,7 +834,9 @@ export function buildSavePayload(input: {
       // flatMap 而不是 filter().map()：filter 的判定 TS 跟不进 map 里，
       // 写成后者就得靠断言把 null 压掉，而断言在过滤条件被改动时不会报错。
       add: draft.members.flatMap((row) =>
-        row.relationId === null && row.memberId !== null
+        row.relationId === null &&
+        row.memberId !== null &&
+        !organizationMemberIds.has(row.memberId)
           ? [
               {
                 tempKey: row.key,
@@ -751,6 +846,7 @@ export function buildSavePayload(input: {
             ]
           : [],
       ),
+      addByOrganization,
       // 手动录入的：带主档字段，服务端先建人再建三层关系。
       addNew: draft.members.flatMap((row) =>
         row.relationId === null && row.newMember !== null

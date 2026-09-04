@@ -1,6 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import type { z } from "zod";
 import {
+  addSegmentMembersByOrganization,
   createMemberInTx,
   ensureSegmentMembers,
   MemberLadderError,
@@ -84,6 +85,16 @@ const invalid = (message: string, path?: string): SaveSegmentConfigResult => ({
   message,
   path,
 });
+
+const organizationBatchConflictMessage = (
+  items: readonly { name: string; outcome: string }[],
+) => {
+  const names = items
+    .filter((item) => item.outcome === "skipped")
+    .map((item) => item.name)
+    .join("、");
+  return `按团体添加失败${names ? `：${names}` : ""}存在其他团体快照，请调整选择后重试`;
+};
 
 /**
  * 用异常把失败的编排结果带出事务。
@@ -302,6 +313,11 @@ export async function applySegmentConfig(
   for (const entry of members.add) {
     memberIdByTempKey.set(entry.tempKey, entry.memberId);
   }
+  for (const batch of members.addByOrganization) {
+    for (const entry of batch.entries) {
+      memberIdByTempKey.set(entry.tempKey, entry.memberId);
+    }
+  }
   for (const entry of members.addNew) {
     const newMemberId = await createMemberInTx(tx, entry.member, userId);
     memberIdByTempKey.set(entry.tempKey, newMemberId);
@@ -332,6 +348,35 @@ export async function applySegmentConfig(
       originType: "manual",
       userId,
     });
+  }
+
+  // 按团体的新增必须复用 ladder 的快照冲突规划，不能降级成上面的逐人 ensure。
+  // 这一步仍在整页事务里执行；发生冲突时返回 invalid，由路由层回滚整笔保存。
+  for (const batch of members.addByOrganization) {
+    const result = await addSegmentMembersByOrganization(tx, {
+      segmentId: realSegmentId,
+      organizationId: batch.organizationId,
+      memberIds: batch.entries.map((entry) => entry.memberId),
+      userId,
+    });
+
+    if (result.skipped > 0 || result.conflict > 0) {
+      return invalid(organizationBatchConflictMessage(result.items), "members");
+    }
+
+    // 团体批处理接口本身不需要环节身份；新版配置页允许在草稿里逐人设置，
+    // 因此在批处理成功后把这些意图写回刚加入/已存在的环节关系。
+    for (const entry of batch.entries) {
+      await tx
+        .update(segmentMember)
+        .set({ segmentRole: entry.segmentRole, updatedBy: userId })
+        .where(
+          and(
+            eq(segmentMember.segmentId, realSegmentId),
+            eq(segmentMember.memberId, entry.memberId),
+          ),
+        );
+    }
   }
 
   if (members.updateRoles.length > 0) {

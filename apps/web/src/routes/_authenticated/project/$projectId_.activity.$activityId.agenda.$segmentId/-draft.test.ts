@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addManualMember,
+  addOrganizationMembers,
   addPickedMembers,
   bindMemberToResource,
   buildSavePayload,
@@ -218,6 +219,31 @@ describe("人员意图", () => {
       },
     ]);
     expect(draft.members).toHaveLength(2);
+  });
+
+  it("按团体添加保留批次意图，并带上草稿里逐人设置的环节身份", () => {
+    const draft = addOrganizationMembers(load(), 7, [
+      {
+        id: 303,
+        name: "陈小敏",
+        companyPosition: "协会秘书长",
+        mobile: "13800000000",
+        organizationId: 7,
+      },
+    ]);
+    const withRole = setMemberRole(draft, "n1", "领导嘉宾");
+
+    expect(payload(withRole).members?.add).toEqual([]);
+    expect(payload(withRole).members?.addByOrganization).toEqual([
+      {
+        organizationId: 7,
+        entries: [{ tempKey: "n1", memberId: 303, segmentRole: "领导嘉宾" }],
+      },
+    ]);
+
+    expect(
+      payload(removeMember(withRole, "n1")).members?.addByOrganization,
+    ).toEqual([]);
   });
 
   it("手动录入的人走 addNew，带主档字段和同一个 tempKey", () => {

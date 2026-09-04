@@ -201,6 +201,25 @@ const SegmentConfigMembers = z.object({
     )
     .default([]),
 
+  /** 按团体选择的人员。批次留到整页保存时执行，以保留团体快照冲突校验。 */
+  addByOrganization: z
+    .array(
+      z.object({
+        organizationId: z.number().int().positive(),
+        entries: z
+          .array(
+            z.object({
+              tempKey,
+              memberId: id,
+              segmentRole: SegmentRoleEnum,
+            }),
+          )
+          .min(1, "请先选择人员")
+          .max(200, "一次最多添加 200 人"),
+      }),
+    )
+    .default([]),
+
   /** 手动录入的新人：先建主档，再补齐项目/活动/环节三层关系。 */
   addNew: z
     .array(
@@ -347,6 +366,7 @@ export const SaveSegmentConfigInput = z.object({
   newLineName: optionalText(64),
   members: SegmentConfigMembers.default({
     add: [],
+    addByOrganization: [],
     addNew: [],
     remove: [],
     updateRoles: [],

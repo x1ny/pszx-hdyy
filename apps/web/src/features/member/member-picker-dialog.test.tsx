@@ -1,7 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { MemberPickerDialog } from "./member-picker-dialog";
+import {
+  MemberPickerDialog,
+  type OrganizationPickerSelection,
+} from "./member-picker-dialog";
 import {
   memberCandidateQueryOptions,
   organizationMemberPickerKeys,
@@ -51,6 +54,7 @@ function renderPicker(
     skipped: 0,
     items: [],
   })),
+  onOrganizationConfirmRows?: (input: OrganizationPickerSelection) => void,
 ) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -94,6 +98,7 @@ function renderPicker(
         organization={{
           hint: "项目层无需补齐上层关系。",
           onConfirm: onOrganizationConfirm,
+          onConfirmRows: onOrganizationConfirmRows,
         }}
         onOpenChange={onOpenChange}
         onConfirm={vi.fn()}
@@ -180,6 +185,30 @@ describe("MemberPickerDialog organization mode", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "待加入的人" })).toBeChecked();
     expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it("草稿模式把选中的团体人员行交给调用方并关闭弹窗", async () => {
+    const onOrganizationConfirmRows = vi.fn();
+    const { onOpenChange, onOrganizationConfirm } = renderPicker(
+      undefined,
+      onOrganizationConfirmRows,
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "按团体添加" }));
+    chooseOption("协会甲");
+    await waitFor(() =>
+      expect(
+        screen.getByRole("checkbox", { name: "待加入的人" }),
+      ).toBeChecked(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "加入草稿 1 人" }));
+
+    expect(onOrganizationConfirmRows).toHaveBeenCalledWith({
+      organizationId: 7,
+      rows: [candidates[7][1]],
+    });
+    expect(onOrganizationConfirm).not.toHaveBeenCalled();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
   it("未配置团体模式的既有选择器保持单一人员流程", () => {

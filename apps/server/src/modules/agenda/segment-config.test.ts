@@ -38,6 +38,7 @@ describe("SaveSegmentConfigInput", () => {
     const parsed = SaveSegmentConfigInput.parse(baseInput);
     expect(parsed.members).toEqual({
       add: [],
+      addByOrganization: [],
       addNew: [],
       remove: [],
       updateRoles: [],

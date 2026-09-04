@@ -64,6 +64,7 @@ import {
   type CandidateScope,
   memberCandidateQueryOptions,
   type OrganizationBatchResult,
+  type OrganizationMemberCandidate,
   organizationMemberCandidatesQueryOptions,
   organizationOptionsQueryOptions,
 } from "./relation-queries";
@@ -87,14 +88,25 @@ export type PickedMember = ApiData<
   InferResponseType<typeof api.api.member.candidates.$post>
 >["list"][number];
 
+export type OrganizationPickerSelection = {
+  organizationId: number;
+  rows: OrganizationMemberCandidate[];
+};
+
 export type OrganizationPickerConfig = {
   /** 由层级调用方明确说明会自动补齐哪些上层关系。 */
   hint: string;
   submitting?: boolean;
-  onConfirm: (input: {
+  /** 立即提交的调用方（活动人员页、旧环节人员弹窗等）。 */
+  onConfirm?: (input: {
     organizationId: number;
     memberIds: number[];
   }) => Promise<OrganizationBatchResult>;
+  /**
+   * 草稿式调用方只接收选中的行，不在弹窗内写库。这样整页配置仍能保持一次保存，
+   * 同时不改变上面那些需要即时提交的调用方。
+   */
+  onConfirmRows?: (input: OrganizationPickerSelection) => void;
 };
 
 type PickerMode = "members" | "organization";
@@ -375,6 +387,19 @@ export function MemberPickerDialog({
       );
       return;
     }
+
+    if (organization.onConfirmRows) {
+      organization.onConfirmRows({
+        organizationId,
+        rows: organizationCandidates.filter((candidate) =>
+          organizationSelected.has(candidate.id),
+        ),
+      });
+      onOpenChange(false);
+      return;
+    }
+
+    if (!organization.onConfirm) return;
 
     setOrganizationSubmitError(undefined);
     setOrganizationResult(undefined);
@@ -1004,7 +1029,9 @@ export function MemberPickerDialog({
                 }
                 onClick={submitOrganization}
               >
-                按团体添加 {organizationSelected.size} 人
+                {organization?.onConfirmRows
+                  ? `加入草稿 ${organizationSelected.size} 人`
+                  : `按团体添加 ${organizationSelected.size} 人`}
               </Button>
             )}
           </div>
