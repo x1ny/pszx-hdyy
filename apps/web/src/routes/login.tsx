@@ -1,14 +1,47 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { AlertCircleIcon, Loader2Icon, LockIcon, MailIcon, SparkleIcon, UserIcon } from "lucide-react";
+import {
+  AlertCircleIcon,
+  Loader2Icon,
+  LockIcon,
+  MailIcon,
+  SparkleIcon,
+  UserIcon,
+} from "lucide-react";
 import { useState } from "react";
 import { authClient } from "#/features/auth/auth-client";
 import { sessionQueryKey } from "#/features/auth/queries";
 import { Alert, AlertDescription } from "#/shared/components/ui/alert.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/shared/components/ui/card.tsx";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "#/shared/components/ui/card.tsx";
 import { Input } from "#/shared/components/ui/input.tsx";
 import { Label } from "#/shared/components/ui/label.tsx";
+
+const AUTH_ERROR_MESSAGES: Record<string, string> = {
+  EMAIL_ALREADY_EXISTS: "该邮箱已注册",
+  INVALID_EMAIL: "邮箱格式不正确",
+  INVALID_EMAIL_OR_PASSWORD: "邮箱或密码错误",
+  PASSWORD_TOO_SHORT: "密码长度不足",
+  USER_ALREADY_EXISTS: "该邮箱已注册",
+  USER_ALREADY_EXISTS_USE_DIFFERENT_EMAIL: "该邮箱已注册，请换一个邮箱",
+};
+
+function getAuthErrorMessage(
+  authError: { code?: string; message?: string },
+  isSignUp: boolean,
+) {
+  if (authError.code && AUTH_ERROR_MESSAGES[authError.code]) {
+    return AUTH_ERROR_MESSAGES[authError.code];
+  }
+
+  return isSignUp ? "注册失败，请检查填写的信息" : "登录失败，请检查邮箱和密码";
+}
 
 export const Route = createFileRoute("/login")({
   validateSearch: (search: Record<string, unknown>): { redirect?: string } => ({
@@ -41,7 +74,7 @@ function Login() {
     setLoading(false);
 
     if (authError) {
-      setError(authError.message ?? "出错了,请重试");
+      setError(getAuthErrorMessage(authError, isSignUp));
       return;
     }
 
