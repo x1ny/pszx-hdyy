@@ -11,7 +11,7 @@ export function AppLayout({ user }: { user: { name: string; email: string } }) {
   return (
     <SidebarProvider>
       <AppSidebar />
-      <SidebarInset>
+      <SidebarInset className="min-w-0">
         {/*
          * 高度必须手动跟 SidebarHeader 对齐，组件不会帮你算：
          *   展开态 = p-2 + size="lg" 按钮(h-12) + p-2 = 64px → h-16

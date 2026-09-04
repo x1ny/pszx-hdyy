@@ -15,13 +15,15 @@ import {
 
 const MemberStatusEnum = z.enum(MEMBER_STATUSES, { error: "状态不正确" });
 const MemberGenderEnum = z
-  .enum(MEMBER_GENDERS, { error: "性别不正确" })
-  .or(z.literal(""))
+  .union([z.enum(MEMBER_GENDERS), z.literal("")], {
+    error: "性别不正确",
+  })
   .optional()
   .transform((value) => value || null);
 const MemberIdTypeEnum = z
-  .enum(MEMBER_ID_TYPES, { error: "证件类型不正确" })
-  .or(z.literal(""))
+  .union([z.enum(MEMBER_ID_TYPES), z.literal("")], {
+    error: "证件类型不正确",
+  })
   .optional()
   .transform((value) => value || null);
 const id = z.number().int().positive();
@@ -140,6 +142,24 @@ const validateIdNumber = (
   value: { idType?: string | null; idNumber?: string | null },
   ctx: z.RefinementCtx,
 ) => {
+  if (value.idType && !value.idNumber) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["idNumber"],
+      message: "请填写证件号码",
+    });
+    return;
+  }
+
+  if (!value.idType && value.idNumber) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["idType"],
+      message: "请先选择证件类型",
+    });
+    return;
+  }
+
   if (!value.idNumber) return;
 
   const rule = idNumberRule(value.idType);

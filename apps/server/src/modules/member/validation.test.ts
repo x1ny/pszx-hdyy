@@ -122,6 +122,27 @@ describe("CreateMemberInput 的团体绑定", () => {
   });
 });
 
+describe("CreateMemberInput 的证件完整性", () => {
+  test("证件类型和证件号码必须同时填写或同时留空", () => {
+    expect(
+      CreateMemberInput.safeParse({ ...base, idType: "身份证" }).success,
+    ).toBe(false);
+    expect(
+      CreateMemberInput.safeParse({
+        ...base,
+        idNumber: "330102199001011234",
+      }).success,
+    ).toBe(false);
+    expect(
+      CreateMemberInput.safeParse({
+        ...base,
+        idType: "身份证",
+        idNumber: "330102199001011234",
+      }).success,
+    ).toBe(true);
+  });
+});
+
 describe("ListMembersInput 的团体筛选", () => {
   test("接受正整数团体 ID，缺省时不过滤", () => {
     expect(

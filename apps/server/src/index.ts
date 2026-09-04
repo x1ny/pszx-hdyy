@@ -15,6 +15,7 @@ import { exampleRoutes } from "./modules/example/routes";
 import { fileRoutes } from "./modules/file/routes";
 import { invitationRoutes } from "./modules/invitation/routes";
 import { memberRoutes } from "./modules/member/routes";
+import { memberImportRoutes } from "./modules/member/routes.import";
 import {
   activityMemberRoutes,
   projectMemberRoutes,
@@ -141,6 +142,7 @@ export const routes = app
   .route("/api/supplierQuote", supplierQuoteRoutes)
   .route("/api/organization", organizationRoutes)
   .route("/api/member", memberRoutes)
+  .route("/api/member", memberImportRoutes)
   // 人员分层的三层关系各占一个前缀。它们和 /api/member 同属 modules/member
   // （三张关系表 + 补齐链路必须跟主档待在一个模块，否则 BR-DEV-026 的跨层
   // 事务会在 project/agenda 之间绕成循环依赖），但接口按层分开挂——查询条件、

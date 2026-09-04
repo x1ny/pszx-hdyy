@@ -1,11 +1,6 @@
 import { and, asc, count, desc, eq, ilike, ne, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../../infra/db";
-import {
-  findCity,
-  findCountryRegion,
-  findProvince,
-} from "../../shared/dict/regions";
 import { toLimitOffset } from "../../shared/pagination";
 import { err, ok } from "../../shared/result";
 import { jsonBody } from "../../shared/validate";
@@ -29,6 +24,7 @@ import {
   SetMemberStatusInput,
   UpdateMemberInput,
 } from "./validation";
+import { memberRegionNames } from "./values";
 
 /** 主档自身的列。`returning()` 只能用这一份——相关子查询在 RETURNING 里非法。 */
 const memberFields = {
@@ -54,22 +50,6 @@ const memberFields = {
   createdAt: member.createdAt,
   updatedAt: member.updatedAt,
 };
-
-/**
- * 把客户端传来的字典码翻成名字快照。
- *
- * 客户端**只传码**，名字一律在这里派生——两样都收，迟早出现码是 US、名字是
- * "中国"的行。码已经过 validation 的白名单校验，查不到就是 null。
- */
-const regionNames = (input: {
-  countryRegionCode: string | null;
-  nativeProvinceCode: string | null;
-  nativeCityCode: string | null;
-}) => ({
-  countryRegion: findCountryRegion(input.countryRegionCode)?.name ?? null,
-  nativeProvince: findProvince(input.nativeProvinceCode)?.name ?? null,
-  nativeCity: findCity(input.nativeCityCode)?.name ?? null,
-});
 
 /**
  * 读取用的投影：补当前团体名称和 activityCount。
@@ -515,7 +495,7 @@ export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
         .insert(member)
         .values({
           ...input,
-          ...regionNames(input),
+          ...memberRegionNames(input),
           createdBy: userId,
           updatedBy: userId,
         })
@@ -547,7 +527,7 @@ export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
         // 不在人员主档编辑时回写。
         .set({
           ...input,
-          ...regionNames(input),
+          ...memberRegionNames(input),
           updatedBy: c.get("authedUser").id,
         })
         .where(eq(member.id, id))

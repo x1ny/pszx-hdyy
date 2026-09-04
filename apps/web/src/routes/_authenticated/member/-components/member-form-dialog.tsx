@@ -109,6 +109,24 @@ const MemberFormSchema = z
     remark: z.string().trim().max(2000, "备注过长").optional(),
   })
   .superRefine((value, ctx) => {
+    if (value.idType && !value.idNumber) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["idNumber"],
+        message: "请填写证件号码",
+      });
+      return;
+    }
+
+    if (!value.idType && value.idNumber) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["idType"],
+        message: "请先选择证件类型",
+      });
+      return;
+    }
+
     if (!value.idNumber) return;
 
     const rule = getIdNumberValidationRule(value.idType);

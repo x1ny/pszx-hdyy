@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Building2Icon,
+  FileUpIcon,
   PlusIcon,
   SearchIcon,
   UsersRoundIcon,
@@ -33,7 +34,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "#/shared/components/ui/alert-dialog.tsx";
-import { Button } from "#/shared/components/ui/button.tsx";
+import { Button, buttonVariants } from "#/shared/components/ui/button.tsx";
 import {
   Empty,
   EmptyDescription,
@@ -232,6 +233,13 @@ function MemberPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            className={buttonVariants({ variant: "outline" })}
+            to="/member/import"
+          >
+            <FileUpIcon data-icon="inline-start" />
+            批量导入
+          </Link>
           <Button
             variant="outline"
             onClick={() => setOrganizationManagerOpen(true)}
