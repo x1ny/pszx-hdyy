@@ -137,6 +137,7 @@ function SegmentConfigPage() {
   const [seed, setSeed] = useState<ConfigDraft | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [confirmMessage, setConfirmMessage] = useState<string | null>(null);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
 
   /**
    * 数据到了就灌草稿。两条守卫缺一不可：
@@ -271,6 +272,21 @@ function SegmentConfigPage() {
         cascadeSeats,
       }),
     );
+  };
+
+  const handleCancel = () => {
+    if (!dirty) {
+      navigate({
+        to: "/project/$projectId/activity/$activityId/agenda",
+        params: {
+          projectId: params.projectId,
+          activityId: params.activityId,
+        },
+      });
+      return;
+    }
+
+    setCancelConfirmOpen(true);
   };
 
   const activityRange = activityQuery.data
@@ -408,8 +424,8 @@ function SegmentConfigPage() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => setDraft(seed)}
-            disabled={!dirty || saveMutation.isPending}
+            onClick={handleCancel}
+            disabled={saveMutation.isPending}
           >
             取消
           </Button>
@@ -423,6 +439,39 @@ function SegmentConfigPage() {
           </Button>
         </div>
       </div>
+
+      <AlertDialog
+        open={cancelConfirmOpen}
+        onOpenChange={setCancelConfirmOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认取消编辑？</AlertDialogTitle>
+            <AlertDialogDescription>
+              当前页面有未保存的内容，取消后这些内容将会丢失。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>继续编辑</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                setCancelConfirmOpen(false);
+                navigate({
+                  to: "/project/$projectId/activity/$activityId/agenda",
+                  params: {
+                    projectId: params.projectId,
+                    activityId: params.activityId,
+                  },
+                  ignoreBlocker: true,
+                });
+              }}
+            >
+              确认取消
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* 移除已排座的人 → 服务端拒绝并点名到座位号，确认后带 cascadeSeats 重来 */}
       <AlertDialog
