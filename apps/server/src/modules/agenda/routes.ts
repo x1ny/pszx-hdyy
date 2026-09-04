@@ -1,4 +1,4 @@
-import { asc, count, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../../infra/db";
 import { err, ok } from "../../shared/result";
@@ -67,6 +67,58 @@ const lineNotFound = () =>
 
 const invalid = (message: string) =>
   err({ code: "VALIDATION_ERROR" as const, message });
+
+/**
+ * 环节配置只展示当前有效的资源安排。
+ *
+ * 作废资源时需求关联会有意保留，恢复后仍能回到原来的需求下；因此这里不能靠
+ * 删除关联来隐藏，而要在读取侧明确限定 `status = active`。绑定名单走同一口径，
+ * 避免为不会展示的作废资源读取人员数据。
+ *
+ * 调用方已经保证 demandIds 非空，避免 drizzle 生成 `in ()`。
+ */
+export const listSegmentConfigResourcesQuery = (demandIds: number[]) =>
+  db
+    .select({
+      demandId: resourceDemandLink.demandId,
+      resource: resourceFields,
+    })
+    .from(resourceDemandLink)
+    .innerJoin(
+      activityResource,
+      and(
+        eq(activityResource.id, resourceDemandLink.resourceId),
+        eq(activityResource.status, "active"),
+      ),
+    )
+    .where(inArray(resourceDemandLink.demandId, demandIds))
+    .orderBy(asc(activityResource.id));
+
+export const listSegmentConfigResourceBindingsQuery = (demandIds: number[]) =>
+  db
+    .select({
+      id: resourceMemberBinding.id,
+      resourceId: resourceMemberBinding.resourceId,
+      activityMemberId: resourceMemberBinding.activityMemberId,
+      memberId: resourceMemberBinding.memberId,
+      name: member.name,
+      mobile: member.mobile,
+    })
+    .from(resourceDemandLink)
+    .innerJoin(
+      activityResource,
+      and(
+        eq(activityResource.id, resourceDemandLink.resourceId),
+        eq(activityResource.status, "active"),
+      ),
+    )
+    .innerJoin(
+      resourceMemberBinding,
+      eq(resourceMemberBinding.resourceId, activityResource.id),
+    )
+    .innerJoin(member, eq(member.id, resourceMemberBinding.memberId))
+    .where(inArray(resourceDemandLink.demandId, demandIds))
+    .orderBy(asc(resourceMemberBinding.id));
 
 export const agendaRoutes = new Hono<{ Variables: AuthedVariables }>()
   .use(requireUser)
@@ -438,38 +490,8 @@ export const agendaRoutes = new Hono<{ Variables: AuthedVariables }>()
     // 会生成 `in ()`，Postgres 直接语法错误。
     const [links, bindings] = demandIds.length
       ? await Promise.all([
-          db
-            .select({
-              demandId: resourceDemandLink.demandId,
-              resource: resourceFields,
-            })
-            .from(resourceDemandLink)
-            .innerJoin(
-              activityResource,
-              eq(activityResource.id, resourceDemandLink.resourceId),
-            )
-            .where(inArray(resourceDemandLink.demandId, demandIds))
-            .orderBy(asc(activityResource.id)),
-          db
-            .select({
-              id: resourceMemberBinding.id,
-              resourceId: resourceMemberBinding.resourceId,
-              activityMemberId: resourceMemberBinding.activityMemberId,
-              memberId: resourceMemberBinding.memberId,
-              name: member.name,
-              mobile: member.mobile,
-            })
-            .from(resourceMemberBinding)
-            .innerJoin(member, eq(member.id, resourceMemberBinding.memberId))
-            .innerJoin(
-              resourceDemandLink,
-              eq(
-                resourceDemandLink.resourceId,
-                resourceMemberBinding.resourceId,
-              ),
-            )
-            .where(inArray(resourceDemandLink.demandId, demandIds))
-            .orderBy(asc(resourceMemberBinding.id)),
+          listSegmentConfigResourcesQuery(demandIds),
+          listSegmentConfigResourceBindingsQuery(demandIds),
         ])
       : [[], []];
 
