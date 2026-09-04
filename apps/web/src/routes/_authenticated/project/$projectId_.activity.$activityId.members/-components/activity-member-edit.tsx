@@ -60,7 +60,10 @@ type ActivityMemberEditActions = {
     segmentIds: number[];
   }) => Promise<ActivityMemberSegmentSyncResult>;
   updateRelation: (
-    input: ReturnType<typeof toRelationInput> & { id: number },
+    input: ReturnType<typeof toRelationInput> & {
+      id: number;
+      ownerPhone?: string;
+    },
   ) => Promise<unknown>;
 };
 
@@ -80,6 +83,8 @@ export async function submitActivityMemberEdit(
     activityMemberId: number;
     segmentIds: number[];
     relation: RelationFormValues;
+    /** 负责人电话，选填，只有活动层有——见 relation-fields.tsx 里同名 prop 的注释。 */
+    ownerPhone?: string;
   },
   actions: ActivityMemberEditActions = defaultActivityMemberEditActions,
 ): Promise<ActivityMemberEditSaveResult> {
@@ -92,6 +97,7 @@ export async function submitActivityMemberEdit(
   try {
     await actions.updateRelation({
       id: input.activityMemberId,
+      ownerPhone: input.ownerPhone || undefined,
       ...toRelationInput(input.relation),
     });
   } catch (error) {

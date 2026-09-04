@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { PLACEHOLDER_CONTACT } from "../-placeholders";
 import type { ActivityInfo } from "../-queries";
 import { formatActivityDate } from "../-utils";
 import { EventDetailOverlay } from "./event-detail-overlay";
@@ -15,9 +14,10 @@ import { PhoneChip } from "./phone-chip";
  * 头图只回答「是什么活动、什么时候」。地点挪进了「活动详情」面板：下面每一场
  * 议程都自带更精确的地点，这里再放一个总的属于重复，还占掉首屏最值钱的位置。
  *
- * 现场联系人放在首屏、不用滚：嘉宾在门口找不到人时第一反应是找电话。**但它
- * 现在是占位** —— 库里没有联系人电话列，所以号码是脱敏形态且不可拨，见
- * `-placeholders.ts` 顶部那条规则。
+ * 现场联系人放在首屏、不用滚：嘉宾在门口找不到人时第一反应是找电话。它取的是
+ * **这个嘉宾自己的对接人**（`activity_member.owner_name` / `owner_phone`），
+ * 不是全场统一的咨询电话 —— 王芳和张三看到的是各自的号码。运营没填电话就整块
+ * 不渲染。
  */
 export function EventHero({
   userName,
@@ -90,18 +90,32 @@ export function EventHero({
           </div>
         )}
 
-        <div className="mt-2.5 flex items-center gap-2.5 rounded-xl border border-line bg-sunken px-2.5 py-2">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand">
-            <Icon name="user-round" size={15} />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-caption text-ink-3">现场联系人</span>
-            <span className="block truncate font-bold text-body text-ink-1">
-              {PLACEHOLDER_CONTACT.name}
+        {/* 没填对接人电话就整块不渲染 —— 一张只有名字、点不动的卡片对嘉宾没有
+            用处，它唯一的价值就是那个能拨出去的号码。服务端在 owner_phone 为空
+            时直接给 null，前端不做"有名字也显示"的降级。 */}
+        {activity.contact && (
+          <div className="mt-2.5 flex items-center gap-2.5 rounded-xl border border-line bg-sunken px-2.5 py-2">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand">
+              <Icon name="user-round" size={15} />
             </span>
-          </span>
-          <PhoneChip phone={PLACEHOLDER_CONTACT.phone} placeholder />
-        </div>
+            <span className="min-w-0 flex-1">
+              <span className="block text-caption text-ink-3">现场联系人</span>
+              {activity.contact.name && (
+                <span className="block truncate font-bold text-body text-ink-1">
+                  {activity.contact.name}
+                </span>
+              )}
+            </span>
+            <PhoneChip
+              phone={activity.contact.phone}
+              ariaLabel={
+                activity.contact.name
+                  ? `拨打现场联系人${activity.contact.name}的电话`
+                  : "拨打现场联系人电话"
+              }
+            />
+          </div>
+        )}
       </div>
 
       <EventDetailOverlay

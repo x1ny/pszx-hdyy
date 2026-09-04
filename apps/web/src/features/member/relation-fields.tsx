@@ -72,11 +72,21 @@ export function RelationFields({
   value,
   onChange,
   idPrefix = "rel",
+  ownerPhone,
 }: {
   value: RelationFormValues;
   onChange: (next: RelationFormValues) => void;
   /** 同一个页面可能同时挂着两个这样的表单（新增弹窗 + 编辑弹窗），id 得错开。 */
   idPrefix?: string;
+  /**
+   * 负责人电话，选填，只有活动层有——跟下面 `SegmentRoleField` 是同一个道理，
+   * 单独一个 prop 而不是塞进 `RelationFormValues`：那个类型三层共用，
+   * activity_member 之外没有 owner_phone 这一列（见 schema.ts 的注释），
+   * 环节层将来复用这个组件时不传这个 prop，字段就不会出现，不用改这个文件。
+   *
+   * 传了就跟"负责人"并排渲染成两列，呼应上面"来源/分组"那一行的排版。
+   */
+  ownerPhone?: { value: string; onChange: (next: string) => void };
 }) {
   const set = (patch: Partial<RelationFormValues>) =>
     onChange({ ...value, ...patch });
@@ -104,15 +114,30 @@ export function RelationFields({
         </Field>
       </div>
 
-      <Field>
-        <FieldLabel htmlFor={`${idPrefix}-owner`}>负责人</FieldLabel>
-        <Input
-          id={`${idPrefix}-owner`}
-          placeholder="如：王运营"
-          value={value.ownerName}
-          onChange={(event) => set({ ownerName: event.target.value })}
-        />
-      </Field>
+      <div className={ownerPhone ? "grid grid-cols-2 gap-4" : undefined}>
+        <Field>
+          <FieldLabel htmlFor={`${idPrefix}-owner`}>负责人</FieldLabel>
+          <Input
+            id={`${idPrefix}-owner`}
+            placeholder="如：王运营"
+            value={value.ownerName}
+            onChange={(event) => set({ ownerName: event.target.value })}
+          />
+        </Field>
+        {ownerPhone && (
+          <Field>
+            <FieldLabel htmlFor={`${idPrefix}-owner-phone`}>
+              负责人电话
+            </FieldLabel>
+            <Input
+              id={`${idPrefix}-owner-phone`}
+              placeholder="如：13800000000 或 010-12345678"
+              value={ownerPhone.value}
+              onChange={(event) => ownerPhone.onChange(event.target.value)}
+            />
+          </Field>
+        )}
+      </div>
 
       <Field>
         <FieldLabel htmlFor={`${idPrefix}-remark`}>备注</FieldLabel>

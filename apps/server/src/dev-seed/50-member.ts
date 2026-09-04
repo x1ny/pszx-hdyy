@@ -218,6 +218,14 @@ export const seed: SeedFn = async (db, { userId }) => {
       source: SOURCES[index % SOURCES.length],
       groupName: index < 4 ? "嘉宾组" : "工作组",
       ownerName: index < 4 ? "王芳" : "李强",
+      // 刻意每 4 人留 1 个不填（index % 4 === 3）：h5 行程页首屏的「现场联系人」
+      // 卡在这一列为空时要整块不渲染，种子若全灌满真号码，本地永远看不到那条
+      // 分支。这条规则正好落在刘洋（index 3）身上——调试时用他的手机号
+      // 13810000003 验证空态，用王芳 13810000000 验证有号码的正常态。
+      ownerPhone:
+        index % 4 === 3
+          ? null
+          : `137${String(20000000 + index).padStart(8, "0")}`,
       originType: "manual" as const,
       ...audit,
     })),

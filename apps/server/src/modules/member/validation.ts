@@ -284,6 +284,24 @@ const relationFields = {
 };
 
 /**
+ * 负责人（现场对接人）电话，选填，**只作用于活动层**——刻意不放进上面共用的
+ * `relationFields`：那个对象同时喂给环节层的入参 schema（AddSegmentMembersInput
+ * 的 entries、UpdateSegmentMemberInput），塞进去这一列会跟着漏到环节层的入参
+ * 里，而 segment_member 表根本没有这一列（原因见 schema.ts 里 ownerPhone 的
+ * 注释）。所以这里单独定义，只在下面三个活动层 schema 里逐个铺开。
+ *
+ * 现场用，手机、座机都要能填。人员主档已有的两条规则各管一半：`mobile` 只认
+ * 1 开头 11 位，`phone` 只认 0 开头的座机格式（如 010-12345678）——单独复用
+ * 任何一条都会拒掉另一种真实存在的号码，所以这里把两条正则合并成一条，而不是
+ * 照字面只搬 `phone`。
+ */
+const ownerPhone = optionalPattern(
+  /^(1\d{10}|0\d{2,3}-?\d{7,8})$/,
+  "请输入正确的手机号或电话号码，如 13800000000 或 010-12345678",
+  32,
+);
+
+/**
  * 入口标记。originType 整体是系统生成的（R-003），但"这批人是从哪个选择器进来
  * 的"只有客户端知道，所以由客户端传一个**收窄过的**子集，服务端再补齐剩下的
  * 值（backfill_from_* 永远由 ladder 自己写，客户端传不了）。
@@ -366,6 +384,7 @@ export const AddActivityMembersInput = z.object({
   // 批量套用同一组关系字段——原型 activity-members.html 的"新增活动人员"弹窗
   // 就是一组表单配一次多选，不是每人一行。环节层才需要逐行填，见下面。
   ...relationFields,
+  ownerPhone,
 });
 
 export const AddActivityMembersByOrganizationInput = z.object({
@@ -377,6 +396,7 @@ export const AddActivityMembersByOrganizationInput = z.object({
 export const UpdateActivityMemberInput = z.object({
   id,
   ...relationFields,
+  ownerPhone,
 });
 
 /**
@@ -493,6 +513,7 @@ export const AddNewActivityMemberInput = z
     activityId: id,
     member: NewMemberFields,
     ...relationFields,
+    ownerPhone,
   })
   .superRefine((value, ctx) => validateIdNumber(value.member, ctx));
 

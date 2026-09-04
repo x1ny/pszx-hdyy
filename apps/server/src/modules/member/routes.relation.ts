@@ -495,6 +495,7 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
           source: activityMember.source,
           groupName: activityMember.groupName,
           ownerName: activityMember.ownerName,
+          ownerPhone: activityMember.ownerPhone,
           originType: activityMember.originType,
           remark: activityMember.remark,
           createdAt: activityMember.createdAt,
@@ -550,6 +551,7 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
         source: activityMember.source,
         groupName: activityMember.groupName,
         ownerName: activityMember.ownerName,
+        ownerPhone: activityMember.ownerPhone,
         originType: activityMember.originType,
         remark: activityMember.remark,
       })

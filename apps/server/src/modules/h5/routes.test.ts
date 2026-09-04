@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { maskMobile, resolveActivityMemberQuery } from "./auth";
 import {
   itineraryCarsQuery,
+  itineraryContactQuery,
   itineraryHeroQuery,
   itinerarySeatsQuery,
   itinerarySegmentsQuery,
@@ -125,6 +126,29 @@ describe("交通两个来源各自的范围", () => {
 
   test("用车走 inner join，没绑人的资源不会漏给所有人", () => {
     expect(itineraryCarsQuery(9).toSQL().sql).not.toContain("left join");
+  });
+});
+
+describe("itineraryContactQuery —— 现场联系人按活动人员关系取", () => {
+  const rendered = itineraryContactQuery(9).toSQL();
+
+  test("按 activity_member_id 查，不是按 member_id", () => {
+    // 同一个人在别的活动里可能挂着不同的对接人。按 member_id 查的话，会把
+    // 那场活动的联系人串进这场活动的页面——同到离行程、用车两个查询一样的坑。
+    expect(rendered.sql).toContain('"activity_member"."id" =');
+    expect(rendered.params).toContain(9);
+  });
+
+  test("只取 owner_name / owner_phone 两列，不把整行发给浏览器", () => {
+    // 单表 select 时 drizzle 出的是不带表名前缀的列名（同 itinerarySegmentsQuery
+    // 和 itineraryTripsQuery），所以这里断言的是 select 列表本身的样子。
+    expect(rendered.sql).toStartWith(
+      'select "owner_name", "owner_phone" from "activity_member"',
+    );
+    // 这一行上还挂着 remark、source、groupName 这些只给运营看的字段，一个都不能
+    // 跟着发到公众端去。
+    expect(rendered.sql).not.toContain("remark");
+    expect(rendered.sql).not.toContain("source");
   });
 });
 

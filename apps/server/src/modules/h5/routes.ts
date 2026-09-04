@@ -4,7 +4,7 @@ import { db } from "../../infra/db";
 import { err, ok } from "../../shared/result";
 import { jsonBody } from "../../shared/validate";
 import { activitySegment } from "../agenda/schema";
-import { segmentMember } from "../member/schema";
+import { activityMember, segmentMember } from "../member/schema";
 import { activity, activityMedia } from "../project/schema";
 import { activityResource, resourceMemberBinding } from "../resource/schema";
 import {
@@ -161,6 +161,27 @@ export const itineraryCarsQuery = (activityMemberId: number) =>
     .orderBy(asc(activityResource.startTime), asc(activityResource.id));
 
 /**
+ * 现场联系人：这个嘉宾在**这场活动**里的对接人，从 `activity_member.owner_name`
+ * / `owner_phone` 直接取。
+ *
+ * 按 `activityMemberId` 查，不是按 `memberId`——同一个人在别的活动里可能挂着
+ * 不同的对接人，按 memberId 查会把那场活动的联系人串进这场活动的页面（同
+ * itineraryTripsQuery / itineraryCarsQuery 的道理，见各自注释）。
+ *
+ * 只取活动层：环节层没有这一列（schema.ts 里 activityMember.ownerPhone 的
+ * 注释），行程页也不区分环节，一个人在一场活动里只看到一个联系人。
+ */
+export const itineraryContactQuery = (activityMemberId: number) =>
+  db
+    .select({
+      ownerName: activityMember.ownerName,
+      ownerPhone: activityMember.ownerPhone,
+    })
+    .from(activityMember)
+    .where(eq(activityMember.id, activityMemberId))
+    .limit(1);
+
+/**
  * 头图取画廊第一张图，走 /api/file/:fileId —— 那条路刻意没挂 requireUser，
  * 免登录取得到（见 index.ts 里 file 模块那段注释）。没有媒体就不渲染头图。
  */
@@ -214,16 +235,25 @@ export const h5Routes = new Hono<{ Variables: H5Variables }>()
       return c.json(err({ code: "NOT_FOUND", message: "活动不存在" }));
     }
 
-    // 五个查询互不依赖，并发发出去省掉四个往返。
-    const [segments, seatRows, trips, cars, heroRows] = await Promise.all([
-      itinerarySegmentsQuery(activityId, me.memberId),
-      itinerarySeatsQuery(activityId, me.memberId),
-      itineraryTripsQuery(me.activityMemberId),
-      itineraryCarsQuery(me.activityMemberId),
-      itineraryHeroQuery(activityId),
-    ]);
+    // 六个查询互不依赖，并发发出去省掉五个往返。
+    const [segments, seatRows, trips, cars, heroRows, contactRows] =
+      await Promise.all([
+        itinerarySegmentsQuery(activityId, me.memberId),
+        itinerarySeatsQuery(activityId, me.memberId),
+        itineraryTripsQuery(me.activityMemberId),
+        itineraryCarsQuery(me.activityMemberId),
+        itineraryHeroQuery(activityId),
+        itineraryContactQuery(me.activityMemberId),
+      ]);
     const hero = heroRows[0];
     const seatBySegment = new Map(seatRows.map((row) => [row.segmentId, row]));
+
+    // ownerPhone 为空/空白时整块不给：前端拿到 null 就不渲染联系人卡，而不是
+    // 渲染一张没有电话可拨的卡片。
+    const contactPhone = contactRows[0]?.ownerPhone?.trim();
+    const contact = contactPhone
+      ? { name: contactRows[0]?.ownerName ?? null, phone: contactPhone }
+      : null;
 
     const organizers = [
       { role: "主办单位", name: activityRow.hostOrg },
@@ -243,6 +273,7 @@ export const h5Routes = new Hono<{ Variables: H5Variables }>()
           paragraphs: toParagraphs(activityRow.description),
           organizers,
           heroFileId: hero?.fileId ?? null,
+          contact,
         },
         agenda: segments.map((segment) => {
           const assigned = seatBySegment.get(segment.id);

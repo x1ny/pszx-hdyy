@@ -1,13 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import {
   AddActivityMembersByOrganizationInput,
+  AddActivityMembersInput,
   AddProjectMembersByOrganizationInput,
   AddSegmentMembersByOrganizationInput,
+  AddSegmentMembersInput,
   CreateMemberInput,
   ListActivityMembersInput,
   ListMembersInput,
   ListOrganizationMemberCandidatesInput,
   SyncActivityMemberSegmentsInput,
+  UpdateActivityMemberInput,
+  UpdateSegmentMemberInput,
 } from "./validation";
 
 const base = { name: "王芳" };
@@ -271,5 +275,66 @@ describe("活动人员参与环节同步输入", () => {
         segmentIds: [0],
       }).success,
     ).toBe(false);
+  });
+});
+
+/**
+ * 活动人员的现场联系人电话：选填，且现场用要同时认手机号和座机——单独复用
+ * member.mobile 或 member.phone 任一条正则都会拒掉另一种真实存在的号码，
+ * 见 validation.ts 里 ownerPhone 常量的注释。
+ */
+describe("活动人员 ownerPhone", () => {
+  test("手机号和座机格式都能通过", () => {
+    expect(
+      UpdateActivityMemberInput.safeParse({ id: 1, ownerPhone: "13800001234" })
+        .success,
+    ).toBe(true);
+    expect(
+      UpdateActivityMemberInput.safeParse({
+        id: 1,
+        ownerPhone: "010-12345678",
+      }).success,
+    ).toBe(true);
+  });
+
+  test("选填，不传或空串都合法，且落到 null", () => {
+    expect(UpdateActivityMemberInput.parse({ id: 1 }).ownerPhone).toBeNull();
+    expect(
+      UpdateActivityMemberInput.parse({ id: 1, ownerPhone: "" }).ownerPhone,
+    ).toBeNull();
+  });
+
+  test("格式不对的号码拒绝", () => {
+    expect(
+      UpdateActivityMemberInput.safeParse({ id: 1, ownerPhone: "abc123" })
+        .success,
+    ).toBe(false);
+  });
+
+  test("批量新增活动人员也能带 ownerPhone", () => {
+    expect(
+      AddActivityMembersInput.parse({
+        activityId: 1,
+        memberIds: [1, 2],
+        ownerPhone: "13800001234",
+      }).ownerPhone,
+    ).toBe("13800001234");
+  });
+
+  test("不泄漏到环节层——环节人员的入参 schema 没有这个字段", () => {
+    // 这条是防回归：ownerPhone 只作用于活动层（schema.ts 里 activityMember
+    // 才有这一列），万一哪天有人把它误加进三层共用的 relationFields，
+    // segment_member 表没有这一列，写入会直接报错——这条测试要在那之前就红。
+    const addParsed = AddSegmentMembersInput.parse({
+      segmentId: 1,
+      entries: [{ memberId: 1, ownerPhone: "13800001234" }],
+    });
+    expect(addParsed.entries[0]).not.toHaveProperty("ownerPhone");
+
+    const updateParsed = UpdateSegmentMemberInput.parse({
+      id: 1,
+      ownerPhone: "13800001234",
+    });
+    expect(updateParsed).not.toHaveProperty("ownerPhone");
   });
 });

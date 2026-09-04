@@ -1,0 +1,1 @@
+ALTER TABLE "activity_member" ADD COLUMN "owner_phone" text;

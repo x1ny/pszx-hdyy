@@ -346,11 +346,23 @@ export const activityMember = pgTable(
       { onDelete: "no action" },
     ),
 
-    // 以下三列是运营手填的业务字段，只作用于当前活动（BR-DEV-027）。
+    // 以下字段是运营手填的业务字段，只作用于当前活动（BR-DEV-027）。
     // ownerName 本期是文本，同 activity_segment.ownerName——原型就是个 input。
     source: text("source"),
     groupName: text("group_name"),
     ownerName: text("owner_name"),
+    /**
+     * 负责人（现场对接人）电话，选填。跟着 ownerName 走，是这个嘉宾在**这场
+     * 活动**里的对接人联系方式——不是全场统一的咨询电话，王芳和张三看到的
+     * 是各自的号码。H5 嘉宾行程页首屏"现场联系人"卡就读这一列。
+     *
+     * 刻意不加到 segment_member：那张表 source/groupName/ownerName 的"可空 =
+     * 继承活动层，读取时 COALESCE"模式要求有消费方才建列，而环节层的电话现在
+     * 没有任何读取方——H5 行程页按活动取联系人，不区分环节。等环节层真要覆盖
+     * 对接人电话时再加，那时把 COALESCE 一起补上（同 segmentMember 里 source/
+     * groupName/ownerName 的注释）。
+     */
+    ownerPhone: text("owner_phone"),
 
     // 系统生成、页面只读（R-003）。
     originType: text("origin_type")

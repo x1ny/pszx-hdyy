@@ -48,6 +48,15 @@ export type RelationFields = {
   source?: string | null;
   groupName?: string | null;
   ownerName?: string | null;
+  /**
+   * 只有活动层真正持久化这一列（同 segmentRole 之于环节层的反面：那个字段只在
+   * SegmentMemberEntry 上追加，这个字段挂在三层共用的 RelationFields 上，但
+   * 只有 ensureActivityMembers 的 insert 读它）。segment_member 表没有
+   * owner_phone 列，ensureSegmentMembers 的 insert 也不读这个字段——从环节
+   * 入口进来的 entries 即使带着这个属性也会被静默忽略，不会报错，也不会写进
+   * 任何地方。理由见 schema.ts 里 activityMember.ownerPhone 的注释。
+   */
+  ownerPhone?: string | null;
   remark?: string | null;
 };
 
@@ -327,6 +336,7 @@ export async function ensureActivityMembers(
         source: entry.source ?? null,
         groupName: entry.groupName ?? null,
         ownerName: entry.ownerName ?? null,
+        ownerPhone: entry.ownerPhone ?? null,
         remark: entry.remark ?? null,
         originType: input.originType,
         createdBy: input.userId,

@@ -146,12 +146,15 @@ function ActivityMembersPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] =
     useState<RelationFormValues>(emptyRelationForm);
+  const [createOwnerPhone, setCreateOwnerPhone] = useState("");
   const [pendingIds, setPendingIds] = useState<number[]>([]);
   const [addForm, setAddForm] = useState<RelationFormValues>(emptyRelationForm);
+  const [addOwnerPhone, setAddOwnerPhone] = useState("");
 
   const [editing, setEditing] = useState<ActivityMember>();
   const [editForm, setEditForm] =
     useState<RelationFormValues>(emptyRelationForm);
+  const [editOwnerPhone, setEditOwnerPhone] = useState("");
   const [editSegmentIds, setEditSegmentIds] = useState<number[]>([]);
   const [editSelectionFor, setEditSelectionFor] = useState<number>();
   const [editIssue, setEditIssue] = useState<ActivityMemberEditIssue>();
@@ -242,12 +245,14 @@ function ActivityMembersPage() {
         activityId,
         memberIds,
         originType: "manual",
+        ownerPhone: addOwnerPhone || undefined,
         ...toRelationInput(addForm),
       }),
     onSuccess: (result) => {
       toast.success(`已新增 ${result.added} 名活动人员`);
       setPendingIds([]);
       setAddForm(emptyRelationForm);
+      setAddOwnerPhone("");
       invalidate();
     },
     onError: (error) => toast.error(error.message),
@@ -269,12 +274,14 @@ function ActivityMembersPage() {
       addNewActivityMember({
         activityId,
         member: fields,
+        ownerPhone: createOwnerPhone || undefined,
         ...toRelationInput(createForm),
       }),
     onSuccess: () => {
       toast.success("已录入并加入本活动，同时写入全量人员库");
       setCreateOpen(false);
       setCreateForm(emptyRelationForm);
+      setCreateOwnerPhone("");
       invalidate();
     },
     onError: (error) => toast.error(error.message),
@@ -286,6 +293,7 @@ function ActivityMembersPage() {
         activityMemberId: editing?.id ?? 0,
         segmentIds: editSegmentIds,
         relation: editForm,
+        ownerPhone: editOwnerPhone,
       }),
     onMutate: () => setEditIssue(undefined),
     onSuccess: async (result) => {
@@ -363,6 +371,7 @@ function ActivityMembersPage() {
             variant="outline"
             onClick={() => {
               setCreateForm(emptyRelationForm);
+              setCreateOwnerPhone("");
               setCreateOpen(true);
             }}
           >
@@ -371,6 +380,7 @@ function ActivityMembersPage() {
           <Button
             onClick={() => {
               setAddForm(emptyRelationForm);
+              setAddOwnerPhone("");
               setPickerOpen(true);
             }}
           >
@@ -555,6 +565,7 @@ function ActivityMembersPage() {
                             ownerName: row.ownerName ?? "",
                             remark: row.remark ?? "",
                           });
+                          setEditOwnerPhone(row.ownerPhone ?? "");
                         }}
                       >
                         编辑关系
@@ -637,6 +648,7 @@ function ActivityMembersPage() {
         onCreateNew={() => {
           setPickerOpen(false);
           setCreateForm(emptyRelationForm);
+          setCreateOwnerPhone("");
           setCreateOpen(true);
         }}
       />
@@ -651,6 +663,10 @@ function ActivityMembersPage() {
             value={createForm}
             onChange={setCreateForm}
             idPrefix="new"
+            ownerPhone={{
+              value: createOwnerPhone,
+              onChange: setCreateOwnerPhone,
+            }}
           />
         }
         onOpenChange={setCreateOpen}
@@ -677,6 +693,7 @@ function ActivityMembersPage() {
               value={addForm}
               onChange={setAddForm}
               idPrefix="add"
+              ownerPhone={{ value: addOwnerPhone, onChange: setAddOwnerPhone }}
             />
           </DialogBody>
           <DialogFooter>
@@ -730,6 +747,10 @@ function ActivityMembersPage() {
                   value={editForm}
                   onChange={setEditForm}
                   idPrefix="edit"
+                  ownerPhone={{
+                    value: editOwnerPhone,
+                    onChange: setEditOwnerPhone,
+                  }}
                 />
                 <ActivityMemberParticipationFields
                   segments={editSegmentOptionsQuery.data}
@@ -940,6 +961,9 @@ function ActivityMemberDetailContent({ id }: { id: number }) {
           </DetailField>
           <DetailField label="负责人">
             {displayValue(detail.ownerName)}
+          </DetailField>
+          <DetailField label="负责人电话">
+            {displayValue(detail.ownerPhone)}
           </DetailField>
           <DetailField label="数据来源">
             {RELATION_ORIGIN_LABELS[detail.originType]}
