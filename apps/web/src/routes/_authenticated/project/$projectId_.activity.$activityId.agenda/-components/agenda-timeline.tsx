@@ -100,7 +100,16 @@ export function AgendaTimeline({
                   {day.ticks.map((tick) => (
                     <span
                       key={tick.label + tick.leftPct}
-                      className="absolute -translate-x-1/2 text-[11px] text-muted-foreground tabular-nums"
+                      className={cn(
+                        "absolute text-[11px] text-muted-foreground tabular-nums",
+                        // 端点标签向轨道内部对齐，避免居中后半个文字落到
+                        // overflow-x-auto 的滚动边界外而被裁掉。
+                        tick.leftPct === 0
+                          ? "translate-x-0"
+                          : tick.leftPct === 100
+                            ? "-translate-x-full"
+                            : "-translate-x-1/2",
+                      )}
                       style={{ left: `${tick.leftPct}%` }}
                     >
                       {tick.label}
