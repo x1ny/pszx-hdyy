@@ -207,11 +207,9 @@ export const TRANSPORT_SCENE_LABELS = {
   dropoff: "送站",
 } as const;
 
-/**
- * `activity_resource.start_time` 是可空的，没有时间的用车塞进任何一天都是猜。
- * 这类单列在页尾，不进时间轴。
- */
-export const isScheduled = (car: Car) => Boolean(car.startTime);
+/** 没有有效发车时间的用车归入页尾「待定安排」，不猜日期。 */
+export const isScheduled = (car: Car) =>
+  Boolean(car.startTime && Number.isFinite(Date.parse(car.startTime)));
 
 /* ------------------------------------------------------------------ */
 /* 平台动作：电话 / 剪贴板                                              */

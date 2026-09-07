@@ -6,6 +6,7 @@ import { Icon } from "./icon";
 
 /**
  * 多天活动里的「一天」大卡：日期磁贴 + 标题 + 条目数 + 折叠箭头。
+ * `day` 为空时复用同一套卡片展示时间待定的安排。
  *
  * 标题由调用方给（`第一天` / `出发日` / `返程日`），因为只有交通没有议程的
  * 日子不该占用「第 N 天」的编号，见 -utils 的 `dayLabelOf`。
@@ -22,19 +23,20 @@ export function DayCard({
   children,
 }: {
   label: string;
-  day: string;
+  day: string | null;
   count: number;
   isCurrent: boolean;
   isPast: boolean;
   children: ReactNode;
 }) {
-  const parts = parseDayKey(day);
+  const isPending = day === null;
+  const parts = isPending ? null : parseDayKey(day);
 
   return (
     <Collapsible.Root
       defaultOpen={!isPast}
       className="mb-3 overflow-hidden rounded-2xl border border-line bg-surface shadow-card"
-      render={<section aria-label={`${label} ${day}`} />}
+      render={<section aria-label={day ? `${label} ${day}` : label} />}
     >
       <Collapsible.Trigger className="group flex w-full items-center gap-2.5 px-3 py-2.5 text-left">
         <span
@@ -44,12 +46,18 @@ export function DayCard({
             isPast ? "bg-[#f1f2f5] text-ink-4" : "bg-brand-soft text-brand",
           )}
         >
-          <span className="font-extrabold text-[1rem] leading-5 tabular-nums">
-            {parts?.day ?? "–"}
-          </span>
-          <span className="font-bold text-[0.5625rem] leading-3 opacity-70">
-            {parts?.weekday ?? ""}
-          </span>
+          {isPending ? (
+            <Icon name="clock" size={20} />
+          ) : (
+            <>
+              <span className="font-extrabold text-[1rem] leading-5 tabular-nums">
+                {parts?.day ?? "–"}
+              </span>
+              <span className="font-bold text-[0.5625rem] leading-3 opacity-70">
+                {parts?.weekday ?? ""}
+              </span>
+            </>
+          )}
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5">
@@ -69,7 +77,11 @@ export function DayCard({
             {isPast && <span className="text-caption text-ink-4">已结束</span>}
           </span>
           <span className="block text-caption text-ink-3">
-            {parts ? `${parts.month}月${parts.day}日 ${parts.weekday}` : day}
+            {isPending
+              ? "时间待定"
+              : parts
+                ? `${parts.month}月${parts.day}日 ${parts.weekday}`
+                : day}
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-1 font-bold text-caption text-ink-3">

@@ -11,8 +11,7 @@ import {
   uniqueDays,
 } from "../-utils";
 import { DayCard } from "./day-card";
-import { CarBody, type DayEntry, DayTimeline } from "./day-timeline";
-import { Icon } from "./icon";
+import { type DayEntry, DayTimeline } from "./day-timeline";
 
 /**
  * 「我的行程」—— **议程和交通合成一条按天分组、按时间排序的列表**。
@@ -36,8 +35,8 @@ export function ScheduleList({
   trips: Trip[];
   cars: Car[];
 }) {
-  // `activity_resource.start_time` 可空。没有时间的用车塞进任何一天都是猜，
-  // 单列在页尾那一块，不进时间轴。
+  // `activity_resource.start_time` 可空。没有时间的用车不进任何日期，统一放到
+  // 页尾的「待定安排」卡片里，避免猜日期或时间顺序。
   const scheduledCars = useMemo(() => cars.filter(isScheduled), [cars]);
   const undatedCars = useMemo(
     () => cars.filter((car) => !isScheduled(car)),
@@ -119,7 +118,19 @@ export function ScheduleList({
     return map;
   }, [agenda, trips, scheduledCars, currentDay]);
 
-  const total = agenda.length + trips.length + scheduledCars.length;
+  const pendingEntries = useMemo<DayEntry[]>(
+    () =>
+      undatedCars.map((car) => ({
+        kind: "car",
+        key: `car-${car.id}`,
+        time: "",
+        car,
+        finished: false,
+      })),
+    [undatedCars],
+  );
+
+  const total = agenda.length + trips.length + cars.length;
 
   return (
     <section aria-label="我的行程" className="px-4">
@@ -131,37 +142,52 @@ export function ScheduleList({
         </h2>
         {total > 0 && (
           <span className="text-caption text-ink-4">
-            共{days.length}天 · <span className="tabular-nums">{total}</span>项
+            {days.length > 0 && <>共{days.length}天 · </>}
+            <span className="tabular-nums">{total}</span>项
           </span>
         )}
       </div>
 
       {total === 0 ? (
         <EmptySchedule />
-      ) : days.length <= 1 ? (
-        <DayTimeline
-          entries={entriesByDay.get(days[0] ?? "") ?? []}
-          status={status}
-        />
       ) : (
-        days.map((day) => {
-          const entries = entriesByDay.get(day) ?? [];
-          return (
-            <DayCard
-              key={day}
-              label={dayLabelOf(day, agendaDays)}
-              day={day}
-              count={entries.length}
-              isCurrent={day === currentDay}
-              isPast={day < currentDay}
-            >
-              <DayTimeline entries={entries} status={status} />
-            </DayCard>
-          );
-        })
-      )}
+        <>
+          {days.length === 1 && undatedCars.length === 0 ? (
+            <DayTimeline
+              entries={entriesByDay.get(days[0] ?? "") ?? []}
+              status={status}
+            />
+          ) : (
+            days.map((day) => {
+              const entries = entriesByDay.get(day) ?? [];
+              return (
+                <DayCard
+                  key={day}
+                  label={dayLabelOf(day, agendaDays)}
+                  day={day}
+                  count={entries.length}
+                  isCurrent={day === currentDay}
+                  isPast={day < currentDay}
+                >
+                  <DayTimeline entries={entries} status={status} />
+                </DayCard>
+              );
+            })
+          )}
 
-      {undatedCars.length > 0 && <UndatedCars cars={undatedCars} />}
+          {undatedCars.length > 0 && (
+            <DayCard
+              label="待定安排"
+              day={null}
+              count={undatedCars.length}
+              isCurrent={false}
+              isPast={false}
+            >
+              <DayTimeline entries={pendingEntries} status={status} />
+            </DayCard>
+          )}
+        </>
+      )}
     </section>
   );
 }
@@ -180,32 +206,5 @@ function EmptySchedule() {
         主办方安排完成后会显示在这里，如有疑问请联系主办方
       </p>
     </div>
-  );
-}
-
-/** 没有发车时间的用车。塞进任何一天都是猜，所以单列在页尾。 */
-function UndatedCars({ cars }: { cars: Car[] }) {
-  return (
-    <section aria-label="用车安排" className="mt-4">
-      <div className="mb-2 flex items-center gap-1.5">
-        <Icon name="car-front" size={13} className="text-ink-3" />
-        <h2 className="font-bold text-caption text-ink-3 tracking-[0.14em]">
-          用车安排
-        </h2>
-        <span className="text-caption text-ink-4">（未定发车时间）</span>
-      </div>
-      <div className="overflow-hidden rounded-2xl border border-line bg-surface shadow-card">
-        {cars.map((car, index) => (
-          <div
-            key={car.id}
-            className={
-              index > 0 ? "border-line border-t px-3 py-2.5" : "px-3 py-2.5"
-            }
-          >
-            <CarBody car={car} />
-          </div>
-        ))}
-      </div>
-    </section>
   );
 }

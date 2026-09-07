@@ -130,7 +130,7 @@ export const itineraryTripsQuery = (activityMemberId: number) =>
 
 /**
  * 主办方给这个人安排的用车。和到离行程是两个来源，前端混排在同一条时间轴上；
- * `start_time` 可空，没有时间的那些前端单列在页尾。
+ * `start_time` 可空，没有时间的归入同一行程列表的「待定安排」。
  */
 export const itineraryCarsQuery = (activityMemberId: number) =>
   db

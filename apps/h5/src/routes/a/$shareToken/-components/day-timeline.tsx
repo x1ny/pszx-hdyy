@@ -1,5 +1,4 @@
 import { cn } from "#/shared/lib/utils";
-import { PLACEHOLDER_TRANSIT_MINUTES } from "../-placeholders";
 import type { AgendaItem, Car, Trip } from "../-queries";
 import {
   type AgendaStatus,
@@ -12,7 +11,6 @@ import { Copyable } from "./copyable";
 import { Icon, type IconName } from "./icon";
 import { PhoneChip } from "./phone-chip";
 import { PillTag } from "./pill-tag";
-import { PlaceholderMark } from "./placeholder-mark";
 
 /** 融合时间轴上的一行。`time`（`HH:mm`）是当天内的排序键。 */
 export type DayEntry =
@@ -176,8 +174,7 @@ function AgendaRow({
         <h3 className="text-ink-1 text-title">{item.name}</h3>
 
         {/* 地点只有文字，没有导航按钮 —— 全库没有任何经纬度列，编一个坐标点
-            下去会把人导到错误的地点，而人一旦跳出 App 就再也看不到"占位"两个
-            字了（见 -placeholders.ts 顶部那条规则）。 */}
+            下去会把人导到错误的地点，而人一旦跳出 App 就再也看不到提示了。 */}
         {item.locationText && (
           <div className="mt-1 flex w-full items-center gap-1">
             <Icon name="map-pin" size={12} className="shrink-0 text-ink-3" />
@@ -315,11 +312,13 @@ function CarRow({
   index: number;
   isLast: boolean;
 }) {
+  const startTime = timeOf(car.startTime);
+
   return (
     <Row index={index} isLast={isLast}>
       <TimeRail
-        top={timeOf(car.startTime)}
-        bottom="发车"
+        top={startTime || "待定"}
+        bottom={startTime ? "发车" : undefined}
         isLast={isLast}
         finished={finished}
       />
@@ -338,7 +337,9 @@ function CarRow({
   );
 }
 
-export function CarBody({ car }: { car: Car }) {
+function CarBody({ car }: { car: Car }) {
+  const durationMinutes = getDurationMinutes(car);
+
   return (
     <>
       <h3 className="text-ink-1 text-title">
@@ -350,14 +351,15 @@ export function CarBody({ car }: { car: Car }) {
         )}
       </h3>
 
-      <div className="mt-0.5 text-caption text-ink-3">
-        路程预计 {PLACEHOLDER_TRANSIT_MINUTES} 分钟
-        <PlaceholderMark />
-      </div>
+      {durationMinutes !== null && (
+        <div className="mt-0.5 text-caption text-ink-3">
+          路程预计 {durationMinutes} 分钟
+        </div>
+      )}
 
       {/* 车牌 / 司机 / 电话三样在 375px 上正好排一行；320px 上放不下时让电话
           整颗换行，而不是把司机名字截掉 —— 名字截一半比多占一行难用得多。
-          **这颗电话是真数据，可拨**，和上面那个占位联系人不是一回事。 */}
+          **这颗电话是真数据，可拨**。 */}
       {(car.vehicleInfo || car.driverName || car.driverPhone) && (
         <div className="mt-1 flex flex-wrap items-center justify-between gap-x-1.5 gap-y-1 text-body text-ink-2">
           <div className="flex items-center gap-1">
@@ -398,4 +400,17 @@ export function CarBody({ car }: { car: Car }) {
       )}
     </>
   );
+}
+
+function getDurationMinutes(car: Car): number | null {
+  if (!car.startTime || !car.endTime) return null;
+
+  const start = Date.parse(car.startTime);
+  const end = Date.parse(car.endTime);
+  const duration = (end - start) / 60000;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || duration < 0) {
+    return null;
+  }
+
+  return Math.round(duration);
 }
