@@ -33,6 +33,9 @@ import { seatingRoutes } from "./modules/seating/routes";
 import { supplierRoutes } from "./modules/supplier/routes";
 import { supplierQuoteRoutes } from "./modules/supplier/routes.quote";
 import { tripRoutes } from "./modules/trip/routes";
+import { bootstrapBuiltinAdmin } from "./modules/user/bootstrap";
+import { userRoutes } from "./modules/user/routes";
+import { roleRoutes } from "./modules/user/routes.role";
 import { venueRoutes } from "./modules/venue/routes";
 import { activityVenueRoutes } from "./modules/venue/routes.activity";
 import { err } from "./shared/result";
@@ -111,6 +114,31 @@ if (webStaticApp || h5StaticApp) {
   });
 }
 
+/**
+ * 关闭公网自助注册。**必须挂在 `authHandler` 之前**，否则 Better Auth 先接管了
+ * `/api/auth/*`，这里永远轮不到。
+ *
+ * 为什么不用 Better Auth 自己的 `emailAndPassword.disableSignUp`：它的检查写在
+ * 端点处理函数内部（`api/routes/sign-up.mjs:144`），**服务端直接调
+ * `auth.api.signUpEmail()` 一样会被挡**。而建用户（`modules/user/routes.ts`）和
+ * 开发种子（`dev-seed/00-user.ts`）都要用它——那两处走的是函数调用不是 HTTP，
+ * 拦在这一层正好只封住公网入口。
+ *
+ * 账号一律由管理员在 `/system/user` 创建；全新部署的第一个账号由生产引导创建
+ * （见 modules/user/bootstrap.ts）。完整取舍见 docs/user-management-design.md。
+ *
+ * 有一个测试盯着这条路由（modules/user/signup-closed.test.ts）：这里被改回去
+ * 或者顺序被调换，都会立刻红。
+ */
+app.on(["GET", "POST"], "/api/auth/sign-up/*", (c) =>
+  c.json(
+    err({
+      code: "UNAUTHORIZED",
+      message: "本系统不开放自助注册，请联系管理员",
+    }),
+  ),
+);
+
 // Order matters — see modules/auth/routes.ts for why Better Auth is mounted
 // before the session middleware.
 app.route("/", authHandler);
@@ -138,6 +166,10 @@ app.use("*", sessionMiddleware);
 // default export，这里多一个具名导出不改变任何行为。
 export const routes = app
   .route("/api/example", exampleRoutes)
+  // 后台账号管理。角色另占一个前缀（独立资源，同 supplier / supplierQuote），
+  // 本次只有 list —— 角色管理是下一个 PR，见 docs/user-management-design.md。
+  .route("/api/user", userRoutes)
+  .route("/api/role", roleRoutes)
   .route("/api/supplier", supplierRoutes)
   // 报价附件是 supplier 模块下的子资源，按约定另占一个前缀（理由写在
   // modules/supplier/routes.quote.ts 的文件头注释里）。
@@ -200,6 +232,17 @@ app.onError((error, c) => {
 });
 
 export type AppType = typeof routes;
+
+// 保证库里存在内置管理员账号 —— 自助注册关掉之后，全新部署的库没有别的途径长出
+// 第一个能登录的人（完整理由见 modules/user/bootstrap.ts）。**在开始服务之前
+// 跑完**：抛错就是起不来，这是有意的。
+//
+// `import.meta.main` 这道守卫是给 scripts/gen-api-docs.ts 的：它 import 本模块
+// 只为读 `app.routes`，那时既不该连库也不该建账号（构建阶段往往连 DATABASE_URL
+// 都没有）。打包成 dist/server.js 之后它仍然是 true —— 实测确认过，不是推测。
+if (import.meta.main) {
+  await bootstrapBuiltinAdmin();
+}
 
 // 不设 SERVER_HOST 时保持 Bun 的默认行为（绑所有接口）—— 生产镜像走的就是
 // 这条路。开发编排会显式传 127.0.0.1（scripts/dev.ts）：Bun 默认绑全部接口，

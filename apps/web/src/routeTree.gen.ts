@@ -20,13 +20,13 @@ import { Route as AuthenticatedProjectProjectIdRouteImport } from './routes/_aut
 import { Route as AuthenticatedProjectListRouteImport } from './routes/_authenticated/project/list'
 import { Route as AuthenticatedSupplierIndexRouteImport } from './routes/_authenticated/supplier/index'
 import { Route as AuthenticatedSystemRoleRouteImport } from './routes/_authenticated/system/role'
-import { Route as AuthenticatedSystemUserRouteImport } from './routes/_authenticated/system/user'
 import { Route as AuthenticatedVenueIndexRouteImport } from './routes/_authenticated/venue/index'
 import { Route as AuthenticatedInvitationTemplateIndexRouteImport } from './routes/_authenticated/invitation/template/index'
 import { Route as AuthenticatedMemberImportIndexRouteImport } from './routes/_authenticated/member/import/index'
 import { Route as AuthenticatedProjectProjectIdIndexRouteImport } from './routes/_authenticated/project/$projectId.index'
 import { Route as AuthenticatedProjectProjectIdMembersRouteImport } from './routes/_authenticated/project/$projectId.members'
 import { Route as AuthenticatedSupplierSupplierIdQuoteRouteImport } from './routes/_authenticated/supplier/$supplierId.quote'
+import { Route as AuthenticatedSystemUserIndexRouteImport } from './routes/_authenticated/system/user/index'
 import { Route as AuthenticatedVenueVenueIdLayoutRouteImport } from './routes/_authenticated/venue/$venueId.layout'
 import { Route as AuthenticatedProjectProjectIdActivityActivityIdRouteImport } from './routes/_authenticated/project/$projectId_.activity.$activityId'
 import { Route as AuthenticatedProjectProjectIdActivityActivityIdIndexRouteImport } from './routes/_authenticated/project/$projectId_.activity.$activityId.index'
@@ -104,11 +104,6 @@ const AuthenticatedSystemRoleRoute = AuthenticatedSystemRoleRouteImport.update({
   path: '/system/role',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedSystemUserRoute = AuthenticatedSystemUserRouteImport.update({
-  id: '/system/user',
-  path: '/system/user',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
 const AuthenticatedVenueIndexRoute = AuthenticatedVenueIndexRouteImport.update({
   id: '/venue/',
   path: '/venue/',
@@ -142,6 +137,12 @@ const AuthenticatedSupplierSupplierIdQuoteRoute =
   AuthenticatedSupplierSupplierIdQuoteRouteImport.update({
     id: '/supplier/$supplierId/quote',
     path: '/supplier/$supplierId/quote',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedSystemUserIndexRoute =
+  AuthenticatedSystemUserIndexRouteImport.update({
+    id: '/system/user/',
+    path: '/system/user/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedVenueVenueIdLayoutRoute =
@@ -282,7 +283,6 @@ export interface FileRoutesByFullPath {
   '/project/$projectId': typeof AuthenticatedProjectProjectIdRouteWithChildren
   '/project/list': typeof AuthenticatedProjectListRoute
   '/system/role': typeof AuthenticatedSystemRoleRoute
-  '/system/user': typeof AuthenticatedSystemUserRoute
   '/activity/': typeof AuthenticatedActivityIndexRoute
   '/member/': typeof AuthenticatedMemberIndexRoute
   '/supplier/': typeof AuthenticatedSupplierIndexRoute
@@ -293,6 +293,7 @@ export interface FileRoutesByFullPath {
   '/invitation/template/': typeof AuthenticatedInvitationTemplateIndexRoute
   '/member/import/': typeof AuthenticatedMemberImportIndexRoute
   '/project/$projectId/': typeof AuthenticatedProjectProjectIdIndexRoute
+  '/system/user/': typeof AuthenticatedSystemUserIndexRoute
   '/project/$projectId/activity/$activityId': typeof AuthenticatedProjectProjectIdActivityActivityIdRouteWithChildren
   '/project/$projectId/activity/$activityId/config': typeof AuthenticatedProjectProjectIdActivityActivityIdConfigRoute
   '/project/$projectId/activity/$activityId/registration': typeof AuthenticatedProjectProjectIdActivityActivityIdRegistrationRoute
@@ -317,7 +318,6 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/project/list': typeof AuthenticatedProjectListRoute
   '/system/role': typeof AuthenticatedSystemRoleRoute
-  '/system/user': typeof AuthenticatedSystemUserRoute
   '/activity': typeof AuthenticatedActivityIndexRoute
   '/member': typeof AuthenticatedMemberIndexRoute
   '/supplier': typeof AuthenticatedSupplierIndexRoute
@@ -328,6 +328,7 @@ export interface FileRoutesByTo {
   '/invitation/template': typeof AuthenticatedInvitationTemplateIndexRoute
   '/member/import': typeof AuthenticatedMemberImportIndexRoute
   '/project/$projectId': typeof AuthenticatedProjectProjectIdIndexRoute
+  '/system/user': typeof AuthenticatedSystemUserIndexRoute
   '/project/$projectId/activity/$activityId/config': typeof AuthenticatedProjectProjectIdActivityActivityIdConfigRoute
   '/project/$projectId/activity/$activityId/registration': typeof AuthenticatedProjectProjectIdActivityActivityIdRegistrationRoute
   '/project/$projectId/activity/$activityId/resources': typeof AuthenticatedProjectProjectIdActivityActivityIdResourcesRoute
@@ -354,7 +355,6 @@ export interface FileRoutesById {
   '/_authenticated/project/$projectId': typeof AuthenticatedProjectProjectIdRouteWithChildren
   '/_authenticated/project/list': typeof AuthenticatedProjectListRoute
   '/_authenticated/system/role': typeof AuthenticatedSystemRoleRoute
-  '/_authenticated/system/user': typeof AuthenticatedSystemUserRoute
   '/_authenticated/activity/': typeof AuthenticatedActivityIndexRoute
   '/_authenticated/member/': typeof AuthenticatedMemberIndexRoute
   '/_authenticated/supplier/': typeof AuthenticatedSupplierIndexRoute
@@ -365,6 +365,7 @@ export interface FileRoutesById {
   '/_authenticated/invitation/template/': typeof AuthenticatedInvitationTemplateIndexRoute
   '/_authenticated/member/import/': typeof AuthenticatedMemberImportIndexRoute
   '/_authenticated/project/$projectId/': typeof AuthenticatedProjectProjectIdIndexRoute
+  '/_authenticated/system/user/': typeof AuthenticatedSystemUserIndexRoute
   '/_authenticated/project/$projectId_/activity/$activityId': typeof AuthenticatedProjectProjectIdActivityActivityIdRouteWithChildren
   '/_authenticated/project/$projectId_/activity/$activityId/config': typeof AuthenticatedProjectProjectIdActivityActivityIdConfigRoute
   '/_authenticated/project/$projectId_/activity/$activityId/registration': typeof AuthenticatedProjectProjectIdActivityActivityIdRegistrationRoute
@@ -392,7 +393,6 @@ export interface FileRouteTypes {
     | '/project/$projectId'
     | '/project/list'
     | '/system/role'
-    | '/system/user'
     | '/activity/'
     | '/member/'
     | '/supplier/'
@@ -403,6 +403,7 @@ export interface FileRouteTypes {
     | '/invitation/template/'
     | '/member/import/'
     | '/project/$projectId/'
+    | '/system/user/'
     | '/project/$projectId/activity/$activityId'
     | '/project/$projectId/activity/$activityId/config'
     | '/project/$projectId/activity/$activityId/registration'
@@ -427,7 +428,6 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/project/list'
     | '/system/role'
-    | '/system/user'
     | '/activity'
     | '/member'
     | '/supplier'
@@ -438,6 +438,7 @@ export interface FileRouteTypes {
     | '/invitation/template'
     | '/member/import'
     | '/project/$projectId'
+    | '/system/user'
     | '/project/$projectId/activity/$activityId/config'
     | '/project/$projectId/activity/$activityId/registration'
     | '/project/$projectId/activity/$activityId/resources'
@@ -463,7 +464,6 @@ export interface FileRouteTypes {
     | '/_authenticated/project/$projectId'
     | '/_authenticated/project/list'
     | '/_authenticated/system/role'
-    | '/_authenticated/system/user'
     | '/_authenticated/activity/'
     | '/_authenticated/member/'
     | '/_authenticated/supplier/'
@@ -474,6 +474,7 @@ export interface FileRouteTypes {
     | '/_authenticated/invitation/template/'
     | '/_authenticated/member/import/'
     | '/_authenticated/project/$projectId/'
+    | '/_authenticated/system/user/'
     | '/_authenticated/project/$projectId_/activity/$activityId'
     | '/_authenticated/project/$projectId_/activity/$activityId/config'
     | '/_authenticated/project/$projectId_/activity/$activityId/registration'
@@ -577,13 +578,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSystemRoleRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/system/user': {
-      id: '/_authenticated/system/user'
-      path: '/system/user'
-      fullPath: '/system/user'
-      preLoaderRoute: typeof AuthenticatedSystemUserRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
     '/_authenticated/venue/': {
       id: '/_authenticated/venue/'
       path: '/venue'
@@ -624,6 +618,13 @@ declare module '@tanstack/react-router' {
       path: '/supplier/$supplierId/quote'
       fullPath: '/supplier/$supplierId/quote'
       preLoaderRoute: typeof AuthenticatedSupplierSupplierIdQuoteRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/system/user/': {
+      id: '/_authenticated/system/user/'
+      path: '/system/user'
+      fullPath: '/system/user/'
+      preLoaderRoute: typeof AuthenticatedSystemUserIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/venue/$venueId/layout': {
@@ -829,7 +830,6 @@ interface AuthenticatedRouteChildren {
   AuthenticatedProjectProjectIdRoute: typeof AuthenticatedProjectProjectIdRouteWithChildren
   AuthenticatedProjectListRoute: typeof AuthenticatedProjectListRoute
   AuthenticatedSystemRoleRoute: typeof AuthenticatedSystemRoleRoute
-  AuthenticatedSystemUserRoute: typeof AuthenticatedSystemUserRoute
   AuthenticatedActivityIndexRoute: typeof AuthenticatedActivityIndexRoute
   AuthenticatedMemberIndexRoute: typeof AuthenticatedMemberIndexRoute
   AuthenticatedSupplierIndexRoute: typeof AuthenticatedSupplierIndexRoute
@@ -838,6 +838,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedVenueVenueIdLayoutRoute: typeof AuthenticatedVenueVenueIdLayoutRoute
   AuthenticatedInvitationTemplateIndexRoute: typeof AuthenticatedInvitationTemplateIndexRoute
   AuthenticatedMemberImportIndexRoute: typeof AuthenticatedMemberImportIndexRoute
+  AuthenticatedSystemUserIndexRoute: typeof AuthenticatedSystemUserIndexRoute
   AuthenticatedProjectProjectIdActivityActivityIdRoute: typeof AuthenticatedProjectProjectIdActivityActivityIdRouteWithChildren
 }
 
@@ -848,7 +849,6 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
     AuthenticatedProjectProjectIdRouteWithChildren,
   AuthenticatedProjectListRoute: AuthenticatedProjectListRoute,
   AuthenticatedSystemRoleRoute: AuthenticatedSystemRoleRoute,
-  AuthenticatedSystemUserRoute: AuthenticatedSystemUserRoute,
   AuthenticatedActivityIndexRoute: AuthenticatedActivityIndexRoute,
   AuthenticatedMemberIndexRoute: AuthenticatedMemberIndexRoute,
   AuthenticatedSupplierIndexRoute: AuthenticatedSupplierIndexRoute,
@@ -859,6 +859,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedInvitationTemplateIndexRoute:
     AuthenticatedInvitationTemplateIndexRoute,
   AuthenticatedMemberImportIndexRoute: AuthenticatedMemberImportIndexRoute,
+  AuthenticatedSystemUserIndexRoute: AuthenticatedSystemUserIndexRoute,
   AuthenticatedProjectProjectIdActivityActivityIdRoute:
     AuthenticatedProjectProjectIdActivityActivityIdRouteWithChildren,
 }

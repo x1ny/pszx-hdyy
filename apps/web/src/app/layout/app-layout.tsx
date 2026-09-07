@@ -7,7 +7,14 @@ import {
   SidebarTrigger,
 } from "#/shared/components/ui/sidebar.tsx";
 
-export function AppLayout({ user }: { user: { name: string; email: string } }) {
+export function AppLayout({
+  user,
+}: {
+  // 顶栏显示的是**登录账号**不是邮箱：登录标识已经改成账号，而邮箱是选填的
+  // ——没填时库里存的是 `<账号>@local.invalid` 占位值（见服务端的
+  // modules/user/placeholder-email.ts），直接显示会把那个假地址摆给用户看。
+  user: { name: string; displayUsername?: string | null };
+}) {
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -23,7 +30,7 @@ export function AppLayout({ user }: { user: { name: string; email: string } }) {
         <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center gap-2 border-b bg-background px-4 transition-[height] duration-200 ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
           <SidebarTrigger />
           <div className="ml-auto">
-            <NavUser name={user.name} email={user.email} />
+            <NavUser name={user.name} username={user.displayUsername} />
           </div>
         </header>
         <div className="flex flex-1 flex-col p-6">

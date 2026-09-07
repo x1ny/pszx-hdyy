@@ -4,7 +4,6 @@ import {
   AlertCircleIcon,
   Loader2Icon,
   LockIcon,
-  MailIcon,
   SparkleIcon,
   UserIcon,
 } from "lucide-react";
@@ -23,25 +22,29 @@ import {
 import { Input } from "#/shared/components/ui/input.tsx";
 import { Label } from "#/shared/components/ui/label.tsx";
 
+/**
+ * Better Auth 的错误码 → 中文文案。
+ *
+ * **注册相关的码全部删掉了**：本系统不开放自助注册（拦截在 apps/server 的
+ * index.ts），账号一律由管理员在 /system/user 创建。留着那几条只会让下一个人
+ * 以为注册入口还在某处。
+ */
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
-  EMAIL_ALREADY_EXISTS: "该邮箱已注册",
-  INVALID_EMAIL: "邮箱格式不正确",
-  INVALID_EMAIL_OR_PASSWORD: "邮箱或密码错误",
-  PASSWORD_TOO_SHORT: "密码长度不足",
-  USER_ALREADY_EXISTS: "该邮箱已注册",
-  USER_ALREADY_EXISTS_USE_DIFFERENT_EMAIL: "该邮箱已注册，请换一个邮箱",
+  INVALID_USERNAME_OR_PASSWORD: "账号或密码错误",
+  // 服务端 auth.ts 的 databaseHooks.session.create.before 抛的。**必须有这一条**：
+  // 没有它，被停用的人拿到的是"登录失败，请检查账号和密码"，然后会一直重试一个
+  // 其实完全正确的密码。
+  ACCOUNT_DISABLED: "该账号已被停用，请联系管理员",
+  // 账号名不合法时 Better Auth 会直接返回这几个，而不是"账号或密码错误"——
+  // 它们发生在查库之前，不构成账号是否存在的信息泄露。
+  INVALID_USERNAME: "账号格式不正确",
+  USERNAME_TOO_SHORT: "账号格式不正确",
+  USERNAME_TOO_LONG: "账号格式不正确",
 };
 
-function getAuthErrorMessage(
-  authError: { code?: string; message?: string },
-  isSignUp: boolean,
-) {
-  if (authError.code && AUTH_ERROR_MESSAGES[authError.code]) {
-    return AUTH_ERROR_MESSAGES[authError.code];
-  }
-
-  return isSignUp ? "注册失败，请检查填写的信息" : "登录失败，请检查邮箱和密码";
-}
+const getAuthErrorMessage = (authError: { code?: string }) =>
+  (authError.code && AUTH_ERROR_MESSAGES[authError.code]) ??
+  "登录失败，请检查账号和密码";
 
 export const Route = createFileRoute("/login")({
   validateSearch: (search: Record<string, unknown>): { redirect?: string } => ({
@@ -54,9 +57,7 @@ function Login() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { redirect } = Route.useSearch();
-  const [mode, setMode] = useState<"signIn" | "signUp">("signIn");
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -66,15 +67,16 @@ function Login() {
     setError(null);
     setLoading(true);
 
-    const { error: authError } =
-      mode === "signIn"
-        ? await authClient.signIn.email({ email, password })
-        : await authClient.signUp.email({ name, email, password });
+    // signIn.username 由 usernameClient() 插件提供（features/auth/auth-client.ts）。
+    const { error: authError } = await authClient.signIn.username({
+      username,
+      password,
+    });
 
     setLoading(false);
 
     if (authError) {
-      setError(getAuthErrorMessage(authError, isSignUp));
+      setError(getAuthErrorMessage(authError));
       return;
     }
 
@@ -84,8 +86,6 @@ function Login() {
     queryClient.removeQueries({ queryKey: sessionQueryKey });
     navigate({ to: redirect || "/" });
   };
-
-  const isSignUp = mode === "signUp";
 
   return (
     <div className="relative flex min-h-svh items-center justify-center overflow-hidden bg-background p-6">
@@ -100,50 +100,31 @@ function Login() {
             <SparkleIcon className="size-5" />
           </div>
           <h1 className="font-heading text-xl font-semibold tracking-tight">
-            {isSignUp ? "创建账号" : "欢迎回来"}
+            欢迎回来
           </h1>
-          <p className="text-sm text-muted-foreground">
-            {isSignUp ? "填写信息以创建一个新账号" : "登录以继续访问工作台"}
-          </p>
+          <p className="text-sm text-muted-foreground">登录以继续访问工作台</p>
         </div>
 
         <Card>
           <CardHeader className="sr-only">
-            <CardTitle>{isSignUp ? "注册" : "登录"}</CardTitle>
-            <CardDescription>
-              {isSignUp ? "创建一个新账号" : "使用邮箱和密码登录"}
-            </CardDescription>
+            <CardTitle>登录</CardTitle>
+            <CardDescription>使用账号和密码登录</CardDescription>
           </CardHeader>
           <CardContent>
             <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-              {isSignUp && (
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor="name">昵称</Label>
-                  <div className="relative">
-                    <UserIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      id="name"
-                      className="pl-8"
-                      placeholder="你的昵称"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-              )}
-
               <div className="flex flex-col gap-2">
-                <Label htmlFor="email">邮箱</Label>
+                <Label htmlFor="username">账号</Label>
                 <div className="relative">
-                  <MailIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <UserIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    id="email"
+                    id="username"
                     className="pl-8"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    // autoComplete="username" 让密码管理器认得出这是账号栏；
+                    // 上一版是 type="email"，浏览器会拒绝填非邮箱格式的账号。
+                    autoComplete="username"
+                    placeholder="请输入账号"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
                     required
                   />
                 </div>
@@ -157,10 +138,10 @@ function Login() {
                     id="password"
                     className="pl-8"
                     type="password"
-                    placeholder="至少 8 位"
+                    autoComplete="current-password"
+                    placeholder="请输入密码"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    minLength={8}
                     required
                   />
                 </div>
@@ -175,24 +156,17 @@ function Login() {
 
               <Button type="submit" className="mt-1 w-full" disabled={loading}>
                 {loading && <Loader2Icon className="animate-spin" />}
-                {isSignUp ? "创建账号" : "登录"}
+                登录
               </Button>
             </form>
           </CardContent>
         </Card>
 
+        {/* 原来这里是「还没有账号？去注册」。注册入口整个删掉了——服务端
+            /api/auth/sign-up/* 已经被拦死，留一个点了必然失败的按钮只会让人以为
+            系统坏了。忘记密码同理：现在的流程是找管理员在用户管理里重置。 */}
         <p className="text-center text-sm text-muted-foreground">
-          {isSignUp ? "已有账号？" : "还没有账号？"}
-          <button
-            type="button"
-            className="ml-1 font-medium text-foreground underline underline-offset-4 hover:text-primary"
-            onClick={() => {
-              setError(null);
-              setMode(isSignUp ? "signIn" : "signUp");
-            }}
-          >
-            {isSignUp ? "去登录" : "去注册"}
-          </button>
+          忘记密码或需要开通账号，请联系系统管理员。
         </p>
       </div>
     </div>

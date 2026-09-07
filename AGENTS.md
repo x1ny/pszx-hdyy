@@ -165,7 +165,7 @@ bun run typecheck && bun run test
 
 ## 认证
 
-**这一节只讲管理端。** Better Auth 服务的是 `apps/web` 那套邮箱密码登录，身份落在 `user` 表；相关代码全在 `apps/server/src/modules/auth/`。
+**这一节只讲管理端。** Better Auth 服务的是 `apps/web` 那套**账号**密码登录（`username` 插件），身份落在 `user` 表；相关代码全在 `apps/server/src/modules/auth/`。用户管理（含角色预留、生产引导、为什么不用 `admin` 插件）见 [docs/user-management-design.md](docs/user-management-design.md)。**自助注册已在 Hono 层封死**，改 `index.ts` 中间件顺序前先看那份文档。
 
 - **`index.ts` 里 `authHandler` 的 `.route()` 必须注册在 session 中间件之前。** 这不是官方要求的顺序，是我们自己的选择：`auth.handler()` 直接处理 raw `Request`/`Response`、从不读 Hono context，顺序不影响正确性；排前面纯粹是让 Better Auth 自己的路由跳过后面注册的 session 查询。`routes.ts` 里那行 `app.on(["GET","POST"], "/api/auth/*", …)` 照抄官方文档，**不要改动它的结构**。
 - session 中间件把 `user`/`session` 放进 Hono context，受保护接口从 `c.get("user")` 取，为空时返回 `err({ code: "UNAUTHORIZED" })`——**不是 401**，见「前后端边界」。

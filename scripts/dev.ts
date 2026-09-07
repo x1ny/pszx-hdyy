@@ -192,6 +192,14 @@ async function startAppProcesses(envPath: string, databaseUrl?: string) {
     // 而 DEV_AUTH_BYPASS=1 出现在非 development 形态里会直接拒绝启动。
     APP_ENV: "development",
     DEV_AUTH_BYPASS: "1",
+    // 内置管理员的引导参数（modules/user/bootstrap.ts）。生产必须显式配置，缺了
+    // 就拒绝启动；开发这边给个默认值，免得每个人在 .env 里各写一份。
+    //
+    // `bun run dev`（临时库）其实用不上：种子里的开发账号已经标了 isBuiltin，
+    // 引导会直接跳过。这两行是给 `dev:persist` 的——持久库只跑迁移不灌种子，
+    // 里面那些账号都是关闭注册之前注册出来的，一个 isBuiltin 都没有。
+    ADMIN_USERNAME: process.env.ADMIN_USERNAME ?? "admin",
+    ADMIN_PASSWORD: process.env.ADMIN_PASSWORD ?? "admindevpass",
     ...(databaseUrl ? { DATABASE_URL: databaseUrl } : {}),
   };
 
