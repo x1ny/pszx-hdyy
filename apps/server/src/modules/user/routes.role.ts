@@ -1,11 +1,11 @@
-import { asc, count, desc, eq, ilike } from "drizzle-orm";
+import { asc, count, desc, eq, ilike, ne } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../../infra/db";
 import { toLimitOffset } from "../../shared/pagination";
 import { err, ok } from "../../shared/result";
 import { jsonBody } from "../../shared/validate";
 import { type AuthedVariables, requireUser } from "../auth";
-import { BUILTIN_ROLE_NAMES } from "./bootstrap";
+import { BUILTIN_ROLE_NAME, BUILTIN_ROLE_NAMES } from "./bootstrap";
 import { role, userRole } from "./schema";
 import {
   CreateRoleInput,
@@ -39,11 +39,18 @@ export const roleRoutes = new Hono<{ Variables: AuthedVariables }>()
    *
    * 和下面的 `/page` 并存不是重复：这条只回 `{id,name}`、不回权限点、不受
    * 「角色管理」权限点管（只有「用户管理」权限的人也要能选角色）。
+   *
+   * **「超级管理员」不在这条清单里**——它是**可分配角色**的清单，而那个角色绑的是
+   * 引导出来的那一个 `isBuiltin` 账号，是系统最后一条回来的路，不该日常挂到同事
+   * 身上。要给人全部权限用「管理员」，两者权限完全相同（都恒等于全集）。
+   *
+   * 想看全部角色（含超管）的是角色管理页，它走 `/page`。
    */
   .post("/list", async (c) => {
     const list = await db
       .select({ id: role.id, name: role.name, remark: role.remark })
       .from(role)
+      .where(ne(role.name, BUILTIN_ROLE_NAME))
       // 按 id 升序：角色没有排序字段（刻意不做，见 schema.ts），先建的排前面
       // 是最不会让人意外的顺序。
       .orderBy(asc(role.id));

@@ -53,8 +53,9 @@ export const userDetailQueryOptions = (id: string) =>
   });
 
 /**
- * 角色下拉的数据源。**本次只有一条内置的"超级管理员"**——角色管理是下一个 PR，
- * 在那之前这个下拉里只有它。见 docs/user-management-design.md。
+ * 角色下拉的数据源。**回的是"可分配"的角色，不含「超级管理员」**——那个角色绑着
+ * 引导出来的内置账号，是系统最后一条回来的路，不分配给别人；要给人全部权限用
+ * 「管理员」，两者权限完全相同。过滤在服务端（routes.role.ts），不在这里。
  */
 export const roleListQueryOptions = () =>
   queryOptions({

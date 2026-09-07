@@ -126,10 +126,21 @@ function UserForm({
 }) {
   const isEdit = !!user;
   const rolesQuery = useQuery(roleListQueryOptions());
-  const roleItems = (rolesQuery.data ?? []).map((role) => ({
-    value: role.id,
-    label: role.name,
-  }));
+
+  // 接口回的是**可分配**的角色，「超级管理员」不在里面（它绑内置账号，见服务端
+  // routes.role.ts）。但内置账号自己挂着它，得把它并回来——否则编辑那个账号时，
+  // 角色栏会显示成"未分配角色"，明明它有角色。
+  const assignable = rolesQuery.data ?? [];
+  const roleItems = [
+    ...assignable,
+    ...(user?.roles ?? []).filter(
+      (own) => !assignable.some((item) => item.id === own.id),
+    ),
+  ].map((role) => ({ value: role.id, label: role.name }));
+
+  // 内置账号的角色不可改（服务端 /update 会拒绝）。禁用而不是隐藏：栏位消失了
+  // 用户会以为界面坏了，禁用 + 下面那句说明能讲清原因。同列表页那几颗按钮。
+  const rolesLocked = !!user?.isBuiltin;
 
   const defaultValues: UserFormState = {
     username: user?.username ?? "",
@@ -312,11 +323,11 @@ function UserForm({
                 <FieldLabel>角色</FieldLabel>
                 {/* 多选：一个人可以同时是多个角色，权限取并集
                     （见 modules/user/schema.ts 的 userRole）。
-                    **刻意不设成必填**：本次只预置一条"超级管理员"，必填等于逼着
-                    每个新账号都挂最高权限；没有角色 = 将来什么都不能做，才是新
-                    账号该有的起点。 */}
+                    **刻意不设成必填**：必填等于逼着每个新账号都挂上权限；没有角色
+                    = 什么都不能做，才是新账号该有的起点。 */}
                 <Select
                   multiple
+                  disabled={rolesLocked}
                   items={roleItems}
                   value={field.state.value}
                   onValueChange={(value) => {
@@ -349,6 +360,11 @@ function UserForm({
                     ))}
                   </SelectContent>
                 </Select>
+                {rolesLocked && (
+                  <p className="text-muted-foreground text-xs">
+                    内置管理员的角色不能修改。
+                  </p>
+                )}
               </Field>
             )}
           </form.Field>

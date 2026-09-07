@@ -7,6 +7,7 @@ import { err, ok } from "../../shared/result";
 import { jsonBody } from "../../shared/validate";
 import { type AuthedVariables, auth, requireUser } from "../auth";
 import { session, user } from "../auth/schema";
+import { BUILTIN_ROLE_NAME } from "./bootstrap";
 import { role, userRole } from "./schema";
 import {
   ChangePasswordInput,
@@ -109,6 +110,28 @@ const replaceRoles = async (
 };
 
 /**
+ * 「超级管理员」不可分配给任何人——它绑的是引导出来的那一个 `isBuiltin` 账号，
+ * 是系统最后一条回来的路。要给人全部权限用「管理员」，两者权限完全相同。
+ *
+ * `/api/role/list` 已经把它从下拉里去掉了，但**那不是边界**：前端过滤只是别让人
+ * 看见点不动的东西，直接打接口照样能传这个 id 进来（见 AGENTS.md「渲染模型」）。
+ *
+ * 返回 null = 通过。
+ */
+const rejectBuiltinRole = async (roleIds: number[]) => {
+  if (roleIds.length === 0) return null;
+
+  const [found] = await db
+    .select({ id: role.id })
+    .from(role)
+    .where(and(inArray(role.id, roleIds), eq(role.name, BUILTIN_ROLE_NAME)));
+
+  return found
+    ? `「${BUILTIN_ROLE_NAME}」不能分配给其他账号，需要全部权限请用「管理员」`
+    : null;
+};
+
+/**
  * Better Auth 的接口在唯一冲突等情况下抛 `APIError`（带真 HTTP 状态），而我们的
  * 约定是业务失败一律 HTTP 200 + `code`。这里把它翻成中文的 VALIDATION_ERROR。
  *
@@ -190,6 +213,11 @@ export const userRoutes = new Hono<{ Variables: AuthedVariables }>()
       c.req.valid("json");
     const operatorId = c.get("authedUser").id;
 
+    // 在建号**之前**拦：建号走 auth.api，不在下面那个事务里，放到后面拦就会留下
+    // 一个已经创建、但角色没写成的账号。
+    const builtinRoleError = await rejectBuiltinRole(roleIds);
+    if (builtinRoleError) return c.json(invalid(builtinRoleError));
+
     // **走 Better Auth 的注册接口，不手写 user/account 两张表。** 密码哈希的
     // 算法和参数归它管，手写一份必然在某次升级之后悄悄失配，而失配的表现是
     // 「登录返回 401」这种完全不指向此处的症状。同 dev-seed/00-user.ts。
@@ -262,6 +290,11 @@ export const userRoutes = new Hono<{ Variables: AuthedVariables }>()
         current.length === roleIds.length &&
         current.every((item) => roleIds.includes(item.id));
       if (!same) return c.json(invalid("内置管理员的角色不能修改"));
+    } else {
+      // 只有内置超管账号能挂「超级管理员」，而它走的正是上面那条"角色必须不变"的
+      // 分支。其他人一律拒绝。
+      const builtinRoleError = await rejectBuiltinRole(roleIds);
+      if (builtinRoleError) return c.json(invalid(builtinRoleError));
     }
 
     try {
