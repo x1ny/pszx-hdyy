@@ -1,10 +1,6 @@
 import { cn } from "#/shared/lib/utils";
 import {
-  PLACEHOLDER_FLIGHT_GATE,
-  PLACEHOLDER_FLIGHT_SEAT,
   PLACEHOLDER_GROUP_SEAT_NOTE,
-  PLACEHOLDER_TRAIN_GATE,
-  PLACEHOLDER_TRAIN_SEAT,
   PLACEHOLDER_TRANSIT_MINUTES,
 } from "../-placeholders";
 import type { AgendaItem, Car, Trip } from "../-queries";
@@ -289,17 +285,8 @@ function TripRow({
   );
 }
 
-/** 火车 / 飞机：车次或航班号，加一行票面信息（占位）。 */
+/** 火车 / 飞机：展示车次或航班号。 */
 function TicketBody({ trip }: { trip: Trip }) {
-  const seat =
-    trip.transportMode === "flight"
-      ? PLACEHOLDER_FLIGHT_SEAT
-      : PLACEHOLDER_TRAIN_SEAT;
-  const gate =
-    trip.transportMode === "flight"
-      ? PLACEHOLDER_FLIGHT_GATE
-      : PLACEHOLDER_TRAIN_GATE;
-
   return (
     <>
       {trip.serviceNumber ? (
@@ -314,12 +301,6 @@ function TicketBody({ trip }: { trip: Trip }) {
           {TRANSPORT_MODE_LABELS[trip.transportMode]}
         </h3>
       )}
-      <div className="mt-0.5 text-caption text-ink-3">
-        <span className="tabular-nums">{seat}</span>
-        <span className="mx-1 text-ink-4">·</span>
-        <span className="tabular-nums">{gate}</span>
-        <PlaceholderMark />
-      </div>
     </>
   );
 }

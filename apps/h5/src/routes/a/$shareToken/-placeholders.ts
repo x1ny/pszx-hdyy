@@ -11,7 +11,6 @@
  * | 这里的常量 | 库里的情况 |
  * | --- | --- |
  * | `PLACEHOLDER_TRANSIT_MINUTES` | `activity_resource` 上没有车程 |
- * | `PLACEHOLDER_TICKET_*` | `member_trip` 只有车次 / 起讫点 / 起讫时刻 |
  * | `PLACEHOLDER_GROUP_SEAT_NOTE` | 无。排位有整区分配给团体，语义不是这个 |
  *
  * 还有一项**不在这里**：地图导航。全库没有任何经纬度列（`venue` / `activity`
@@ -20,7 +19,7 @@
  *
  * ## 铁律：占位数据可以被看见，不可以被点击执行
  *
- * 纯展示的占位（车程、票面座位、同行人座位）标注一下就完事，假的代价只是
+ * 纯展示的占位（车程、同行人座位）标注一下就完事，假的代价只是
  * 难看。但**会在物理世界产生后果的不行**：占位坐标会把人送错地方，而人一旦跳出
  * App，「占位数据」四个字就不在他眼前了；同理，将来若再出现占位电话，**不许**
  * 套 `<a href="tel:">` —— 嘉宾点一下就真的打给某个陌生人，标注拦不住已经按下去
@@ -34,14 +33,6 @@
 
 /** 用车的路程预计（分钟）。 */
 export const PLACEHOLDER_TRANSIT_MINUTES = 40;
-
-/** 火车票面。 */
-export const PLACEHOLDER_TRAIN_SEAT = "二等座 05车08A";
-export const PLACEHOLDER_TRAIN_GATE = "检票口 3A";
-
-/** 机票票面。 */
-export const PLACEHOLDER_FLIGHT_SEAT = "经济舱 32C";
-export const PLACEHOLDER_FLIGHT_GATE = "登机口 B12";
 
 /** 同行人座位说明。只挂在本人确实有座位的那几场上，否则没有意义。 */
 export const PLACEHOLDER_GROUP_SEAT_NOTE = "您的团体成员座位安排在 5排03-05座";
