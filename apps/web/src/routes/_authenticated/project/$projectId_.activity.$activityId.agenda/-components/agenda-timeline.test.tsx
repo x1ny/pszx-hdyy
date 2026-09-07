@@ -62,6 +62,26 @@ const longDay: TimelineDay = {
 };
 
 describe("AgendaTimeline", () => {
+  it("leaves a visible gap between the text lines and bottom configuration marks", () => {
+    const { container } = render(
+      <AgendaTimeline
+        days={[longDay]}
+        demandsBySegment={new Map()}
+        memberCounts={new Map()}
+        seatingStatusBySegment={new Map()}
+        onSelect={() => undefined}
+      />,
+    );
+
+    const block = container.querySelector('button[aria-label^="长环节"]');
+    expect(block).toHaveClass("justify-start", "px-2.5", "py-1.5");
+
+    const [name, time, place] = block?.querySelectorAll(":scope > span") ?? [];
+    expect(name).toHaveClass("text-[12.5px]", "leading-4");
+    expect(time).toHaveClass("mt-px", "text-[11px]", "leading-[14px]");
+    expect(place).toHaveClass("text-[11px]", "leading-[14px]");
+  });
+
   it("keeps the first and last tick labels inside the scroll viewport", () => {
     const { container } = render(
       <AgendaTimeline

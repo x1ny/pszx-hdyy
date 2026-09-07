@@ -172,7 +172,7 @@ export function AgendaTimeline({
                                   // 能点得到的宽度，量级几像素；真正让短环节可读
                                   // 的是上面撑宽的轨道。@container 让下面的内容
                                   // 按块的实际宽度决定收起哪几行。
-                                  "@container absolute inset-y-0 flex min-w-2 cursor-pointer flex-col justify-center overflow-hidden rounded-md border px-1.5 py-1.5 text-left transition-colors",
+                                  "@container absolute inset-y-0 flex min-w-2 cursor-pointer flex-col justify-start overflow-hidden rounded-md border px-2.5 py-1.5 text-left transition-colors @max-[5.5rem]:px-[7px] @max-[5.5rem]:py-[5px]",
                                   lane.line.lineType === "main"
                                     ? "border-primary/25 bg-primary/10 hover:bg-primary/15"
                                     : "border-chart-2/25 bg-chart-2/10 hover:bg-chart-2/15",
@@ -199,7 +199,7 @@ export function AgendaTimeline({
                                     际宽度要比阈值多 14px 才会命中。按每小时 120px
                                     折算：2.5rem→约 27 分钟起显示图标，5.5rem→约
                                     51 分钟起显示时间和类型/地点。 */}
-                                <span className="truncate font-medium text-xs leading-4">
+                                <span className="truncate font-medium text-[12.5px] leading-4">
                                   {block.continuesFromPrevDay && (
                                     <span className="mr-1 hidden rounded-sm bg-muted px-1 py-px font-normal text-[10px] text-muted-foreground @min-[5.5rem]:inline">
                                       接上日
@@ -208,15 +208,15 @@ export function AgendaTimeline({
                                   {segment.name}
                                 </span>
                                 {/* 续接日从当天 00:00 展示，环节列表/详情仍保留真实起止。 */}
-                                <span className="hidden truncate text-[11px] text-muted-foreground leading-4 tabular-nums @min-[5.5rem]:block">
+                                <span className="mt-px hidden truncate text-[11px] text-muted-foreground leading-[14px] tabular-nums @min-[5.5rem]:block">
                                   {formatTimelineBlockRange(segment, block)}
                                 </span>
-                                <span className="hidden truncate text-[11px] text-muted-foreground leading-4 @min-[5.5rem]:block">
+                                <span className="hidden truncate text-[11px] text-muted-foreground leading-[14px] @min-[5.5rem]:block">
                                   {SEGMENT_TYPE_LABELS[segment.segmentType]}
                                   {segment.locationText &&
                                     ` · ${segment.locationText}`}
                                 </span>
-                                <div className="mt-0.5 hidden h-4 min-w-0 items-center @min-[2.5rem]:flex">
+                                <div className="absolute bottom-1.5 left-2.5 hidden @max-[5.5rem]:left-[7px] @min-[2.5rem]:flex">
                                   <SegmentConfigIcons
                                     segment={segment}
                                     memberCount={memberCounts.get(segment.id)}
