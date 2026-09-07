@@ -17,6 +17,7 @@ import { err, ok } from "../../shared/result";
 import { jsonBody } from "../../shared/validate";
 import { activitySegment } from "../agenda/schema";
 import { type AuthedVariables, requireUser } from "../auth";
+import { deleteActivityCascade } from "./activity-delete";
 import { activity, project } from "./schema";
 import { createItineraryShareToken } from "./share-token";
 import {
@@ -487,19 +488,14 @@ export const activityRoutes = new Hono<{ Variables: AuthedVariables }>()
     const { id } = c.req.valid("json");
 
     try {
-      // activity_media 按表定义级联删除关联记录；其余下游业务表不设级联，
-      // 由数据库外键保护议程、人员、资源和邀请函等已有业务数据。
-      const [row] = await db
-        .delete(activity)
-        .where(eq(activity.id, id))
-        .returning({ id: activity.id });
+      const row = await deleteActivityCascade(id);
 
       return row ? c.json(ok(row)) : c.json(activityNotFound());
     } catch (error) {
       if (isForeignKeyViolation(error)) {
         return c.json(
           validationError(
-            "该活动已被议程、人员、资源或邀请函等业务数据引用，不能删除；如需隐藏请改为下架",
+            "该活动仍被尚未纳入清理范围的关联数据引用，暂时不能删除",
           ),
         );
       }
@@ -555,6 +551,5 @@ export const activityRoutes = new Hono<{ Variables: AuthedVariables }>()
     },
   );
 
-// 活动物理删除只开放给没有下游引用的活动；activity_media 会按表定义级联
-// 删除关联记录，其余人员/议程/资源/邀请函外键会阻止删除，避免误删历史业务数据。
-// 已有引用的活动请用 publishStatus = "delisted" 隐藏。
+// 活动物理删除会在一个事务里清理全部活动级业务数据；共享主档和下载审计
+// 不会被删除。需要保留活动及其历史时，应使用 publishStatus = "delisted" 下架。

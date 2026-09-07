@@ -51,9 +51,10 @@ export type SegmentType = (typeof SEGMENT_TYPES)[number];
 /**
  * 环节状态：正常 / 作废。
  *
- * "作废"承担了这张表的删除语义（BR-DEV-021：已被引用的环节不物理删除）。
+ * "作废"承担了这张表的日常删除语义（BR-DEV-021：已被引用的环节不物理删除）。
  * 所以 routes.ts 里**没有** deleteSegment——同时留删除和作废两个出口，只会
- * 让每个调用方自己纠结用哪个。
+ * 让每个调用方自己纠结用哪个。永久删除整个活动是例外：它以活动为边界，在
+ * 一个事务中显式清理整棵活动数据，并不是另一条独立的环节删除入口。
  *
  * 注意作废**不占用时间段**：重叠校验只看 active 行。反过来说，把一个作废
  * 环节改回 active 时必须重跑一次重叠校验，因为它让出的时段可能已经被别人
@@ -77,8 +78,8 @@ export const agendaLine = pgTable(
       .primaryKey()
       .generatedByDefaultAsIdentity(),
 
-    // onDelete 不设 cascade，理由同 activity.projectId：活动不做物理删除，
-    // 真有人绕过应用层删了活动，宁可让外键约束报错，也不要静默删空整条议程。
+    // onDelete 不设 cascade：即使活动的永久删除会由应用层事务清理议程，也不让
+    // 绕过该事务的直接 SQL 静默删空整条议程。
     activityId: bigint("activity_id", { mode: "number" })
       .notNull()
       .references(() => activity.id),
@@ -253,7 +254,8 @@ export type SegmentSnapshot = {
  * 忽略，换来的是"查一条就拿到当时的完整状态"，不用回放。diff 可以事后从
  * 相邻两条快照算出来，反过来不行。
  *
- * segmentId 刻意不加外键——历史记录不该因为主表行的任何变动而受牵连。
+ * segmentId 刻意不加外键——日常环节变更不该牵连历史记录。永久删除整个活动是
+ * 明确的破坏性例外，活动删除事务会按该活动的环节 id 一并清理其快照。
  */
 export const activitySegmentRevision = pgTable("activity_segment_revision", {
   id: bigint("id", { mode: "number" })

@@ -96,9 +96,10 @@ export type TransportScene = (typeof TRANSPORT_SCENES)[number];
 /**
  * 资源记录状态：正常 / 作废。
  *
- * 同 activity_segment.status，"作废"承担删除语义——资源记录会被需求项关联、
- * 被人员绑定引用，物理删除会留下悬空引用（crud-page-guide 里"别的表开始外键
- * 引用这张表时才补软删"说的正是这种情况）。
+ * 同 activity_segment.status，"作废"承担日常删除语义——资源记录会被需求项
+ * 关联、被人员绑定引用，单独物理删除会留下悬空引用（crud-page-guide 里
+ * "别的表开始外键引用这张表时才补软删"说的正是这种情况）。永久删除整个活动
+ * 是例外：活动删除事务会先清理关联，再移除活动范围内的资源记录。
  *
  * 作废的资源**不计入需求项的配置状态**：一条需求关联的两辆车全作废了，它就
  * 该退回"待配置"，而不是停在"已配置"。这是"状态派生"最直接的一个好处——
@@ -433,8 +434,9 @@ export const resourceDemandLink = pgTable(
       name: "fk_link_demand_activity",
     }).onDelete("cascade"),
 
-    // 资源侧不设 cascade：资源不做物理删除，只作废（作废后自动不计入配置
-    // 状态，见 RESOURCE_STATUSES 的注释）。
+    // 资源侧不设 cascade：日常操作只作废资源（作废后自动不计入配置状态，见
+    // RESOURCE_STATUSES 的注释）。永久删除活动时由专门事务先删关联再删资源，
+    // 不允许直接 SQL 静默级联。
     foreignKey({
       columns: [table.resourceId, table.activityId],
       foreignColumns: [activityResource.id, activityResource.activityId],

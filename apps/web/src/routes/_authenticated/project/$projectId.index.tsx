@@ -512,8 +512,8 @@ function ProjectActivityListPage() {
             <AlertDialogTitle>确认删除该活动？</AlertDialogTitle>
             <AlertDialogDescription>
               「{pendingDelete?.name}
-              」将被永久删除。已有议程、人员、资源或邀请函等业务数据引用的活动不能删除，
-              请改为下架。
+              」及其议程、人员关系、资源、排位、场地配置和邀请函记录将被永久删除，
+              无法恢复。已对外发送的文件或消息不会被撤回。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
