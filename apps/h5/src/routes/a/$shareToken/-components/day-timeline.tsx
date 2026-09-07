@@ -1,8 +1,5 @@
 import { cn } from "#/shared/lib/utils";
-import {
-  PLACEHOLDER_GROUP_SEAT_NOTE,
-  PLACEHOLDER_TRANSIT_MINUTES,
-} from "../-placeholders";
+import { PLACEHOLDER_TRANSIT_MINUTES } from "../-placeholders";
 import type { AgendaItem, Car, Trip } from "../-queries";
 import {
   type AgendaStatus,
@@ -190,30 +187,14 @@ function AgendaRow({
           </div>
         )}
 
-        {/* 只有已确认的排位方案才会给出 zone/seat（服务端过滤），所以这里
-            出现的座位号一定是可以照着坐的。 */}
-        {item.zone && (
+        {/* 只有已确认的个人排位才会给出 zone/seat（服务端已按当前人员过滤），
+            所以这里展示的始终是这位嘉宾自己的真实座位。 */}
+        {item.zone && item.seat && (
           <div className="mt-1.5 flex items-center gap-2.5">
             <PillTag variant="outline">
               <span>{item.zone}</span>
-              {item.seat && <span className="tabular-nums">{item.seat}</span>}
+              <span className="tabular-nums">{item.seat}</span>
             </PillTag>
-          </div>
-        )}
-
-        {/* 同行人的座位：他们多半没有自己的分享链接，座位号只能挂在拿到链接的
-            这位嘉宾身上。只在本人确实有座位的场次上挂，否则没有意义。 */}
-        {item.zone && (
-          <div className="mt-1 flex items-start gap-1 text-caption text-ink-3">
-            <Icon
-              name="users-round"
-              size={12}
-              className="mt-[0.125rem] shrink-0"
-            />
-            <span className="min-w-0">
-              {PLACEHOLDER_GROUP_SEAT_NOTE}
-              <PlaceholderMark />
-            </span>
           </div>
         )}
 
