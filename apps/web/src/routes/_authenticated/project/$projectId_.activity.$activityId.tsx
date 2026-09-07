@@ -67,6 +67,7 @@ const TABS = [
     label: "议程 / 环节",
   },
   { to: "/project/$projectId/activity/$activityId/venue", label: "场地空间" },
+  { to: "/project/$projectId/activity/$activityId/seating", label: "排位" },
   {
     to: "/project/$projectId/activity/$activityId/resources",
     label: "资源需求",
@@ -81,7 +82,6 @@ const TABS = [
     to: "/project/$projectId/activity/$activityId/invitations",
     label: "邀请函",
   },
-  { to: "/project/$projectId/activity/$activityId/seating", label: "排位" },
 ] as const;
 
 /**
