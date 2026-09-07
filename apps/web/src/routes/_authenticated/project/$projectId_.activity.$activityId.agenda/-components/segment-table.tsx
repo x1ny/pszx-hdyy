@@ -48,10 +48,8 @@ export function SegmentTable({
   seatingStatusBySegment,
   pendingStatusId,
   onDetail,
-  onEdit,
   onConfigure,
   onToggleStatus,
-  onManageDemands,
 }: {
   segments: Segment[];
   lines: AgendaLine[];
@@ -64,16 +62,14 @@ export function SegmentTable({
   seatingStatusBySegment: ReadonlyMap<number, PlanStatus | null>;
   pendingStatusId?: number;
   onDetail: (segment: Segment) => void;
-  onEdit: (segment: Segment) => void;
   /**
    * 新版环节配置页（基础信息 + 人员 + 资源 + 排位，整页原子保存）。
    *
-   * 和左边那几个旧入口**并存**，不是替换：新版先给一部分人在真实数据上试，
-   * 稳定后再收敛到只剩这一个入口，把四个弹窗组件一起删掉。
+   * 这是列表操作区的默认入口；旧弹窗组件和环节名称的旧详情入口暂时保留，
+   * 便于回退，不在这里重复展示旧的详情、修改和资源需求按钮。
    */
   onConfigure: (segment: Segment) => void;
   onToggleStatus: (segment: Segment) => void;
-  onManageDemands: (segment: Segment) => void;
 }) {
   const lineById = new Map(lines.map((line) => [line.id, line]));
 
@@ -209,38 +205,10 @@ export function SegmentTable({
                         variant="ghost"
                         size="sm"
                         className="text-primary hover:text-primary"
-                        onClick={() => onDetail(segment)}
-                      >
-                        详情
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-primary hover:text-primary"
-                        onClick={() => onEdit(segment)}
-                      >
-                        修改
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-primary hover:text-primary"
                         onClick={() => onConfigure(segment)}
                       >
-                        新版配置
+                        配置
                       </Button>
-                      {/* 作废环节不给配资源：它已经不在议程上了，配了也不
-                          进待办（isOpenTodo 会把它过滤掉） */}
-                      {!voided && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-primary hover:text-primary"
-                          onClick={() => onManageDemands(segment)}
-                        >
-                          资源需求
-                        </Button>
-                      )}
                       {/* 只禁用正在提交的那一行，不要整列一起变灰 */}
                       <Button
                         variant="ghost"

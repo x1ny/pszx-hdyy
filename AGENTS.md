@@ -49,6 +49,8 @@ Before editing files for a substantial task:
 
 环节现在有**两条编辑路径**，有意并存不是遗留：旧的四个弹窗，和新的单页 `agenda/$segmentId`（四块合一、整页原子保存）。两边写同一批表。
 
+议程页默认新版，旧代码保留。
+
 **改之前必须知道**：新页面的人员/绑定发的是**增量意图**（`add`/`remove`/`unbindIds`）而非完整名单，改成"发目标状态"会让草稿一保存就静默覆盖别人在旧弹窗里的改动——这是两套入口能并存的唯一前提。另有两条写入顺序硬约束（环节先于人员、需求先于资源），写反不报错只出怪结果，见 `agenda/segment-config.ts` 顶部。
 
 背景、代价、**收敛旧入口时该删哪些文件**见 [docs/architecture-decisions.md](docs/architecture-decisions.md#环节配置合并为单页整页原子保存)。

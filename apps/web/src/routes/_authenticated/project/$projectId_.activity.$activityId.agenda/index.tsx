@@ -301,11 +301,6 @@ function AgendaTab() {
 
   const tableSegments = search.includeVoided ? segments : activeSegments;
 
-  const openCreate = () => {
-    setEditing(undefined);
-    setFormOpen(true);
-  };
-
   const openEdit = (segment: Segment) => {
     setDetail(undefined);
     setEditing(segment);
@@ -315,10 +310,10 @@ function AgendaTab() {
   /**
    * 新版环节配置页（四块合一、整页原子保存）。
    *
-   * 和上面那两个弹窗入口**并存**——新版先给一部分人在真实数据上试，稳定后再
-   * 把旧入口和四个弹窗组件一起删掉。两条路写的是同一批表、过同一套约束，所以
-   * 并存本身是安全的；真正的前提是新页面发的是"意图"而不是"目标状态"，
-   * 否则草稿放久了一保存就会覆盖别人在旧弹窗里做的改动（见 -draft.ts）。
+   * 现在是新增、时间轴点击和列表「配置」的默认入口。旧弹窗实现暂时保留，
+   * 方便回退；两条路写的是同一批表、过同一套约束，所以并存本身是安全的。
+   * 真正的前提是新页面发的是"意图"而不是"目标状态"，否则草稿放久了一保存
+   * 就会覆盖别人在旧弹窗里做的改动（见 -draft.ts）。
    */
   const openConfigPage = (segmentId: string) =>
     navigate({
@@ -398,11 +393,7 @@ function AgendaTab() {
           <Button variant="outline" onClick={() => setLineDialogOpen(true)}>
             议程线管理
           </Button>
-          <Button variant="outline" onClick={() => openConfigPage("new")}>
-            <PlusIcon />
-            新增环节（新版）
-          </Button>
-          <Button onClick={openCreate}>
+          <Button onClick={() => openConfigPage("new")}>
             <PlusIcon />
             新增环节
           </Button>
@@ -458,7 +449,7 @@ function AgendaTab() {
           demandsBySegment={demandsBySegment}
           memberCounts={memberCounts}
           seatingStatusBySegment={seatingStatusBySegment}
-          onSelect={setDetail}
+          onSelect={(segment) => openConfigPage(String(segment.id))}
         />
       ) : (
         <SegmentTable
@@ -472,10 +463,8 @@ function AgendaTab() {
             statusMutation.isPending ? statusMutation.variables?.id : undefined
           }
           onDetail={setDetail}
-          onEdit={openEdit}
           onConfigure={(segment) => openConfigPage(String(segment.id))}
           onToggleStatus={(segment) => statusMutation.mutate(segment)}
-          onManageDemands={setDemandSegment}
         />
       )}
 
