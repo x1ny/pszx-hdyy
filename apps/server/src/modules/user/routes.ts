@@ -2,11 +2,11 @@ import { and, asc, count, desc, eq, ilike, inArray } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../../infra/db";
 import { toLimitOffset } from "../../shared/pagination";
+import { toDisplayEmail, toStoredEmail } from "../../shared/placeholder-email";
 import { err, ok } from "../../shared/result";
 import { jsonBody } from "../../shared/validate";
 import { type AuthedVariables, auth, requireUser } from "../auth";
 import { session, user } from "../auth/schema";
-import { toDisplayEmail, toStoredEmail } from "./placeholder-email";
 import { role, userRole } from "./schema";
 import {
   ChangePasswordInput,

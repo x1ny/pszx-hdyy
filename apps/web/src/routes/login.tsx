@@ -30,21 +30,33 @@ import { Label } from "#/shared/components/ui/label.tsx";
  * 以为注册入口还在某处。
  */
 const AUTH_ERROR_MESSAGES: Record<string, string> = {
+  // 两条路径（账号 / 邮箱）的"没匹配上"都收敛到同一句文案。**必须一致**：
+  // 一边说"账号或密码错误"另一边说"邮箱或密码错误"，等于告诉试探的人他猜中的是
+  // 哪一类标识。
   INVALID_USERNAME_OR_PASSWORD: "账号或密码错误",
+  INVALID_EMAIL_OR_PASSWORD: "账号或密码错误",
   // 服务端 auth.ts 的 databaseHooks.session.create.before 抛的。**必须有这一条**：
-  // 没有它，被停用的人拿到的是"登录失败，请检查账号和密码"，然后会一直重试一个
-  // 其实完全正确的密码。
+  // 没有它，被停用的人拿到的是"登录失败"，然后会一直重试一个其实完全正确的密码。
   ACCOUNT_DISABLED: "该账号已被停用，请联系管理员",
-  // 账号名不合法时 Better Auth 会直接返回这几个，而不是"账号或密码错误"——
-  // 它们发生在查库之前，不构成账号是否存在的信息泄露。
+  // 标识格式不合法时 Better Auth 在查库之前就返回，不构成"这个账号存不存在"的
+  // 信息泄露，所以可以说得具体一点。
   INVALID_USERNAME: "账号格式不正确",
   USERNAME_TOO_SHORT: "账号格式不正确",
   USERNAME_TOO_LONG: "账号格式不正确",
+  INVALID_EMAIL: "邮箱格式不正确",
 };
 
 const getAuthErrorMessage = (authError: { code?: string }) =>
-  (authError.code && AUTH_ERROR_MESSAGES[authError.code]) ??
-  "登录失败，请检查账号和密码";
+  (authError.code && AUTH_ERROR_MESSAGES[authError.code]) ?? "登录失败，请重试";
+
+/**
+ * 输入的是邮箱还是账号？
+ *
+ * 判据是"含不含 `@`"，而这个判据是**可靠的**，不是凑合：账号名的字符集是
+ * `[a-zA-Z0-9_.]`（服务端 validation.ts 和 username 插件都这么校验），`@` 不在里面
+ * ——所以一个合法账号名永远不含 `@`，一个邮箱永远含 `@`，两者不可能混淆。
+ */
+const looksLikeEmail = (identifier: string) => identifier.includes("@");
 
 export const Route = createFileRoute("/login")({
   validateSearch: (search: Record<string, unknown>): { redirect?: string } => ({
@@ -57,7 +69,7 @@ function Login() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { redirect } = Route.useSearch();
-  const [username, setUsername] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -67,11 +79,16 @@ function Login() {
     setError(null);
     setLoading(true);
 
-    // signIn.username 由 usernameClient() 插件提供（features/auth/auth-client.ts）。
-    const { error: authError } = await authClient.signIn.username({
-      username,
-      password,
-    });
+    // 账号和邮箱是 Better Auth 的**两个端点**（`/sign-in/username` 由 username
+    // 插件提供，`/sign-in/email` 是内置的，插件只新增不替换），没有一个"通用标识"
+    // 入口，所以在这里分流。
+    //
+    // 邮箱这条路留着是为了**关闭自助注册之前建的老账号**：它们没有 username 列，
+    // 但邮箱和密码都完好，不给这条路它们就直接进不来了。
+    const trimmed = identifier.trim();
+    const { error: authError } = looksLikeEmail(trimmed)
+      ? await authClient.signIn.email({ email: trimmed, password })
+      : await authClient.signIn.username({ username: trimmed, password });
 
     setLoading(false);
 
@@ -108,23 +125,24 @@ function Login() {
         <Card>
           <CardHeader className="sr-only">
             <CardTitle>登录</CardTitle>
-            <CardDescription>使用账号和密码登录</CardDescription>
+            <CardDescription>使用账号或邮箱登录</CardDescription>
           </CardHeader>
           <CardContent>
             <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="username">账号</Label>
+                <Label htmlFor="identifier">账号 / 邮箱</Label>
                 <div className="relative">
                   <UserIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    id="username"
+                    id="identifier"
                     className="pl-8"
-                    // autoComplete="username" 让密码管理器认得出这是账号栏；
-                    // 上一版是 type="email"，浏览器会拒绝填非邮箱格式的账号。
+                    // autoComplete="username" 是**账号栏**的标准值，跟邮箱无关，
+                    // 密码管理器认的就是它。注意不能写 type="email"：那会让浏览器
+                    // 拒绝提交非邮箱格式的账号名。
                     autoComplete="username"
-                    placeholder="请输入账号"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="请输入账号或邮箱"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
                     required
                   />
                 </div>

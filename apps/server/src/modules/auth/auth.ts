@@ -1,9 +1,10 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { APIError } from "better-auth/api";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { username } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
 import { db } from "../../infra/db";
+import { isPlaceholderEmail } from "../../shared/placeholder-email";
 import * as schema from "./schema";
 
 const DEFAULT_SESSION_EXPIRES_IN_SECONDS = 7 * 24 * 60 * 60;
@@ -46,6 +47,30 @@ export const auth = betterAuth({
       maxUsernameLength: 30,
     }),
   ],
+  /**
+   * **账号和邮箱两种登录方式都支持**（`/sign-in/username` 和 `/sign-in/email`，
+   * 插件是新增端点不是替换）。前端按输入里有没有 `@` 分流，见 routes/login.tsx。
+   *
+   * 这里只堵一件事：拿**占位邮箱**登录。没填邮箱的人库里存的是
+   * `<账号>@local.invalid`，那是从账号名机械派生的，等于给他凭空多出一条可推导的
+   * 登录标识——不是漏洞（照样要密码），但是纯噪音，理由见 shared/placeholder-email.ts。
+   *
+   * 错误码复用 `INVALID_EMAIL_OR_PASSWORD` 而不是新造一个：告诉对方"这个邮箱是
+   * 占位值"等于确认了这个账号存在。
+   */
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      if (ctx.path !== "/sign-in/email") return;
+
+      const email = (ctx.body as { email?: unknown } | undefined)?.email;
+      if (typeof email === "string" && isPlaceholderEmail(email)) {
+        throw new APIError("UNAUTHORIZED", {
+          code: "INVALID_EMAIL_OR_PASSWORD",
+          message: "邮箱或密码错误",
+        });
+      }
+    }),
+  },
   databaseHooks: {
     session: {
       create: {

@@ -1,8 +1,8 @@
 import { eq } from "drizzle-orm";
 import { db } from "../../infra/db";
+import { toStoredEmail } from "../../shared/placeholder-email";
 import { auth } from "../auth";
 import { user } from "../auth/schema";
-import { toStoredEmail } from "./placeholder-email";
 import { role, userRole } from "./schema";
 import { PasswordInput, UsernameInput } from "./validation";
 

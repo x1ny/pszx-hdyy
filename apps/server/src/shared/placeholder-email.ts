@@ -26,3 +26,17 @@ export const toStoredEmail = (email: string | undefined, username: string) =>
 /** 读库用：占位值对外一律呈现为"没填"。 */
 export const toDisplayEmail = (email: string | null) =>
   email && !email.endsWith(PLACEHOLDER_DOMAIN) ? email : null;
+
+/**
+ * 登录用：这个邮箱是我们编出来的占位值吗？
+ *
+ * **系统支持账号和邮箱两种登录方式**，于是占位邮箱冒出一个副作用：它是从账号名
+ * 机械派生的（`zhangsan` → `zhangsan@local.invalid`），等于给每个没填邮箱的人凭空
+ * 多出一条**可推导**的登录标识。
+ *
+ * 它不是漏洞（照样要密码），但是纯噪音——那条标识不指向任何真实邮箱，谁都不会去
+ * 用它登录。所以在 `auth.ts` 的 `hooks.before` 里直接拒掉，让"邮箱登录"这条路只
+ * 对真填了邮箱的人开放。
+ */
+export const isPlaceholderEmail = (email: string) =>
+  email.trim().toLowerCase().endsWith(PLACEHOLDER_DOMAIN);
