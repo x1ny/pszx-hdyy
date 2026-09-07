@@ -27,6 +27,9 @@ export function EventHero({
   activity: ActivityInfo;
 }) {
   const [detailOpen, setDetailOpen] = useState(false);
+  const heroSrc = activity.heroFileId
+    ? `/api/file/${activity.heroFileId}`
+    : "/hero-quanzhou.jpg";
   const { dateText, timeRange } = formatActivityDate(
     activity.startTime,
     activity.endTime,
@@ -35,16 +38,14 @@ export function EventHero({
   return (
     <section className="relative">
       <div className="relative h-[12.5rem] overflow-hidden bg-brand-gradient">
-        {/* 没有画廊图片时就留渐变底 —— 塞一张占位图会让整页看起来像是加载失败。
-            /api/file/:fileId 刻意没挂登录守卫，免登录取得到。 */}
-        {activity.heroFileId && (
-          <img
-            src={`/api/file/${activity.heroFileId}`}
-            alt=""
-            className="absolute inset-0 h-full w-full object-cover"
-            draggable={false}
-          />
-        )}
+        {/* 活动没有配置头图时使用 Demo 的泉州主题图，避免首屏只剩渐变占位。
+            配置了活动图片则仍优先读取 /api/file/:fileId。 */}
+        <img
+          src={heroSrc}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover"
+          draggable={false}
+        />
         {/* 白卡切进来的那条边压一层暗角，否则图底部亮的时候接缝很硬 */}
         <div
           aria-hidden
