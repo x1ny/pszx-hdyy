@@ -55,15 +55,7 @@ Before editing files for a substantial task:
 
 ## 仓库结构
 
-Bun workspaces monorepo，三个包：
-
-```
-apps/web       管理端。Vite + TanStack Router，纯 SPA（端口 3000）
-apps/h5        移动公众端。Vite + TanStack Router，纯 SPA（端口 3001）
-apps/server    Hono + Better Auth + Drizzle（端口 8787）
-```
-
-包名分别是 `@repo/web`、`@repo/h5`、`@repo/server`。根 `package.json` 只放 workspaces 声明、Biome、TypeScript 和跨包编排脚本，**不要**往根上加业务依赖。
+Bun workspaces monorepo，三个包：`apps/web`（管理端）、`apps/h5`（移动公众端）、`apps/server`。包名分别是 `@repo/web`、`@repo/h5`、`@repo/server`。根 `package.json` 只放 workspaces 声明、Biome、TypeScript 和跨包编排脚本，**不要**往根上加业务依赖。
 
 **`apps/h5` 不是 `apps/web` 的移动版，是另一个端**——用户、视觉语言、身份体系都不同，所以刻意不共享主题、不共享组件。h5 **不用 shadcn**（没有 `components.json` 和 `ui/` 目录）：那套中性灰桌面审美要对抗到底，而 `card`/`badge`/`button` 本体极薄，生成出来第一件事就是删 variants 重写。需要弹层交互（Dialog/Drawer/Collapsible/Select）时**直接 import `@base-ui/react` 原语自己套样式**——值钱的是焦点管理、滚动锁定和 `aria-*`，不是 shadcn 的皮。h5 另外：两份 `styles.css` 各自维护 token；不加载 Web 字体（系统字体栈）；没装 `class-variance-authority`，`cn()` + 字符串常量够用。
 
@@ -165,7 +157,7 @@ bun run typecheck && bun run test
 
 ## 认证
 
-**这一节只讲管理端。** Better Auth 服务的是 `apps/web` 那套**账号**密码登录（`username` 插件），身份落在 `user` 表；相关代码全在 `apps/server/src/modules/auth/`。用户管理（含角色预留、生产引导、为什么不用 `admin` 插件）见 [docs/user-management-design.md](docs/user-management-design.md)。**自助注册已在 Hono 层封死**，改 `index.ts` 中间件顺序前先看那份文档。
+**这一节只讲管理端。** Better Auth 服务的是 `apps/web` 那套**账号**密码登录（`username` 插件），身份落在 `user` 表；相关代码全在 `apps/server/src/modules/auth/`。用户管理、角色预留、生产引导、**已在 Hono 层封死的自助注册**见 [docs/user-management-design.md](docs/user-management-design.md)——改 `index.ts` 中间件顺序或停用逻辑前先看它。
 
 - **`index.ts` 里 `authHandler` 的 `.route()` 必须注册在 session 中间件之前。** 这不是官方要求的顺序，是我们自己的选择：`auth.handler()` 直接处理 raw `Request`/`Response`、从不读 Hono context，顺序不影响正确性；排前面纯粹是让 Better Auth 自己的路由跳过后面注册的 session 查询。`routes.ts` 里那行 `app.on(["GET","POST"], "/api/auth/*", …)` 照抄官方文档，**不要改动它的结构**。
 - session 中间件把 `user`/`session` 放进 Hono context，受保护接口从 `c.get("user")` 取，为空时返回 `err({ code: "UNAUTHORIZED" })`——**不是 401**，见「前后端边界」。
