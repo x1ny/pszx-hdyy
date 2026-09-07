@@ -5,7 +5,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./client-type": "./src/client-type.ts",
-    "./dict": "./src/shared/dict/regions.ts"
+    "./dict": "./src/shared/dict/regions.ts",
+    "./permissions": "./src/shared/permissions.ts"
   },
   "scripts": {
     "dev": "bun --env-file=../../.env --hot run src/index.ts",

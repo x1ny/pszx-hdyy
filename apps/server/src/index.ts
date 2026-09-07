@@ -8,6 +8,7 @@ import {
   authHandler,
   devAuthRoutes,
   isDevAuthEnabled,
+  permissionGate,
   sessionMiddleware,
   type Variables,
 } from "./modules/auth";
@@ -24,6 +25,7 @@ import {
   segmentMemberRoutes,
 } from "./modules/member/routes.relation";
 import { organizationRoutes } from "./modules/organization/routes";
+import { permissionRoutes } from "./modules/permission/routes";
 import { activityRoutes, projectRoutes } from "./modules/project/routes";
 import {
   activityResourceRoutes,
@@ -33,7 +35,10 @@ import { seatingRoutes } from "./modules/seating/routes";
 import { supplierRoutes } from "./modules/supplier/routes";
 import { supplierQuoteRoutes } from "./modules/supplier/routes.quote";
 import { tripRoutes } from "./modules/trip/routes";
-import { bootstrapBuiltinAdmin } from "./modules/user/bootstrap";
+import {
+  bootstrapBuiltinAdmin,
+  syncBuiltinRoles,
+} from "./modules/user/bootstrap";
 import { userRoutes } from "./modules/user/routes";
 import { roleRoutes } from "./modules/user/routes.role";
 import { venueRoutes } from "./modules/venue/routes";
@@ -156,6 +161,16 @@ if (isDevAuthEnabled()) {
 
 app.use("*", sessionMiddleware);
 
+// 权限点闸门。**必须在下面的 `.route()` 链之前注册**——Hono 按注册顺序匹配，
+// 挂在后面的中间件不会包住已经注册的路由。反过来，它也不会碰 `/api/auth/*` 和
+// `/api/dev/*`：那两条在上面已经注册完了，先匹配到的 handler 直接出响应。
+//
+// 归属写在 `modules/auth/permission-map.ts` 一张集中表里，而不是各模块自己在链头
+// 挂：`requireUser` 漏挂会立刻炸，权限闸门漏挂是**静默全开**。
+// `permission-map.test.ts` 遍历 `routes.routes` 断言每条路径都被登记过，
+// 新模块忘了填表就是红测试。
+app.use("/api/*", permissionGate);
+
 // Add new feature modules by chaining another .route("/api/<module>", xyzRoutes)
 // here — only what's chained onto `routes` is visible to hc<AppType> on the
 // client. Each module owns one prefix, so its auth middleware (module-wide or
@@ -166,8 +181,10 @@ app.use("*", sessionMiddleware);
 // default export，这里多一个具名导出不改变任何行为。
 export const routes = app
   .route("/api/example", exampleRoutes)
-  // 后台账号管理。角色另占一个前缀（独立资源，同 supplier / supplierQuote），
-  // 本次只有 list —— 角色管理是下一个 PR，见 docs/user-management-design.md。
+  // 查询自己有哪些权限点。**不受权限点管**（用权限点挡它是循环依赖），
+  // 登记在 permission-map.ts 的 UNGATED_PREFIXES 里。
+  .route("/api/permission", permissionRoutes)
+  // 后台账号管理。角色另占一个前缀（独立资源，同 supplier / supplierQuote）。
   .route("/api/user", userRoutes)
   .route("/api/role", roleRoutes)
   .route("/api/supplier", supplierRoutes)
@@ -179,8 +196,11 @@ export const routes = app
   .route("/api/member", memberImportRoutes)
   // 人员分层的三层关系各占一个前缀。它们和 /api/member 同属 modules/member
   // （三张关系表 + 补齐链路必须跟主档待在一个模块，否则 BR-DEV-026 的跨层
-  // 事务会在 project/agenda 之间绕成循环依赖），但接口按层分开挂——查询条件、
-  // 返回列、将来的权限点三层都不一样，糊成一个 ?scope= 入口只会让投影失焦。
+  // 事务会在 project/agenda 之间绕成循环依赖），但接口按层分开挂——查询条件和
+  // 返回列三层都不一样，糊成一个 ?scope= 入口只会让投影失焦。
+  //
+  // 权限点上三层不再分开：projectMember 归「项目管理」，另外两层归「活动管理」，
+  // 按菜单项切（见 modules/auth/permission-map.ts）。
   .route("/api/projectMember", projectMemberRoutes)
   .route("/api/activityMember", activityMemberRoutes)
   .route("/api/segmentMember", segmentMemberRoutes)
@@ -241,6 +261,9 @@ export type AppType = typeof routes;
 // 只为读 `app.routes`，那时既不该连库也不该建账号（构建阶段往往连 DATABASE_URL
 // 都没有）。打包成 dist/server.js 之后它仍然是 true —— 实测确认过，不是推测。
 if (import.meta.main) {
+  // 顺序有意义：内置角色必须先存在（引导要把超管账号挂上去）。而且这一步
+  // **每次启动都跑**——新增权限点后，两个内置角色靠它自愈成全集，见 bootstrap.ts。
+  await syncBuiltinRoles();
   await bootstrapBuiltinAdmin();
 }
 

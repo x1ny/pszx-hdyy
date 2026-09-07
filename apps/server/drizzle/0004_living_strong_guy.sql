@@ -1,0 +1,1 @@
+ALTER TABLE "role" ADD COLUMN "permissions" text[] DEFAULT '{}' NOT NULL;

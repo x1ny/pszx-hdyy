@@ -1,3 +1,4 @@
+import type { PermissionKey } from "@repo/server/permissions";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -17,15 +18,32 @@ import {
   SidebarMenuSubItem,
 } from "#/shared/components/ui/sidebar.tsx";
 
-export function NavMain() {
+export function NavMain({ permissions }: { permissions: PermissionKey[] }) {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
+  });
+
+  // 过滤只是"别让人看见点不动的东西"，不是安全边界——用户绕过界面直接打
+  // `/api/*` 即可，真正的闸门在服务端每条路由上。
+  //
+  // 分组过滤到子项为止：子项被过滤光的分组整个不渲染（一个点开是空的「系统管理」
+  // 比没有这个菜单更让人困惑）。没标 permission 的单项（只有「工作台」）恒显示。
+  const visible = navMain.flatMap<NavItem>((item) => {
+    if (!("children" in item)) {
+      return !item.permission || permissions.includes(item.permission)
+        ? [item]
+        : [];
+    }
+    const children = item.children.filter((child) =>
+      permissions.includes(child.permission),
+    );
+    return children.length > 0 ? [{ ...item, children }] : [];
   });
 
   return (
     <SidebarGroup className="p-[6px_10px]">
       <SidebarMenu className="gap-0">
-        {navMain.map((item) =>
+        {visible.map((item) =>
           "children" in item ? (
             <NavGroup key={item.title} item={item} pathname={pathname} />
           ) : (

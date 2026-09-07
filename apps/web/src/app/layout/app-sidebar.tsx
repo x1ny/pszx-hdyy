@@ -1,3 +1,4 @@
+import type { PermissionKey } from "@repo/server/permissions";
 import { Link } from "@tanstack/react-router";
 import { LayoutGrid } from "lucide-react";
 import { NavMain } from "#/app/layout/nav-main.tsx";
@@ -22,7 +23,7 @@ const sidebarTheme = {
   "--sidebar-ring": "#2b4acb",
 } as React.CSSProperties;
 
-export function AppSidebar() {
+export function AppSidebar({ permissions }: { permissions: PermissionKey[] }) {
   return (
     <Sidebar
       collapsible="icon"
@@ -49,7 +50,7 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent className="gap-0">
-        <NavMain />
+        <NavMain permissions={permissions} />
       </SidebarContent>
       <SidebarRail />
     </Sidebar>

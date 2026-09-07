@@ -29,6 +29,13 @@
       "when": 1788755437935,
       "tag": "0003_wild_mattie_franklin",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788768566073,
+      "tag": "0004_living_strong_guy",
+      "breakpoints": true
     }
   ]
 }

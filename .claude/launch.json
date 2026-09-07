@@ -24,6 +24,17 @@
       "runtimeExecutable": "bun",
       "runtimeArgs": ["run", "dev"],
       "port": 3000
+    },
+    {
+      "name": "dev-alt",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3100,
+      "env": {
+        "SERVER_PORT": "8800",
+        "WEB_PORT": "3100",
+        "H5_PORT": "3101"
+      }
     }
   ]
 }

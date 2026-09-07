@@ -5,6 +5,7 @@ import {
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
+import type { PermissionKey } from "../../shared/permissions";
 import { user } from "../auth/schema";
 
 // ---------------------------------------------------------------------------
@@ -38,6 +39,28 @@ export const role = pgTable("role", {
 
   // 角色是物理删除的，没有软删除状态；删掉之后名称才重新可用。同 organization。
   name: text("name").notNull().unique(),
+
+  /**
+   * 这个角色勾选的权限点。取值范围是 `shared/permissions.ts` 的 `PermissionKey`
+   * ——**代码是清单，库里只存勾选结果**。
+   *
+   * **为什么是一列而不是 `role_permission` 关联表**：关联表存在的意义是让
+   * `permission_id` 外键指向一张 `permission` 表，而我们刻意不做权限点入库
+   * （见上面 `role` 的注释）。没有可指向的表，关联表就退化成"给一堆没有关系可言
+   * 的字符串做范式化"，白得一次 join——而这次 join 在**每条受闸门的请求**上都要
+   * 跑（`session-middleware.ts`）。
+   *
+   * 形状照搬 `supplier.serviceCategories`：同样是代码定义的字符串集合、同样要按值
+   * 反查（`permissions @> ARRAY['systemUser']`）、同样没有外键可加。
+   *
+   * 代码里删掉一个权限点时，库里的历史值不会自动清理——读取侧
+   * （`session-middleware.ts`）会过滤掉不认识的字符串，不需要写迁移。
+   */
+  permissions: text("permissions")
+    .array()
+    .$type<PermissionKey[]>()
+    .notNull()
+    .default([]),
 
   remark: text("remark"),
 

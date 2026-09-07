@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PageInput } from "../../shared/pagination";
+import { PERMISSION_KEYS } from "../../shared/permissions";
 import { USER_STATUSES } from "../auth/schema";
 
 // 带上中文 error：这些 message 会被前端直接丢进 toast，漏一个就露出 zod 的
@@ -135,3 +136,33 @@ export const ListUsersInput = PageInput.extend({
   phone: filter,
   status: UserStatusEnum.optional(),
 });
+
+// ---------------------------------------------------------------------------
+// 角色
+// ---------------------------------------------------------------------------
+
+/**
+ * 权限点。**校验的是"代码里存在这个 key"**，不是"库里存在这行"——权限点是代码
+ * 里的清单（`shared/permissions.ts`），运营只能从中勾选，发明不出新的。
+ */
+const PermissionEnum = z.enum(PERMISSION_KEYS, { error: "权限点不正确" });
+
+export const ListRolesInput = PageInput.extend({
+  name: filter,
+});
+
+export const RoleIdInput = z.object({ id: roleId });
+
+const roleFields = {
+  name: required("角色名称", 50),
+  remark: optionalText("备注", 200),
+  /**
+   * 允许空数组：一个什么都不能进的角色是合法的（它就是"停用这个角色"的表达方式
+   * ——`role` 表刻意没有 status 列，见 schema.ts）。
+   */
+  permissions: z.array(PermissionEnum).max(PERMISSION_KEYS.length),
+};
+
+export const CreateRoleInput = z.object(roleFields);
+
+export const UpdateRoleInput = z.object({ id: roleId, ...roleFields });

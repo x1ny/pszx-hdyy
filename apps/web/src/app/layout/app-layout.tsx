@@ -1,4 +1,6 @@
+import type { PermissionKey } from "@repo/server/permissions";
 import { Outlet } from "@tanstack/react-router";
+import type { ReactNode } from "react";
 import { AppSidebar } from "#/app/layout/app-sidebar.tsx";
 import { NavUser } from "#/app/layout/nav-user.tsx";
 import {
@@ -9,15 +11,23 @@ import {
 
 export function AppLayout({
   user,
+  permissions,
+  children,
 }: {
   // 顶栏显示的是**登录账号**不是邮箱：登录标识已经改成账号，而邮箱是选填的
   // ——没填时库里存的是 `<账号>@local.invalid` 占位值（见服务端的
   // modules/user/placeholder-email.ts），直接显示会把那个假地址摆给用户看。
   user: { name: string; displayUsername?: string | null };
+  permissions: PermissionKey[];
+  /**
+   * 给了就**顶替 `<Outlet/>`**，用来在没有权限时渲染 `<Forbidden/>` 而仍然保留
+   * 侧边栏和顶栏。不这么做的话用户会掉进一个没有导航的死页面，只能按浏览器后退。
+   */
+  children?: ReactNode;
 }) {
   return (
     <SidebarProvider>
-      <AppSidebar />
+      <AppSidebar permissions={permissions} />
       <SidebarInset className="min-w-0">
         {/*
          * 高度必须手动跟 SidebarHeader 对齐，组件不会帮你算：
@@ -34,7 +44,7 @@ export function AppLayout({
           </div>
         </header>
         <div className="flex flex-1 flex-col p-6">
-          <Outlet />
+          {children ?? <Outlet />}
         </div>
         <footer className="shrink-0 border-t px-6 py-4 text-center text-sm text-muted-foreground">
           活动运营平台 © {new Date().getFullYear()}

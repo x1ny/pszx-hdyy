@@ -1,9 +1,13 @@
 import { eq } from "drizzle-orm";
 import { auth } from "../modules/auth/auth";
 import { user } from "../modules/auth/schema";
-import { BUILTIN_ROLE_NAME } from "../modules/user/bootstrap";
+import {
+  BUILTIN_MANAGER_ROLE_NAME,
+  BUILTIN_ROLE_NAME,
+} from "../modules/user/bootstrap";
 import { role, userRole } from "../modules/user/schema";
 import { DEV_ACCOUNT } from "../shared/dev-account";
+import { ALL_PERMISSIONS } from "../shared/permissions";
 import type { SeedFn } from "./context";
 
 export const seed: SeedFn = async (db, context) => {
@@ -37,14 +41,36 @@ export const seed: SeedFn = async (db, context) => {
   // 标成内置管理员，让开发库和生产库长得一样：`bootstrapBuiltinAdmin()` 在服务
   // 启动时找的就是这个标记，找到了就跳过引导。不标的话每次 `bun run dev` 都会
   // 因为缺 ADMIN_USERNAME / ADMIN_PASSWORD 而拒绝启动。
+  //
+  // 两个内置角色都建出来、都灌满权限点，和 `syncBuiltinRoles()` 在生产库里干的
+  // 事情保持一致——开发库和生产库长得一样，权限相关的坑才会在开发时就暴露。
   const [builtinRole] = await db
     .insert(role)
-    .values({ name: BUILTIN_ROLE_NAME, remark: "系统内置" })
+    .values([
+      {
+        name: BUILTIN_ROLE_NAME,
+        permissions: ALL_PERMISSIONS,
+        remark: "系统内置，拥有全部权限，不可修改或删除",
+      },
+      {
+        name: BUILTIN_MANAGER_ROLE_NAME,
+        permissions: ALL_PERMISSIONS,
+        remark: "系统内置，拥有全部权限，可分配给管理人员，不可修改或删除",
+      },
+    ])
     .returning({ id: role.id });
 
   if (!builtinRole) {
     throw new Error(`创建角色「${BUILTIN_ROLE_NAME}」失败`);
   }
+
+  // 一个**权限受限**的角色，专门用来在开发时验证闸门真的拦得住。没有它的话
+  // 每次调试都是超管视角，403 那条路径永远走不到。
+  await db.insert(role).values({
+    name: "供应商专员",
+    permissions: ["supplier"],
+    remark: "开发种子：只能进供应商管理，用来验证权限闸门",
+  });
 
   await db.update(user).set({ isBuiltin: true }).where(eq(user.id, created.id));
   await db

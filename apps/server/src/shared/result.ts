@@ -5,6 +5,10 @@
 // (zValidator's error hook) and uncaught exceptions (index.ts's onError).
 export type ApiError =
   | { code: "UNAUTHORIZED"; message: string }
+  // 已登录，但角色没有这个模块的权限点。**和 UNAUTHORIZED 分开**是因为前端要
+  // 分两种处理：UNAUTHORIZED 该把人踢回登录页，FORBIDDEN 踢回去只会让他重新
+  // 登录一次再撞同一堵墙——那是配置问题，得让他看见"没有权限"这四个字。
+  | { code: "FORBIDDEN"; message: string }
   // `path` 是可选的字段定位，给**一次提交里含多个区块**的接口用（目前只有
   // agenda 的 saveSegmentConfig）：环节配置页一屏四块、可能滚很长，一句
   // "保存失败" 用户找不到是哪一格错了。单字段接口不用填，前端也不必处理。

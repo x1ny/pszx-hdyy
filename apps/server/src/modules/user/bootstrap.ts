@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "../../infra/db";
+import { ALL_PERMISSIONS } from "../../shared/permissions";
 import { toStoredEmail } from "../../shared/placeholder-email";
 import { auth } from "../auth";
 import { user } from "../auth/schema";
@@ -11,6 +12,56 @@ import { PasswordInput, UsernameInput } from "./validation";
  * 开发库里会长出两条只差空格的"超级管理员"。
  */
 export const BUILTIN_ROLE_NAME = "超级管理员";
+
+/**
+ * 第二个内置角色。和「超级管理员」同样恒等于全部权限点、同样不可改不可删，
+ * 区别只在于**它是拿来分配给人的**——「超级管理员」绑的是引导出来的那一个
+ * `isBuiltin` 账号，是最后一条回来的路，不该日常挂在同事身上。
+ */
+export const BUILTIN_MANAGER_ROLE_NAME = "管理员";
+
+/** 两个内置角色都不可编辑权限、不可删除。角色 CRUD 用这个判定。 */
+export const BUILTIN_ROLE_NAMES: readonly string[] = [
+  BUILTIN_ROLE_NAME,
+  BUILTIN_MANAGER_ROLE_NAME,
+];
+
+/**
+ * 把两个内置角色的权限点同步为**代码里的全集**，缺角色就建。
+ *
+ * **每次启动都跑，不看库里有没有内置账号**——这是它和 `bootstrapBuiltinAdmin()`
+ * 的关键区别（后者见到 `isBuiltin` 就直接返回）。
+ *
+ * 为什么要每次同步：权限点是代码里的清单，角色的勾选在库里。agent 新增一个菜单项
+ * 就多一个权限点，而线上库里那两个内置角色**不会自动获得它**——超管会突然进不去
+ * 新页面。写个测试盯不住这件事（测试拦不住已经部署的库），只有"重启即自愈"能。
+ *
+ * 这个模式在本文件里不是新东西：`createOrAdoptAdmin` 的接管分支、
+ * `ensureBuiltinRole` 的按名查找，都是同一个"幂等 + 从半途状态自愈"的思路。
+ *
+ * 代价是**内置角色的权限点在界面上不可编辑**（改了下次重启就被覆盖），角色管理
+ * 的 CRUD 因此显式拒绝编辑它们，而不是让运营改完发现改了个寂寞。
+ */
+export const syncBuiltinRoles = async () => {
+  for (const name of BUILTIN_ROLE_NAMES) {
+    await db
+      .insert(role)
+      .values({
+        name,
+        permissions: ALL_PERMISSIONS,
+        remark:
+          name === BUILTIN_ROLE_NAME
+            ? "系统内置，拥有全部权限，不可修改或删除"
+            : "系统内置，拥有全部权限，可分配给管理人员，不可修改或删除",
+      })
+      // 只同步权限点。`remark` 不进 set —— 覆盖它会把运营写的备注每次重启抹掉，
+      // 而备注不影响任何判断。
+      .onConflictDoUpdate({
+        target: role.name,
+        set: { permissions: ALL_PERMISSIONS },
+      });
+  }
+};
 
 /**
  * 生产引导：保证库里**始终存在一个内置超管**。
@@ -148,22 +199,24 @@ const createOrAdoptAdmin = async (username: string, password: string) => {
   }
 };
 
-/** 角色按名字找不到才建——重启不该每次多一条。 */
+/**
+ * 取内置超管角色的 id。
+ *
+ * 这里不再兜底新建：角色由 `syncBuiltinRoles()` 保证存在，而它在 `index.ts` 里
+ * 跑在引导**之前**、且每次启动都跑。留着一条"找不到就建一个"的分支，只会在
+ * 那个前提被人改坏时建出一个**没有任何权限点**的超管角色，然后症状表现为
+ * "超管登录进去什么都点不了"——比直接抛错难查得多。
+ */
 const ensureBuiltinRole = async () => {
   const [found] = await db
     .select({ id: role.id })
     .from(role)
     .where(eq(role.name, BUILTIN_ROLE_NAME));
-  if (found) return found.id;
 
-  const [created] = await db
-    .insert(role)
-    .values({
-      name: BUILTIN_ROLE_NAME,
-      remark: "系统内置，随第一个管理员账号一同创建",
-    })
-    .returning({ id: role.id });
-
-  if (!created) throw new Error(`创建角色「${BUILTIN_ROLE_NAME}」失败`);
-  return created.id;
+  if (!found) {
+    throw new Error(
+      `角色「${BUILTIN_ROLE_NAME}」不存在——syncBuiltinRoles() 应该在引导之前跑过`,
+    );
+  }
+  return found.id;
 };

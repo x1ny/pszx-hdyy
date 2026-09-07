@@ -24,13 +24,9 @@ Before editing files for a substantial task:
 
 `prototype/admin/` 是 `apps/web` 的需求来源，`prototype/h5/` 是 `apps/h5` 的。
 
-> 这里原先写着「H5 相关的功能目前都不做」，**该结论 2026-09-01 作废**——`apps/h5` 已建好并接通构建部署。业务功能仍按需求排期，不要看到目录存在就顺手开工；身份体系没定案、`/api/h5` 守卫也没有，**涉及登录态的页面现在做不了**。
-
-> **已有页面：`/itinerary`（嘉宾专属行程，2026-09-02）——静态页，数据是 `routes/itinerary/-data.ts` 里的常量。** 需求来源是 `docs/新版H5_Demo/`（原型的 React 源码 + 截图）。接后端时把那个常量换成请求即可，类型就是接口约定的草稿。它同时是 h5 端的**视觉与结构范式**：Base UI 原语（Drawer / Collapsible / Toast）+ 自己写皮、内联 SVG 图标不装图标库、动画走 `styles.css` 的 `--animate-*`（不引 framer-motion）。视觉上**只有主题红一种强调色**——交通方式不再分色（`--color-transit`），提示块也是中性灰底 + 红图标，别再往里加第二套语义色。
+> 这里原先写着「H5 相关的功能目前都不做」，**该结论 2026-09-01 作废**——`apps/h5` 已建好并接通构建部署。但身份体系没定案、`/api/h5` 守卫也没有，**涉及登录态的页面现在做不了**，别看到目录存在就顺手开工。
 >
-> 进页面那道手机号校验（`key-gate.tsx`）**是界面不是安全边界**：判断在前端比一个常量，devtools 一开就绕过去了。接后端前不要把它当成"已经有权限控制了"，见文件顶部注释。
-
-> **行程展示（2026-09-07）：** 用车统一归入「我的行程」，缺发车时间的放「待定安排」，计入总项数、不算天数；车程用结束减开始时间（分钟），任一缺失则不显示，禁止占位值。原因：对齐产品 Demo 与时长口径。
+> **已有页面 `/itinerary` 是 h5 端唯一的视觉与结构范式**，做第二个 h5 页面前先读 [docs/h5-itinerary.md](docs/h5-itinerary.md)。
 
 ## 旧项目代码参考
 当用户要求参考旧代码时 再从这两个目录中读取代码研究
@@ -43,17 +39,15 @@ Before editing files for a substantial task:
 
 照着 supplier 模块抄（后端 `modules/supplier/`，前端 `routes/_authenticated/supplier/`）。踩过的坑、定下的模式、配色/表格/按钮的视觉规范、一份可以照抄的检查清单，都在 [docs/crud-page-guide.md](docs/crud-page-guide.md)——写新模块之前先看这份，别重新踩一遍已经踩过的坑（比如 `ok()`/`err()` 千万不能加类型标注、列表别按 `updatedAt` 排序）。
 
-**新模块记得在 `apps/server/src/dev-seed/` 加一个带数字前缀的种子文件**，不加的话新页面在临时库里永远是空的、没法调（见下面"开发调试"）。
+**新模块记得在 `apps/server/src/dev-seed/` 加一个带数字前缀的种子文件**，不加的话新页面在临时库里永远是空的、没法调。
 
 ## 环节配置：新旧两套入口并存中
 
-环节现在有**两条编辑路径**，有意并存不是遗留：旧的四个弹窗，和新的单页 `agenda/$segmentId`（四块合一、整页原子保存）。两边写同一批表。
+环节有**两条编辑路径**，有意并存不是遗留：旧的四个弹窗，和新的单页 `agenda/$segmentId`（整页原子保存）。两边写同一批表。
 
 议程页默认新版，旧代码保留。
 
-**改之前必须知道**：新页面的人员/绑定发的是**增量意图**（`add`/`remove`/`unbindIds`）而非完整名单，改成"发目标状态"会让草稿一保存就静默覆盖别人在旧弹窗里的改动——这是两套入口能并存的唯一前提。另有两条写入顺序硬约束（环节先于人员、需求先于资源），写反不报错只出怪结果，见 `agenda/segment-config.ts` 顶部。
-
-背景、代价、**收敛旧入口时该删哪些文件**见 [docs/architecture-decisions.md](docs/architecture-decisions.md#环节配置合并为单页整页原子保存)。
+**改之前必须知道**：新页面的人员/绑定发的是**增量意图**（`add`/`remove`/`unbindIds`）而非完整名单，改成"发目标状态"会让草稿一保存就静默覆盖别人在旧弹窗里的改动——这是两套入口能并存的唯一前提。另有两条写入顺序硬约束（环节先于人员、需求先于资源），写反不报错只出怪结果，见 `agenda/segment-config.ts` 顶部。背景、代价、**收敛旧入口时该删哪些文件**见 [docs/architecture-decisions.md](docs/architecture-decisions.md#环节配置合并为单页整页原子保存)。
 
 ## 仓库结构
 
@@ -85,7 +79,7 @@ Bun workspaces monorepo，三个包：`apps/web`（管理端）、`apps/h5`（�
 | 构建并推送镜像 | `bun run docker:build-push [版本号]` |
 | 部署测试环境 | `bun run deploy:test` |
 
-**部署产物是单个镜像，三个包跑在同一个 Hono 里、占两个端口**：80 管理端（`WEB_DIST_DIR`）、81 h5（`H5_DIST_DIR`）。两个端口共用同一套路由，**`/api/*` 在两个端口上都完整存在**，差别只有静态目录（经 Hono bindings 逐 server 传入）；静态中间件挂在 session 中间件之前（静态资源不查库），`/api` 之外找不到文件就回落各自的 `index.html`。因此**两端各自同源**——不需要 CORS、`trustedOrigins` 不用加域名、`VITE_API_URL` 不用设，同一个镜像跑遍所有环境；线上两个端口各挂一个域名，前端的 `base` 和 `basepath` 都保持 `/`。开发环境两个 `*_DIST_DIR` 都不设，静态资源归 Vite，第二个端口也不启动。**环境变量表、端口表和一个 cookie 的坑见 [docker/README.md](docker/README.md)。**
+**部署产物是单个镜像，三个包跑在同一个 Hono 里、占两个端口**（80 管理端 / 81 h5），**`/api/*` 在两个端口上都完整存在**，差别只有静态目录。因此**两端各自同源**——不需要 CORS、`trustedOrigins` 不用加域名、`VITE_API_URL` 不用设，同一个镜像跑遍所有环境。开发环境两个 `*_DIST_DIR` 都不设，静态资源归 Vite。**端口表、环境变量表、静态中间件的挂载顺序和一个 cookie 的坑见 [docker/README.md](docker/README.md)。**
 
 **开发端口**：`bun run dev` 由 `scripts/dev.ts` 统一起三个进程。`SERVER_PORT`(8787) / `WEB_PORT`(3000) / `H5_PORT`(3001) 是首选值，被占用时向上找且互相排除；后端端口同时传给 Hono 和两个 Vite 代理，前端端口变化时同步更新认证 origin——避免端口漂移后代理或 Better Auth 还指着旧的。`WEB_ORIGIN` / `BETTER_AUTH_URL` 只跟管理端走（h5 是另一套身份，不进 `trustedOrigins`）。两个 Vite 的 stdin 给 `"ignore"`，否则两个进程抢同一个 TTY 会把按键随机分走。**Vite 必须用 `bun vite …`，不要加 `--bun`**：Windows 下会导致自动换端口失效（已有进程监听 `[::1]:3000` 时仍可能另绑 `127.0.0.1:3000`）。单独起某个包用 `bun run --filter '@repo/server' dev`，不经过这层协调。
 
@@ -159,14 +153,23 @@ bun run typecheck && bun run test
 
 ## 认证
 
-**这一节只讲管理端。** Better Auth 服务的是 `apps/web` 的密码登录，**账号和邮箱都能当登录标识**（`username` 插件是新增端点不是替换），身份落在 `user` 表；相关代码全在 `apps/server/src/modules/auth/`。用户管理、角色预留、生产引导、**已在 Hono 层封死的自助注册**见 [docs/user-management-design.md](docs/user-management-design.md)——改 `index.ts` 中间件顺序或停用逻辑前先看它。
+**这一节只讲管理端。** Better Auth 服务的是 `apps/web` 的密码登录，**账号和邮箱都能当登录标识**（`username` 插件是新增端点不是替换），身份落在 `user` 表；相关代码全在 `apps/server/src/modules/auth/`。用户管理、生产引导、**已在 Hono 层封死的自助注册**见 [docs/user-management-design.md](docs/user-management-design.md)——改 `index.ts` 中间件顺序或停用逻辑前先看它。
 
 - **`index.ts` 里 `authHandler` 的 `.route()` 必须注册在 session 中间件之前。** 这不是官方要求的顺序，是我们自己的选择：`auth.handler()` 直接处理 raw `Request`/`Response`、从不读 Hono context，顺序不影响正确性；排前面纯粹是让 Better Auth 自己的路由跳过后面注册的 session 查询。`routes.ts` 里那行 `app.on(["GET","POST"], "/api/auth/*", …)` 照抄官方文档，**不要改动它的结构**。
 - session 中间件把 `user`/`session` 放进 Hono context，受保护接口从 `c.get("user")` 取，为空时返回 `err({ code: "UNAUTHORIZED" })`——**不是 401**，见「前后端边界」。
 - 前端守卫是 `routes/_authenticated.tsx`（pathless layout），未登录跳 `/login?redirect=...`；session 缓存在 `features/auth/queries.ts`，走的是 Better Auth 自己的客户端，跟业务接口是两条独立的路，不要混着改。
-- **登录/登出后必须 `queryClient.removeQueries({ queryKey: sessionQueryKey })`。** 守卫用 `ensureQueryData`，它**即使数据已过期也会先返回缓存**，所以 `invalidateQueries` 不够——登录成功后守卫会读到旧的 `null` 把用户弹回登录页。必须删掉缓存条目，逼守卫重新请求。
+- **登录/登出后必须 `queryClient.removeQueries({ queryKey: sessionQueryKey })`。** 守卫用 `ensureQueryData`，它**即使数据已过期也会先返回缓存**，所以 `invalidateQueries` 不够——登录成功后守卫会读到旧的 `null` 把用户弹回登录页。必须删掉缓存条目，逼守卫重新请求。当前用户的权限点**共用这一个 key**（在同一个 `queryFn` 里多 fetch 一次），就是为了不让这个坑翻倍。
 
-**`apps/h5` 是另一套身份体系，目前还没做。** 公众端走手机号验证码 / 微信授权，身份是 `member`（人员主档），且同一手机号可能对应多个 `member`、登录后要选身份。它不复用 `sessionMiddleware` 和 `requireUser`，接口另占 `/api/h5` 前缀、另写守卫——把"本人视角"和"管理视角"塞进同一个 handler 用 `if` 分叉，是这类系统数据越权最典型的出法。倾向自建轻量 token（验证码 → 签发带 `memberId` 的 token）而不是 Better Auth 的 phoneNumber 插件（后者会为每个手机号建 `user` 行，还得维护 `user ↔ member` 映射和"当前选中身份"），但**这个决定还没拍板，动手前先问**。h5 会话的 cookie 必须显式起一个不和 Better Auth 冲突的名字（cookie 不按端口隔离，理由见 [docker/README.md](docker/README.md)）。
+## 授权：权限点是代码，角色是数据
+
+**权限点 = 侧边栏菜单项，8 个，能进就能改**（无 view/edit/delete 分档）。清单在 `shared/permissions.ts`，勾选存 `role.permissions text[]`。取舍见 [docs/authorization.md](docs/authorization.md)，这里只留硬线：
+
+- **闸门是 `index.ts` 一条 `app.use("/api/*", permissionGate)`，归属写在 `modules/auth/permission-map.ts` 一张集中表里**，不在各模块链头挂：`requireUser` 漏挂会立刻炸，而权限闸门漏挂是**静默全开**。`permission-map.test.ts` 遍历 `app.routes` 断言每条路径都登记过，**忘了填表就是红测试**，失败信息直接写了修法。
+- 无权限返回 `err({ code: "FORBIDDEN" })`，**HTTP 仍是 200**。
+- **超管没有特判。** 内置的「超级管理员」「管理员」真的勾满了全集，`syncBuiltinRoles()` 每次启动同步，新增权限点后重启即自愈；两者不可改不可删。
+- 新增菜单项要改**四处**：`shared/permissions.ts`、`app/nav.ts`、`features/auth/route-permissions.ts`、`permission-map.ts`。漏了哪处 `bun run test` 会说。
+
+**`apps/h5` 是另一套身份体系，目前还没做。** 公众端走手机号验证码 / 微信授权，身份是 `member`，且同一手机号可能对应多个 `member`。它不复用 `sessionMiddleware` / `requireUser`，接口另占 `/api/h5` 前缀、另写守卫——把"本人视角"和"管理视角"塞进同一个 handler 用 `if` 分叉，是这类系统数据越权最典型的出法。倾向自建轻量 token 而不是 Better Auth 的 phoneNumber 插件（后者会为每个手机号建 `user` 行），但**这个决定还没拍板，动手前先问**。h5 的 cookie 必须显式起一个不和 Better Auth 冲突的名字（cookie 不按端口隔离，见 [docker/README.md](docker/README.md)）。
 
 ## 渲染模型
 
@@ -218,9 +221,9 @@ Bun 传给 `fetch` 的第二个参数是它自己的 Server 对象，默认会�
 
 ## 404 与错误处理
 
-`apps/web/src/app/router.tsx` 把 `defaultNotFoundComponent` 指向 `src/shared/components/not-found.tsx`。单个路由可以用自己的 `notFoundComponent` 覆盖。目前**还没有**配置 `defaultErrorComponent`。
+`apps/web/src/app/router.tsx` 里 `defaultNotFoundComponent` → `shared/components/not-found.tsx`、`defaultErrorComponent` → `route-error.tsx`（显示 `unwrap()` 翻出来的中文 message，而不是英文堆栈）。无权限走 `forbidden.tsx`，由 `_authenticated.tsx` 判定后顶替 `<Outlet/>`——**不静默重定向**，那会把权限问题伪装成页面故障。单个路由可用自己的 `notFoundComponent` 覆盖。
 
-`apps/h5` 两个都没配，走 TanStack Router 的内置默认（一段裸文案）。做第一个真实页面时顺手补一个移动端的 not-found。
+`apps/h5` 都没配，走 TanStack Router 的内置默认（一段裸文案）。做第一个真实页面时顺手补一个移动端的 not-found。
 
 ## 样式
 
