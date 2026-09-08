@@ -94,6 +94,7 @@ const config: SegmentConfig = {
           startTime: null,
           endTime: null,
           location: "T2 到达口",
+          locationPoint: null,
           vehicleInfo: "闽C·12345",
           driverName: "老陈",
           driverPhone: "13800000000",
@@ -127,6 +128,54 @@ const config: SegmentConfig = {
 };
 
 const load = () => draftFromConfig(config, "main");
+
+it("定位点作为整组草稿保存、回显和清除，集合说明保持原值", () => {
+  const original = load();
+  const resource = original.demands.find(
+    (row) => row.resourceType === "transport",
+  )?.resources[0];
+  if (!resource) throw new Error("缺少用车测试数据");
+  const point = {
+    longitude: 120.1,
+    latitude: 30.2,
+    name: "入口",
+    address: "杭州",
+    provider: "baidu" as const,
+    coordinateSystem: "bd09ll" as const,
+  };
+  const edited = setResourceField(
+    original,
+    "transport",
+    resource.key,
+    "locationPoint",
+    point,
+  );
+  expect(isDirty(edited, original)).toBe(true);
+  expect(
+    payload(edited).demands?.find((row) => row.resourceType === "transport")
+      ?.resources?.[0],
+  ).toMatchObject({ fields: { locationPoint: point, location: "T2 到达口" } });
+  const withPoint = structuredClone(config);
+  const savedResource = withPoint.demands[0]?.resources[0];
+  if (!savedResource) throw new Error("缺少用车测试数据");
+  savedResource.locationPoint = point;
+  const reloaded = draftFromConfig(withPoint, "main");
+  expect(
+    reloaded.demands.find((row) => row.resourceType === "transport")
+      ?.resources[0]?.fields.locationPoint,
+  ).toEqual(point);
+  const cleared = setResourceField(
+    reloaded,
+    "transport",
+    resource.key,
+    "locationPoint",
+    null,
+  );
+  expect(
+    payload(cleared).demands?.find((row) => row.resourceType === "transport")
+      ?.resources?.[0],
+  ).toMatchObject({ fields: { locationPoint: null } });
+});
 
 const payload = (draft: ConfigDraft) =>
   buildSavePayload({

@@ -147,6 +147,7 @@ export function normalizeResourceFields(
       startTime: fields.startTime,
       endTime: fields.endTime,
       location: fields.location,
+      locationPoint: fields.locationPoint,
       vehicleInfo: isTransport ? fields.vehicleInfo : null,
       driverName: isTransport ? fields.driverName : null,
       driverPhone: isTransport ? fields.driverPhone : null,

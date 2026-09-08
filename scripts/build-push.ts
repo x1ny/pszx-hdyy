@@ -3,7 +3,10 @@ import { execFileSync, spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const ROOT_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
 const REGISTRY = "ps-docker-registry.cn-beijing.cr.aliyuncs.com";
 const IMAGE_NAME = "psdsframework/pszx-hdyy";
 const DEFAULT_PLATFORM = "linux/amd64";
@@ -62,6 +65,9 @@ const args = [
 
 if (BUN_IMAGE) args.push("--build-arg", `BUN_IMAGE=${BUN_IMAGE}`);
 if (NPM_REGISTRY) args.push("--build-arg", `NPM_REGISTRY=${NPM_REGISTRY}`);
+// 不把 AK 拼进命令日志；Docker 从同名环境变量读取。
+if (process.env.VITE_BAIDU_MAP_AK)
+  args.push("--build-arg", "VITE_BAIDU_MAP_AK");
 
 // 多架构镜像没法 --load 到本地 Docker，只能让 Buildx 直接推。
 if (platform.includes(",")) {

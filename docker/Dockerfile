@@ -30,6 +30,10 @@ RUN bun install --frozen-lockfile --linker=hoisted
 
 COPY . .
 
+# 浏览器端 AK 会进入公开静态资源，以 Referer 白名单限制使用域名。
+ARG VITE_BAIDU_MAP_AK
+ENV VITE_BAIDU_MAP_AK=${VITE_BAIDU_MAP_AK}
+
 # 产出三样东西：apps/web/dist 和 apps/h5/dist（两份静态资源）+
 # apps/server/dist/server.js（bun build 打的单文件，依赖全部内联）。
 #

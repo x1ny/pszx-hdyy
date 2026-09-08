@@ -107,6 +107,7 @@ export type ResourceFieldsDraft = {
   startTime: string;
   endTime: string;
   location: string;
+  locationPoint: ActivityResource["locationPoint"];
   vehicleInfo: string;
   driverName: string;
   driverPhone: string;
@@ -177,6 +178,7 @@ export const emptyResourceFields = (): ResourceFieldsDraft => ({
   startTime: "",
   endTime: "",
   location: "",
+  locationPoint: null,
   vehicleInfo: "",
   driverName: "",
   driverPhone: "",
@@ -240,6 +242,7 @@ const toResourceFields = (
   startTime: toDateTimeLocalValue(resource.startTime ?? undefined),
   endTime: toDateTimeLocalValue(resource.endTime ?? undefined),
   location: resource.location ?? "",
+  locationPoint: resource.locationPoint ?? null,
   vehicleInfo: resource.vehicleInfo ?? "",
   driverName: resource.driverName ?? "",
   driverPhone: resource.driverPhone ?? "",
@@ -572,6 +575,7 @@ export function linkExistingResource(
       startTime: toDateTimeLocalValue(resource.startTime ?? undefined),
       endTime: toDateTimeLocalValue(resource.endTime ?? undefined),
       location: resource.location ?? "",
+      locationPoint: resource.locationPoint ?? null,
       vehicleInfo: resource.vehicleInfo ?? "",
       driverName: resource.driverName ?? "",
       driverPhone: resource.driverPhone ?? "",
@@ -600,12 +604,12 @@ export function linkExistingResource(
   });
 }
 
-export function setResourceField(
+export function setResourceField<K extends keyof ResourceFieldsDraft>(
   draft: ConfigDraft,
   resourceType: ResourceType,
   key: string,
-  field: keyof ResourceFieldsDraft,
-  value: string,
+  field: K,
+  value: ResourceFieldsDraft[K],
 ): ConfigDraft {
   return mapDemand(draft, resourceType, (demand) => ({
     ...demand,
@@ -756,6 +760,7 @@ const toApiFields = (fields: ResourceFieldsDraft) => ({
   startTime: time(fields.startTime),
   endTime: time(fields.endTime),
   location: text(fields.location),
+  locationPoint: fields.locationPoint,
   vehicleInfo: text(fields.vehicleInfo),
   driverName: text(fields.driverName),
   driverPhone: text(fields.driverPhone),

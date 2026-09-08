@@ -11,6 +11,7 @@ import type {
   ActivityResource,
   ResourceType,
 } from "#/features/resource/queries.ts";
+import { BaiduLocationPicker } from "#/shared/components/baidu-location-picker";
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import { Field, FieldLabel } from "#/shared/components/ui/field.tsx";
@@ -77,11 +78,11 @@ export function DemandsSection({
     resourceType: ResourceType,
     resource: ActivityResource,
   ) => void;
-  onResourceFieldChange: (
+  onResourceFieldChange: <K extends keyof ResourceFieldsDraft>(
     resourceType: ResourceType,
     key: string,
-    field: keyof ResourceFieldsDraft,
-    value: string,
+    field: K,
+    value: ResourceFieldsDraft[K],
   ) => void;
   onDetachResource: (resourceType: ResourceType, key: string) => void;
   onVoidResource: (resourceType: ResourceType, key: string) => void;
@@ -164,10 +165,10 @@ function DemandCard({
   ) => void;
   onAddResource: () => void;
   onLinkResource: (resource: ActivityResource) => void;
-  onResourceFieldChange: (
+  onResourceFieldChange: <K extends keyof ResourceFieldsDraft>(
     key: string,
-    field: keyof ResourceFieldsDraft,
-    value: string,
+    field: K,
+    value: ResourceFieldsDraft[K],
   ) => void;
   onDetachResource: (key: string) => void;
   onVoidResource: (key: string) => void;
@@ -359,7 +360,10 @@ function ResourceCard({
   resourceType: ResourceType;
   resource: ResourceDraft;
   members: MemberDraft[];
-  onFieldChange: (field: keyof ResourceFieldsDraft, value: string) => void;
+  onFieldChange: <K extends keyof ResourceFieldsDraft>(
+    field: K,
+    value: ResourceFieldsDraft[K],
+  ) => void;
   onDetach: () => void;
   onVoid: () => void;
   onBindMember: (member: MemberDraft) => void;
@@ -519,6 +523,13 @@ function ResourceCard({
             value={resource.fields.location}
             onChange={(event) => onFieldChange("location", event.target.value)}
           />
+          {isTransport || resource.fields.locationPoint ? (
+            <BaiduLocationPicker
+              value={resource.fields.locationPoint}
+              onChange={(point) => onFieldChange("locationPoint", point)}
+              searchHint={resource.fields.location}
+            />
+          ) : null}
         </Field>
 
         {isTransport ? (

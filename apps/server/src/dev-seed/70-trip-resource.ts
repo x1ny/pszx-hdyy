@@ -87,6 +87,8 @@ export const seed: SeedFn = async (db, { userId }) => {
       startTime: new Date("2026-09-09T22:30:00+08:00"),
       endTime: new Date("2026-09-09T23:20:00+08:00"),
       location: "萧山机场 T4 到达层 3 号门",
+      // 旧记录只有集合说明，不能从文字猜一个坐标当作实际入口。
+      locationPoint: null,
       vehicleInfo: "浙A·D8866",
       driverName: "王师傅",
       driverPhone: "13805710088",
@@ -105,6 +107,7 @@ export const seed: SeedFn = async (db, { userId }) => {
       startTime: null,
       endTime: null,
       location: "A 馆东门 贵宾通道",
+      locationPoint: null,
       vehicleInfo: "浙A·F2218",
       driverName: "李师傅",
       driverPhone: "13805710099",

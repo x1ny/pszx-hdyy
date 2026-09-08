@@ -141,6 +141,7 @@ export const itineraryCarsQuery = (activityMemberId: number) =>
       startTime: activityResource.startTime,
       endTime: activityResource.endTime,
       location: activityResource.location,
+      locationPoint: activityResource.locationPoint,
       vehicleInfo: activityResource.vehicleInfo,
       driverName: activityResource.driverName,
       driverPhone: activityResource.driverPhone,

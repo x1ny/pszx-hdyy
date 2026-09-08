@@ -175,6 +175,14 @@ export const activityResourceRoutes = new Hono<{
       ? or(
           ilike(activityResource.name, `%${keyword}%`),
           ilike(activityResource.location, `%${keyword}%`),
+          ilike(
+            sql`${activityResource.locationPoint}->>'name'`,
+            `%${keyword}%`,
+          ),
+          ilike(
+            sql`${activityResource.locationPoint}->>'address'`,
+            `%${keyword}%`,
+          ),
           ilike(activityResource.vehicleInfo, `%${keyword}%`),
           ilike(activityResource.driverName, `%${keyword}%`),
         )

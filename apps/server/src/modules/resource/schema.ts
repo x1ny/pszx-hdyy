@@ -5,6 +5,7 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -14,6 +15,7 @@ import { activitySegment } from "../agenda/schema";
 import { user } from "../auth/schema";
 import { activityMember } from "../member/schema";
 import { activity } from "../project/schema";
+import type { LocationPoint } from "./location-point";
 
 // ---------------------------------------------------------------------------
 // 领域词汇表
@@ -128,9 +130,7 @@ export const DEMAND_STATUSES = [
 ] as const;
 export type DemandStatus = (typeof DEMAND_STATUSES)[number];
 
-const PERSONAL_SERVICE_TYPE_SET = new Set<ResourceType>(
-  PERSONAL_SERVICE_TYPES,
-);
+const PERSONAL_SERVICE_TYPE_SET = new Set<ResourceType>(PERSONAL_SERVICE_TYPES);
 
 /**
  * 配置状态的**唯一判定处**。
@@ -330,6 +330,7 @@ export const activityResource = pgTable(
     endTime: timestamp("end_time", { withTimezone: true }),
 
     location: text("location"),
+    locationPoint: jsonb("location_point").$type<LocationPoint>(),
 
     // 用车专属，且都非必填（C-006 明确"车辆和司机信息可选记录"）。
     vehicleInfo: text("vehicle_info"),

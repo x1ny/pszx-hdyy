@@ -4,6 +4,7 @@ import {
   SegmentRoleEnum,
   validateIdNumber,
 } from "../member/validation";
+import { LocationPointSchema } from "../resource/location-point";
 import {
   DEMAND_HANDLINGS,
   RESOURCE_TYPES,
@@ -282,6 +283,7 @@ const ResourceDraftFields = z.object({
     .nullish()
     .transform((v) => v ?? null),
   location: optionalNullText(255),
+  locationPoint: LocationPointSchema.nullish(),
   vehicleInfo: optionalNullText(128),
   driverName: optionalNullText(64),
   driverPhone: optionalNullText(32),

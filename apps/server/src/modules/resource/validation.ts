@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PageInput } from "../../shared/pagination";
+import { LocationPointSchema } from "./location-point";
 import {
   DEMAND_HANDLINGS,
   RESOURCE_STATUSES,
@@ -92,7 +93,8 @@ export const SaveSegmentDemandsInput = z.object({
     // UNIQUE(segment_id, resource_type) 会在数据库层挡住，但那时报出来的是
     // 一条约束错误；这里提前判一次是为了给出人能看懂的话。
     .refine(
-      (items) => new Set(items.map((i) => i.resourceType)).size === items.length,
+      (items) =>
+        new Set(items.map((i) => i.resourceType)).size === items.length,
       { message: "同一个环节的同类资源需求只能有一条" },
     ),
 });
@@ -117,9 +119,17 @@ const ResourceFields = z
     transportScene: TransportSceneEnum.nullish().transform((v) => v ?? null),
     name: required("资源名称", 255),
     quantity: optionalCount("数量"),
-    startTime: z.coerce.date().nullish().transform((v) => v ?? null),
-    endTime: z.coerce.date().nullish().transform((v) => v ?? null),
+    startTime: z.coerce
+      .date()
+      .nullish()
+      .transform((v) => v ?? null),
+    endTime: z.coerce
+      .date()
+      .nullish()
+      .transform((v) => v ?? null),
     location: optionalText(255),
+    // 旧客户端省略时保留原定位；新客户端传 null 显式清除。
+    locationPoint: LocationPointSchema.nullish(),
     vehicleInfo: optionalText(128),
     driverName: optionalText(64),
     driverPhone: optionalText(32),

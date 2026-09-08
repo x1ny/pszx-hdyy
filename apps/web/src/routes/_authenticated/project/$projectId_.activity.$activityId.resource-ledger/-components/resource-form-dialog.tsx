@@ -15,6 +15,7 @@ import type {
   ResourceType,
   TransportScene,
 } from "#/features/resource/queries.ts";
+import { BaiduLocationPicker } from "#/shared/components/baidu-location-picker";
 import { Button } from "#/shared/components/ui/button.tsx";
 import { Checkbox } from "#/shared/components/ui/checkbox.tsx";
 import {
@@ -41,6 +42,7 @@ import {
   SelectValue,
 } from "#/shared/components/ui/select.tsx";
 import { Textarea } from "#/shared/components/ui/textarea.tsx";
+import type { MapLocationPoint } from "#/shared/lib/baidu-map";
 
 /**
  * 镜像 apps/server/src/modules/resource/validation.ts 的 ResourceFields。
@@ -56,6 +58,7 @@ const ResourceFormSchema = z
     startTime: z.string(),
     endTime: z.string(),
     location: z.string().trim().max(255, "地点过长"),
+    locationPoint: z.custom<MapLocationPoint>().nullable(),
     vehicleInfo: z.string().trim().max(128, "车辆信息过长"),
     driverName: z.string().trim().max(64, "司机姓名过长"),
     driverPhone: z.string().trim().max(32, "司机电话过长"),
@@ -89,6 +92,7 @@ export type ResourceFormSubmitValues = {
   startTime: Date | null;
   endTime: Date | null;
   location?: string;
+  locationPoint: MapLocationPoint | null;
   vehicleInfo?: string;
   driverName?: string;
   driverPhone?: string;
@@ -181,6 +185,7 @@ function ResourceForm({
     startTime: toDateTimeLocalValue(resource?.startTime),
     endTime: toDateTimeLocalValue(resource?.endTime),
     location: resource?.location ?? "",
+    locationPoint: resource?.locationPoint ?? null,
     vehicleInfo: resource?.vehicleInfo ?? "",
     driverName: resource?.driverName ?? "",
     driverPhone: resource?.driverPhone ?? "",
@@ -209,6 +214,7 @@ function ResourceForm({
         startTime: value.startTime ? new Date(value.startTime) : null,
         endTime: value.endTime ? new Date(value.endTime) : null,
         location: value.location || undefined,
+        locationPoint: value.locationPoint,
         vehicleInfo: isTransport ? value.vehicleInfo || undefined : undefined,
         driverName: isTransport ? value.driverName || undefined : undefined,
         driverPhone: isTransport ? value.driverPhone || undefined : undefined,
@@ -456,6 +462,23 @@ function ResourceForm({
           </form.Field>
 
           {/* 用车专属字段：非用车时整块不渲染，服务端也有 CHECK 兜底 */}
+          <form.Subscribe selector={(state) => state.values}>
+            {(values) =>
+              values.resourceType === "transport" || values.locationPoint ? (
+                <div className="sm:col-span-2">
+                  <form.Field name="locationPoint">
+                    {(field) => (
+                      <BaiduLocationPicker
+                        value={field.state.value}
+                        onChange={field.handleChange}
+                        searchHint={values.location}
+                      />
+                    )}
+                  </form.Field>
+                </div>
+              ) : null
+            }
+          </form.Subscribe>
           <form.Subscribe selector={(state) => state.values.resourceType}>
             {(resourceType) =>
               resourceType === "transport" ? (
@@ -544,9 +567,11 @@ function ResourceForm({
                           {typed.map((demand) => (
                             <label
                               key={demand.id}
+                              htmlFor={`resource-demand-${demand.id}`}
                               className="flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/60"
                             >
                               <Checkbox
+                                id={`resource-demand-${demand.id}`}
                                 className="mt-0.5"
                                 checked={selected.includes(demand.id)}
                                 onCheckedChange={(next) =>

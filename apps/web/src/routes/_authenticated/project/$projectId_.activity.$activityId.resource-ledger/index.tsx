@@ -21,17 +21,17 @@ import {
 } from "#/features/resource/labels.ts";
 import {
   type ActivityResource,
-  type ResourceStatus,
-  type ResourceType,
-  type TransportScene,
   activityResourceDetailQueryOptions,
   activityResourceKeys,
   activityResourceListQueryOptions,
   activityResourceStatsQueryOptions,
   createResource,
+  type ResourceStatus,
+  type ResourceType,
   resourceDemandKeys,
   resourceDemandListQueryOptions,
   setResourceStatus,
+  type TransportScene,
   updateResource,
 } from "#/features/resource/queries.ts";
 import {
@@ -132,9 +132,8 @@ function ResourceLedgerTab() {
   // 筛选控件全部先落在草稿 state 上，点「查询」才写进 URL——下拉也一样，
   // 全站统一成一种触发方式（见 filter-bar.tsx）。
   const [keywordDraft, setKeywordDraft] = useState(search.keyword ?? "");
-  const [resourceTypeDraft, setResourceTypeDraft] = useState<ResourceType | null>(
-    search.resourceType ?? null,
-  );
+  const [resourceTypeDraft, setResourceTypeDraft] =
+    useState<ResourceType | null>(search.resourceType ?? null);
   const [transportSceneDraft, setTransportSceneDraft] =
     useState<TransportScene | null>(search.transportScene ?? null);
   const [statusDraft, setStatusDraft] = useState<ResourceStatus | null>(
@@ -147,7 +146,12 @@ function ResourceLedgerTab() {
     setResourceTypeDraft(search.resourceType ?? null);
     setTransportSceneDraft(search.transportScene ?? null);
     setStatusDraft(search.status ?? null);
-  }, [search.keyword, search.resourceType, search.transportScene, search.status]);
+  }, [
+    search.keyword,
+    search.resourceType,
+    search.transportScene,
+    search.status,
+  ]);
 
   const filters = {
     activityId,
@@ -169,7 +173,8 @@ function ResourceLedgerTab() {
   // 只有"需落实"的需求项能被关联——"仅记录"按定义就不产生台账记录，
   // 摆在多选里只会让人以为漏配了。作废环节的需求也不列。
   const linkableDemands = demands.filter(
-    (demand) => demand.handling === "arrange" && demand.segmentStatus === "active",
+    (demand) =>
+      demand.handling === "arrange" && demand.segmentStatus === "active",
   );
 
   const prefillDemand = search.newForDemandId
@@ -200,7 +205,9 @@ function ResourceLedgerTab() {
       setFormOpen(false);
       setEditingId(undefined);
       if (search.newForDemandId) {
-        navigate({ search: (prev) => ({ ...prev, newForDemandId: undefined }) });
+        navigate({
+          search: (prev) => ({ ...prev, newForDemandId: undefined }),
+        });
       }
       invalidate();
     },
@@ -214,9 +221,7 @@ function ResourceLedgerTab() {
         resource.status === "active" ? "voided" : "active",
       ),
     onSuccess: (_data, resource) => {
-      toast.success(
-        resource.status === "active" ? "资源已作废" : "资源已恢复",
-      );
+      toast.success(resource.status === "active" ? "资源已作废" : "资源已恢复");
       invalidate();
     },
     onError: (error) => toast.error(error.message),
@@ -242,7 +247,9 @@ function ResourceLedgerTab() {
     if (!open) {
       setEditingId(undefined);
       if (search.newForDemandId) {
-        navigate({ search: (prev) => ({ ...prev, newForDemandId: undefined }) });
+        navigate({
+          search: (prev) => ({ ...prev, newForDemandId: undefined }),
+        });
       }
     }
   };
@@ -494,7 +501,14 @@ function ResourceLedgerTab() {
                     <TableCell className="whitespace-nowrap tabular-nums">
                       {formatResourceTime(resource)}
                     </TableCell>
-                    <TableCell>{resource.location || "-"}</TableCell>
+                    <TableCell>
+                      {resource.location || resource.locationPoint?.name || "-"}
+                      {resource.locationPoint ? (
+                        <p className="text-muted-foreground text-xs">
+                          已地图定位 · {resource.locationPoint.name}
+                        </p>
+                      ) : null}
+                    </TableCell>
                     <TableCell className="text-sm">
                       {resource.vehicleInfo || resource.driverName ? (
                         <>
@@ -600,7 +614,9 @@ function ResourceLedgerTab() {
               size="sm"
               disabled={search.page <= 1}
               onClick={() =>
-                navigate({ search: (prev) => ({ ...prev, page: prev.page - 1 }) })
+                navigate({
+                  search: (prev) => ({ ...prev, page: prev.page - 1 }),
+                })
               }
             >
               上一页
@@ -610,7 +626,9 @@ function ResourceLedgerTab() {
               size="sm"
               disabled={search.page >= totalPages}
               onClick={() =>
-                navigate({ search: (prev) => ({ ...prev, page: prev.page + 1 }) })
+                navigate({
+                  search: (prev) => ({ ...prev, page: prev.page + 1 }),
+                })
               }
             >
               下一页
