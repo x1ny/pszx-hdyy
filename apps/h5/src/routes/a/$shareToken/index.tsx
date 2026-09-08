@@ -5,12 +5,14 @@ import {
   notFound,
   redirect,
 } from "@tanstack/react-router";
+import { useState } from "react";
 import { PageMessage } from "#/shared/components/page-message";
 import { ApiError, H5_UNAUTHORIZED } from "#/shared/lib/api";
 import { EventHero } from "./-components/event-hero";
 import { ScheduleList } from "./-components/schedule-list";
+import { SeatMapSheet } from "./-components/seat-map-sheet";
 import { ToastLayer } from "./-components/toast-layer";
-import { itineraryQueryOptions } from "./-queries";
+import { type AgendaItem, itineraryQueryOptions } from "./-queries";
 
 /**
  * 嘉宾的专属行程页 —— 一个活动一张合一长页：头图（活动信息）+ 议程时间轴 +
@@ -74,6 +76,14 @@ function ItineraryPage() {
   const { shareToken } = Route.useLoaderData();
   const { data } = useSuspenseQuery(itineraryQueryOptions(shareToken));
 
+  /**
+   * 座位图面板**整页只有一个**，由它记住当前看的是哪一场。
+   *
+   * 放在每一行里各渲染一个的话，一位有五场带排位环节的嘉宾，页面上就同时挂着
+   * 五套焦点陷阱和滚动锁定 —— 而其中至多一个会被打开。
+   */
+  const [seatMapFor, setSeatMapFor] = useState<AgendaItem | null>(null);
+
   return (
     <ToastLayer>
       <div className="mx-auto min-h-dvh w-full max-w-[480px] bg-surface pb-6">
@@ -84,9 +94,16 @@ function ItineraryPage() {
             agenda={data.agenda}
             trips={data.trips}
             cars={data.cars}
+            onOpenSeatMap={setSeatMapFor}
           />
         </div>
       </div>
+
+      <SeatMapSheet
+        shareToken={shareToken}
+        item={seatMapFor}
+        onClose={() => setSeatMapFor(null)}
+      />
     </ToastLayer>
   );
 }

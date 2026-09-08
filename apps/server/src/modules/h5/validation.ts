@@ -30,3 +30,13 @@ export const SubmitPhoneInput = z.object({ shareToken, mobile });
 export const H5ScopedInput = z.object({ shareToken });
 
 export const GetItineraryInput = H5ScopedInput;
+
+/**
+ * 座位图按环节取。`segmentId` 是**不可信输入**，改一个数就是在探别的环节——
+ * 越权不靠校验这个数字来挡，靠查询本身：只有"这个人在这个环节有已确认的座位"
+ * 才查得出画布（见 routes.ts 的 seatMapQuery）。查不到一律 NOT_FOUND，不区分
+ * 「环节不存在」和「你不在这个环节」，后者会把环节的存在性泄露出去。
+ */
+export const GetSeatMapInput = H5ScopedInput.extend({
+  segmentId: z.number().int().positive(),
+});

@@ -10,6 +10,7 @@
     "build": "bun --bun vite build",
     "preview": "bun vite preview",
     "generate-routes": "tsr generate",
+    "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

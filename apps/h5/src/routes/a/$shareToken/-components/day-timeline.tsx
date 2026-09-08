@@ -47,10 +47,18 @@ const TRIP_ICON: Record<Trip["transportMode"], IconName> = {
 export function DayTimeline({
   entries,
   status,
+  onOpenSeatMap,
 }: {
   entries: DayEntry[];
   /** 议程行的进行状态由页面统一算一次传进来，避免每行各自读一次时钟。 */
   status: (item: AgendaItem) => AgendaStatus;
+  /**
+   * 座位图面板由页面持有，这里只发出"打开哪一场"。
+   *
+   * 面板放在页面而不是每行各自渲染一个：一位嘉宾可能有四五场带座位图的环节，
+   * 每行一个 Drawer 就是四五套焦点陷阱和滚动锁定同时挂在 DOM 上。
+   */
+  onOpenSeatMap: (item: AgendaItem) => void;
 }) {
   return (
     <div>
@@ -64,6 +72,7 @@ export function DayTimeline({
               startTime={entry.startTime}
               endTime={entry.endTime}
               status={status(entry.item)}
+              onOpenSeatMap={onOpenSeatMap}
               {...shared}
             />
           );
@@ -167,6 +176,7 @@ function AgendaRow({
   status,
   index,
   isLast,
+  onOpenSeatMap,
 }: {
   item: AgendaItem;
   startTime: string;
@@ -174,6 +184,7 @@ function AgendaRow({
   status: AgendaStatus;
   index: number;
   isLast: boolean;
+  onOpenSeatMap: (item: AgendaItem) => void;
 }) {
   return (
     <Row index={index} isLast={isLast}>
@@ -206,6 +217,34 @@ function AgendaRow({
               <span>{item.zone}</span>
               <span className="tabular-nums">{item.seat}</span>
             </PillTag>
+
+            {/*
+              `hasSeatMap` 是服务端的**便宜判定**（画布行在不在、渲染器认不认识），
+              没有解析画布。所以按钮不出现 = 确实没有图；出现了 = 几乎一定有图，
+              残余的失败在面板里有降级文案，不会给出一个空面板。
+
+              这里不是「座位胶囊整颗可点」：那颗胶囊在没有图的时候也存在，做成
+              可点的话就有一半的场次点了没反应。
+            */}
+            {item.hasSeatMap && (
+              <button
+                type="button"
+                onClick={() => onOpenSeatMap(item)}
+                aria-label={`查看${item.zone}座位图`}
+                /*
+                  纯文字链接，没有边框和底色 —— 描边按钮会和左边那颗同样描边的
+                  座位胶囊连成两个框，视觉上分不出谁是信息谁是操作。
+
+                  代价是可点区域只剩 16px 高，所以用 `before:` 伪元素往外撑到
+                  40px 上下：它是绝对定位的，撑大的是热区而不是行高，旁边那颗
+                  胶囊的位置一点不动。
+                */
+                className="relative flex shrink-0 items-center gap-0.5 text-brand text-caption before:absolute before:-inset-x-2 before:-inset-y-3 before:content-['']"
+              >
+                <Icon name="map" size={12} />
+                座位图
+              </button>
+            )}
           </div>
         )}
 

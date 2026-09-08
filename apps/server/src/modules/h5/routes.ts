@@ -2,6 +2,11 @@ import { and, asc, eq, exists, isNull, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../../infra/db";
 import { err, ok } from "../../shared/result";
+import {
+  parseSeatPoints,
+  SEAT_CANVAS_RENDERER_KIND,
+  seatFieldPitch,
+} from "../../shared/seat-canvas";
 import { jsonBody } from "../../shared/validate";
 import { activitySegment } from "../agenda/schema";
 import { activityMember, segmentMember } from "../member/schema";
@@ -10,12 +15,13 @@ import { activityResource, resourceMemberBinding } from "../resource/schema";
 import {
   seatAssignment,
   segmentSeat,
+  segmentSeatingLayout,
   segmentSeatingPlan,
 } from "../seating/schema";
 import { memberTrip } from "../trip/schema";
 import { activityVenueZone } from "../venue/schema";
 import { type H5Variables, requireH5Member } from "./auth";
-import { GetItineraryInput } from "./validation";
+import { GetItineraryInput, GetSeatMapInput } from "./validation";
 
 /**
  * 活动简介按换行拆段。`activity.description` 是纯文本（刻意不接富文本，理由见
@@ -84,6 +90,15 @@ export const itinerarySeatsQuery = (activityId: number, memberId: number) =>
       segmentId: segmentMember.segmentId,
       seat: segmentSeat.label,
       zone: activityVenueZone.name,
+      /**
+       * 座位图入口的显隐判据。**只取 `renderer_kind`，绝不取 `data`**——行程页
+       * 一次返回整页，一位嘉宾可能有三五个带排位的环节，为了三颗按钮把几百 KB
+       * 的画布 jsonb 全拉出来解析一遍，首屏就废了。真正的解析推迟到点开那一刻
+       * （`/getSeatMap`）。
+       *
+       * left join：方案存在但还没画过图时这行是空的，那时按钮不该出现。
+       */
+      rendererKind: segmentSeatingLayout.rendererKind,
     })
     .from(segmentMember)
     .innerJoin(
@@ -105,12 +120,92 @@ export const itinerarySeatsQuery = (activityId: number, memberId: number) =>
       activityVenueZone,
       eq(activityVenueZone.id, segmentSeatingPlan.activityVenueZoneId),
     )
+    .leftJoin(
+      segmentSeatingLayout,
+      eq(segmentSeatingLayout.planId, segmentSeatingPlan.id),
+    )
     .where(
       and(
         eq(segmentMember.activityId, activityId),
         eq(segmentMember.memberId, memberId),
       ),
     );
+
+/**
+ * 座位图：我在这个环节的位置，外加这份方案的画布 blob。
+ *
+ * **越权就挡在这条查询的形状上**，不在 handler 的 if 里：入口是 `segment_member`
+ * 且锚死 `memberId`，所以传进来的 `segmentId` 无论是什么，查出来的都只可能是
+ * 「这个人自己有座位的那个环节」。探测别人的环节返回的是零行，和环节不存在
+ * 完全一样——不区分这两者是有意的，区分了就等于把环节的存在性告诉了调用方。
+ *
+ * join 链和 `itinerarySeatsQuery` 几乎一样，**只有 confirmed 那一条必须保持同步**：
+ * 那边判定按钮显不显示，这边决定点开有没有图。一边放宽另一边没跟上，表现就是
+ * 按钮出现了、点开是「暂不可用」。
+ */
+export const seatMapQuery = (
+  activityId: number,
+  memberId: number,
+  segmentId: number,
+) =>
+  db
+    .select({
+      planId: segmentSeatingPlan.id,
+      zoneName: activityVenueZone.name,
+      mySeatLabel: segmentSeat.label,
+      myExternalId: segmentSeat.externalId,
+      rendererKind: segmentSeatingLayout.rendererKind,
+      data: segmentSeatingLayout.data,
+    })
+    .from(segmentMember)
+    .innerJoin(
+      seatAssignment,
+      and(
+        eq(seatAssignment.segmentMemberId, segmentMember.id),
+        isNull(seatAssignment.revokedAt),
+      ),
+    )
+    .innerJoin(
+      segmentSeatingPlan,
+      and(
+        eq(segmentSeatingPlan.id, seatAssignment.planId),
+        eq(segmentSeatingPlan.status, "confirmed"),
+      ),
+    )
+    .innerJoin(segmentSeat, eq(segmentSeat.id, seatAssignment.segmentSeatId))
+    .innerJoin(
+      activityVenueZone,
+      eq(activityVenueZone.id, segmentSeatingPlan.activityVenueZoneId),
+    )
+    .innerJoin(
+      segmentSeatingLayout,
+      eq(segmentSeatingLayout.planId, segmentSeatingPlan.id),
+    )
+    .where(
+      and(
+        eq(segmentMember.activityId, activityId),
+        eq(segmentMember.memberId, memberId),
+        eq(segmentMember.segmentId, segmentId),
+      ),
+    )
+    .limit(1);
+
+/**
+ * 这份方案里**这次真实存在**的位置标识。
+ *
+ * 存在的意义是给 blob 当过滤器：软删的座位行还在（被分配行引用，删不掉），
+ * 画布里理论上也已经没有它了——但"理论上"不是保证。以座位行为准做一次交集，
+ * 图上的点数才等于现场真实的位置数。
+ *
+ * **停用（`enabled = false`）的位置照样返回**：那是"这次不安排人坐"，椅子还在，
+ * 后台画布上也是画出来的。图上一律画成同一颗灰点，不做视觉区分（h5 只有一种
+ * 强调色，多一档灰就需要图例，而定位图上没有地方放图例）。
+ */
+export const planLiveSeatIdsQuery = (planId: number) =>
+  db
+    .select({ externalId: segmentSeat.externalId })
+    .from(segmentSeat)
+    .where(and(eq(segmentSeat.planId, planId), isNull(segmentSeat.removedAt)));
 
 /** 嘉宾自己的到离行程（火车 / 飞机 / 驾车 / 其他）。 */
 export const itineraryTripsQuery = (activityMemberId: number) =>
@@ -282,10 +377,95 @@ export const h5Routes = new Hono<{ Variables: H5Variables }>()
             ...segment,
             zone: assigned?.zone ?? null,
             seat: assigned?.seat ?? null,
+            /**
+             * 座位图入口显不显示。这里是**便宜判定**：画布行存在、渲染器认识，
+             * 没有解析 blob。真正的解析在 `/getSeatMap`，那条路径上还会再确认
+             * 一次"我的座位在画布里有坐标"——判定为 true 却拿不到图是个几乎不
+             * 可能发生的残余分支（画布和座位行是同一次 saveLayout 从同一份 doc
+             * 写下去的），但它仍然有降级文案，不会给出一个空面板。
+             */
+            hasSeatMap: assigned?.rendererKind === SEAT_CANVAS_RENDERER_KIND,
           };
         }),
         trips,
         cars,
       }),
     );
+  })
+
+  /**
+   * 单个环节的座位图。**按需请求**，只有嘉宾真的点开"座位图"时才付出解析代价——
+   * 一万座那种极端方案不会拖累任何没点开的人。
+   *
+   * 出参里 `zoneName` / `seatLabel` **恒定有值**，`map` 才可能为 null。这样降级
+   * 分支不需要第二种响应形状：图画不出来时前端照样有话说（"座位图暂不可用，
+   * 您的座位是 A区 3排08座"），而不是一个空白面板。
+   *
+   * 载荷里**没有一个字段属于别人**：只有坐标，没有编号、没有种类等级、没有人名。
+   * 隐私不是靠前端"拿到了但不渲染"来保证的，是靠服务端根本不发——这个页面的
+   * 凭证只是一个手机号（auth.ts 顶部写着它挡不住知道号码的人），把整片区的与会者
+   * 名单铺进响应体，等于任何拿到转发链接的人都能把它拖出来。
+   */
+  .post("/getSeatMap", jsonBody(GetSeatMapInput), async (c) => {
+    const activityId = c.get("h5Activity").id;
+    const me = c.get("h5Member");
+    const { segmentId } = c.req.valid("json");
+
+    const [row] = await seatMapQuery(activityId, me.memberId, segmentId);
+    if (!row) {
+      return c.json(
+        err({ code: "NOT_FOUND", message: "没有找到您在这个环节的座位" }),
+      );
+    }
+
+    return c.json(
+      ok({
+        zoneName: row.zoneName,
+        seatLabel: row.mySeatLabel,
+        map: await buildSeatMap(row),
+      }),
+    );
   });
+
+/**
+ * 画布 blob + 座位行 → 一份能直接画的点集。画不出来返回 null。
+ *
+ * 三道关，任何一道不过就降级：渲染器不认识、blob 解析失败、**我的座位在画布里
+ * 没有坐标**。最后一道最容易被忽略却最要紧——一张画出了整片区、偏偏没有"你在
+ * 这里"的图，比不给图更糟：它看起来是正常的，嘉宾会对着它找一个不存在的红点。
+ */
+async function buildSeatMap(row: {
+  planId: number;
+  myExternalId: string;
+  rendererKind: string;
+  data: unknown;
+}) {
+  if (row.rendererKind !== SEAT_CANVAS_RENDERER_KIND) return null;
+
+  const points = parseSeatPoints(row.data);
+  if (!points) return null;
+
+  const mine = points.find((point) => point.externalId === row.myExternalId);
+  if (!mine) return null;
+
+  const live = new Set(
+    (await planLiveSeatIdsQuery(row.planId)).map((seat) => seat.externalId),
+  );
+
+  // 我自己那颗也留在这个列表里：定位钉画在最上层盖住它，点数因此等于现场
+  // 真实的位置数——少一个的话"数一数第几个"就对不上了。
+  const seats = points
+    .filter((point) => live.has(point.externalId))
+    .map((point) => ({ x: point.x, y: point.y }));
+
+  return {
+    seats,
+    mine: { x: mine.x, y: mine.y },
+    /**
+     * 典型座距，前端据此决定圆点画多大、放大到什么程度就该停。**在这里算而不是
+     * 让 h5 重算**：算法要和管理端画布严格一致（同一片座位在两端必须得出同一个
+     * 密度判断），而这里已经有点集、也已经有测试装置。
+     */
+    pitch: seatFieldPitch(seats),
+  };
+}
