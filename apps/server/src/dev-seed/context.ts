@@ -22,6 +22,14 @@ export const DEMO = {
   // 筛选框看上去都是对的，实际上什么都没验证到。
   secondProjectId: 2,
   secondProjectActivityIds: { launch: 3, closing: 4 },
+  /**
+   * h5 行程页的公开地址：`/a/demo-itinerary`。
+   *
+   * 真实 token 是 9 字节随机数转 base64url（`project/share-token.ts`），这里
+   * 刻意用一个读得懂的串——它一眼就看得出是演示数据，不会被当成真 token。
+   * 长度不受限（`h5/validation.ts` 只卡 1..64）。
+   */
+  itineraryShareToken: "demo-itinerary",
   mainLineId: 1,
   parallelLineId: 2,
   segmentIds: { opening: 1, forum: 2, negotiation: 3 },

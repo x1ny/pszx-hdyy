@@ -37,6 +37,18 @@
   也显示为对应的「第 N 天」，不显示「自由活动」。议程前后的交通日仍显示为「出发日」
   /「返程日」，避免和活动议程日混淆。
 
+## 开发环境怎么进这一页
+
+**`http://localhost:3101/a/demo-itinerary`，手机号 `13810000000`（王芳）。**
+
+`activity.itinerary_share_token` 平时是 null——运营在管理端点过「分享行程链接」
+才生成（`project/routes.ts` 的 `getOrCreateItineraryShareToken`）。种子给演示活动
+写死了一个（`dev-seed/context.ts` 的 `DEMO.itineraryShareToken`），**其余三场仍留
+null**，那条"查不到就 404"的分支才有得调。
+
+想试同号多人那条分支（`auth.ts` 里"后登记的那位永远看到前一位的行程"）用
+`13810000003`。
+
 ## 座位图（2026-09-08）
 
 议程行上有座位号时多一颗「座位图」按钮，推上来一张**定位图**：这片区的座位分布

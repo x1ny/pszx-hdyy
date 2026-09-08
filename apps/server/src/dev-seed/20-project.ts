@@ -52,6 +52,17 @@ export const seed: SeedFn = async (db, { userId }) => {
       publishStatus: "published",
       displayEnabled: true,
       registrationEnabled: true,
+      /**
+       * h5 行程页的入口。**只有这一场演示活动写死 token，其余三场留 null**
+       * ——null 才是真实的初始状态（运营点过「分享行程链接」才生成），留几场
+       * 没 token 的，`h5/auth.ts` 那条"查不到就 404"的分支才有得调。
+       *
+       * 不写死的话 h5 端在临时库里**没有任何可访问的 URL**：种子不设这一列，
+       * 而 `/a/:shareToken` 只认它，于是每次 `bun run dev` 都得先去管理端点一次
+       * 分享按钮，或者直接改库。固定值让它和 `/project/1`、`/member` 一样是
+       * 随时可导航的。
+       */
+      itineraryShareToken: DEMO.itineraryShareToken,
       createdBy: userId,
       updatedBy: userId,
     },
