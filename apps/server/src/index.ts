@@ -17,6 +17,7 @@ import { fileRoutes } from "./modules/file/routes";
 import { h5Routes } from "./modules/h5/routes";
 import { h5AccessRoutes } from "./modules/h5/routes.access";
 import { invitationRoutes } from "./modules/invitation/routes";
+import { mapConfigRoutes } from "./modules/map-config/routes";
 import { memberRoutes } from "./modules/member/routes";
 import { memberImportRoutes } from "./modules/member/routes.import";
 import {
@@ -218,6 +219,9 @@ export const routes = app
   // 投影失焦。
   .route("/api/resourceDemand", resourceDemandRoutes)
   .route("/api/activityResource", activityResourceRoutes)
+  // 地图选点的浏览器端 AK 由运行时环境变量提供。模块自身只要求后台登录，
+  // 不归单一权限点（议程和资源台账都要读取），理由登记在 permission-map.ts。
+  .route("/api/mapConfig", mapConfigRoutes)
   .route("/api/trip", tripRoutes)
   // 场地三层，依赖方向严格单向（docs/场地排位底层设计.md §2）：
   //   venue         跨活动复用的场地库，不知道后两者的存在

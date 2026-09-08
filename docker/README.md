@@ -56,19 +56,21 @@ Buildx 直接推。`BUN_IMAGE` / `NPM_REGISTRY` 两个环境变量会透传成 `
 
 ### 百度地图浏览器端 AK
 
-地图选点使用 `VITE_BAIDU_MAP_AK`，它是构建时变量，会写进管理端的静态资源；
-运行中的容器设置该变量不会改变已经构建好的地图 AK。本地开发由
-`apps/web/.env.local` 自动读取，Docker 构建机则先设置同名环境变量：
+地图选点使用运行时变量 `BAIDU_MAP_AK`。管理端在用户打开选点弹窗时，同源服务端
+将该浏览器端 AK 返回给已登录用户；它不会写进镜像，也不需要作为 Docker build
+参数传入。因此构建出的同一份镜像可部署到不同环境，各环境只需设置自己的 AK。
 
-```powershell
-$env:VITE_BAIDU_MAP_AK = "<百度地图浏览器端 AK>"
-bun run docker:build-push v0.1.0
+本地开发在仓库根目录 `.env` 设置 `BAIDU_MAP_AK`；现有的
+`apps/web/.env.local` 中 `VITE_BAIDU_MAP_AK` 应迁移到这里。运行容器时按部署平台
+的运行时变量配置，例如：
+
+```bash
+docker run -e BAIDU_MAP_AK="<百度地图浏览器端 AK>" … pszx-hdyy:dev
 ```
 
-`build-push` 会将变量以无值的 `--build-arg VITE_BAIDU_MAP_AK` 传给 Docker，
-不会把 AK 拼到命令日志中。使用普通 `docker buildx build` 时同样传这个 build arg。
-AK 是浏览器端公开配置，应在百度地图控制台的 Referer 白名单中配置本地地址和
-各个正式管理端域名；不要使用服务端 AK。
+Rancher 则在 workload 的环境变量中设置 `BAIDU_MAP_AK` 后重新部署。AK 是浏览器端
+公开配置，应在百度地图控制台的 Referer 白名单中配置本地地址和各个正式管理端
+域名；不要使用服务端 AK。
 
 ## 发布版本
 
@@ -107,6 +109,7 @@ docker run -d -p 80:80 -p 81:81 -e DATABASE_URL=postgresql://user:pass@db:5432/p
 | `BETTER_AUTH_SECRET` | 是 | — | `openssl rand -base64 32`。缺失时容器直接退出 |
 | `APP_URL` | 是* | — | **管理端**在浏览器里的访问地址。entrypoint 用它派生下面两个。h5 不需要配，它和自己的 API 同源，前端直接用 `window.location.origin` |
 | `H5_URL` | 是 | — | H5 的**公网绝对地址**，例如 `https://h5.hdyy.example.com`。管理端的「分享行程链接」接口用它生成 `/a/<token>`；不是 H5 调 API 的地址 |
+| `BAIDU_MAP_AK` | 否 | — | 百度地图 JavaScript API 的浏览器端 AK。管理端按需从同源服务端获取；变更后重新部署工作负载即可，无需重建镜像 |
 | `BETTER_AUTH_URL` | 是* | 由 `APP_URL` 派生 | 单独设会覆盖派生值 |
 | `WEB_ORIGIN` | 是* | 由 `APP_URL` 派生 | 同上 |
 | `BETTER_AUTH_SESSION_EXPIRES_IN_SECONDS` | 否 | `604800`（7 天） | 会话有效期，单位秒；测试环境设为 `28800` 即 8 小时 |

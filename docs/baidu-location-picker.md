@@ -8,15 +8,23 @@
 
 1. 在[百度地图控制台](https://lbsyun.baidu.com/apiconsole/key)创建或选择**浏览器端**应用，开启 JavaScript API；服务端 AK 无法加载 JSAPI。
 2. Referer 白名单加入本地调试使用的地址（如 `localhost`、`127.0.0.1`，格式以控制台为准），正式使用时加入实际管理端域名。
-3. 复制 `apps/web/.env.example` 为 `apps/web/.env.local`，填写 `VITE_BAIDU_MAP_AK`，重启开发服务。
+3. 在仓库根目录 `.env` 填写 `BAIDU_MAP_AK`，重启开发服务。已有
+   `apps/web/.env.local` 的 `VITE_BAIDU_MAP_AK` 请迁移到这里。
 
 浏览器 AK 会出现在网页网络请求中，应依靠白名单限制来源；不要把服务端密钥填到这里。没有 AK 或地图加载失败时仍可按原方式填写集合说明并保存。
 
 ## 构建和发布
 
-AK 是 Vite **构建时配置**。本地 `bun run build` 会读取 `apps/web/.env.local`；Docker 构建不会复制本地 env 文件，需要传 `--build-arg VITE_BAIDU_MAP_AK` 并设置同名环境变量。`bun run docker:build-push` 已支持转发该环境变量。
+AK 由服务进程在运行时读取。管理端打开选点弹窗时，向同源服务端获取该浏览器端 AK；
+它不会进入 Vite 构建产物，也无需 Docker build arg。同一镜像可部署到多个环境，各环境
+在容器或 Rancher workload 的环境变量中设置 `BAIDU_MAP_AK` 即可。
 
-同一个浏览器 AK 的白名单可包含多个环境域名，同一镜像可在这些环境复用。更换 AK 需要重新构建；只给运行中的容器设置环境变量不会改变已生成的前端资源。数据库迁移随镜像启动执行，新增可空列，不影响已有数据。
+管理端只允许 Vite 注入 `VITE_API_*` 前缀，因此遗留的 `VITE_BAIDU_MAP_AK` 不会进入
+新的静态资源；将其迁移到根目录 `.env` 后可自行删除该旧项。
+
+同一个浏览器 AK 的白名单可包含多个环境域名，同一镜像可在这些环境复用。更换 AK 后
+重新部署工作负载使进程读取新变量，无需重建镜像。数据库迁移随镜像启动执行，新增可空列，
+不影响已有数据。
 
 ## 移动端衔接
 

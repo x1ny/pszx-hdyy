@@ -9,6 +9,9 @@ const webPort = Number(process.env.WEB_PORT ?? "3000");
 
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
+  // 地图 AK 由服务端在运行时提供，不能因 Vite 默认暴露全部 VITE_* 变量而再次
+  // 写进静态资源。当前只有部署拆分前后端时才会使用 VITE_API_URL。
+  envPrefix: "VITE_API_",
   server: {
     host: "localhost",
     port: webPort,
