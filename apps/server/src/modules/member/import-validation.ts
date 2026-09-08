@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CITIES, COUNTRY_REGIONS, PROVINCES } from "../../shared/dict/regions";
+import { duplicateMobileMessage } from "./duplicates";
 import { CreateMemberInput } from "./validation";
 
 export const MEMBER_IMPORT_MAX_ROWS = 2_000;
@@ -332,20 +333,23 @@ export function buildMemberImportPlan(
     if (row.mobile && !hasFieldError(issues, "mobile")) {
       if ((mobileCounts.get(row.mobile) ?? 0) > 1) {
         addIssue(issues, {
-          severity: "warning",
+          severity: "error",
           field: "mobile",
           code: "duplicate_mobile",
           source: "file",
-          message: "当前 Excel 内还有相同手机号",
+          message: "当前 Excel 内存在重复手机号，请修改后再导入",
         });
       }
-      if (context.members.some((item) => item.mobile === row.mobile)) {
+      const duplicate = context.members.find(
+        (item) => item.mobile === row.mobile,
+      );
+      if (duplicate) {
         addIssue(issues, {
-          severity: "warning",
+          severity: "error",
           field: "mobile",
           code: "duplicate_mobile",
           source: "database",
-          message: "系统中已有相同手机号的人员",
+          message: duplicateMobileMessage(duplicate.name),
         });
       }
     }

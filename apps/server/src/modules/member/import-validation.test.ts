@@ -194,7 +194,7 @@ describe("人员导入重复判定", () => {
     }
   });
 
-  test("手机号、邮箱、姓名加团体重复只警告并标明来源", () => {
+  test("手机号重复会阻止导入，邮箱和姓名加团体重复仍标为警告", () => {
     const common = {
       organizationName: "商会",
       mobile: "13800138000",
@@ -219,7 +219,7 @@ describe("人员导入重复判定", () => {
       context,
     ).validation;
 
-    expect(validation.summary.errorCount).toBe(0);
+    expect(validation.summary.errorCount).toBe(4);
     expect(validation.summary.warningRowCount).toBe(2);
     expect(validation.rows[0]?.issues).toEqual(
       expect.arrayContaining([
@@ -227,6 +227,8 @@ describe("人员导入重复判定", () => {
         expect.objectContaining({
           code: "duplicate_mobile",
           source: "database",
+          severity: "error",
+          message: "该手机号和“张三”手机号重复，请重新输入",
         }),
         expect.objectContaining({ code: "duplicate_email", source: "file" }),
         expect.objectContaining({

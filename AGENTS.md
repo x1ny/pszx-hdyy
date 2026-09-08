@@ -20,7 +20,7 @@ Before editing files for a substantial task:
 > 装不下时**不要往下堆**，按这个判据搬：**能从代码库看出来的**（目录树、依赖清单、架构概览）直接删；**踩过的坑、决策理由、和工具默认不一样的约定**留在这里；**成体系的细则**（结构判据、CRUD 范式、部署参数）搬进 `docs/` 并在这里留一行指针。`CLAUDE.md` 只是一行 `@AGENTS.md`——Claude Code 不读 `AGENTS.md`，删了它这份文档对 Claude 就完全失效。
 
 ## 第一版原型参考
-座位采用独立坐标，避免抽象区域限制排布；约定见 [docs/seating-canvas.md](docs/seating-canvas.md)。
+座位采用独立坐标；人员主档手机号新增/修改时唯一校验，历史重号仅兼容读取；见 [docs/seating-canvas.md](docs/seating-canvas.md)。
 
 相关文件目录 \docs\20260811交接
 

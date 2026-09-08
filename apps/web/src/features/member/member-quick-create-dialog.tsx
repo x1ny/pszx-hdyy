@@ -34,8 +34,8 @@ import type { NewMemberFields } from "./relation-queries";
  * 全量人员库补全更合适；导入模板的必填项也只有姓名（文档 8.1.2 校验规则第 1
  * 条），这里跟它对齐。所以底部那句提示不是客套，是在告诉运营剩下的字段去哪补。
  *
- * 校验交给后端：同一套 zod 规则（手机号/证件号正则、证件类型+号码唯一）已经在
- * validation.ts 里了，前端再写一遍就是第二个真相源。失败信息由调用方 toast。
+ * 校验交给后端：同一套 zod 规则（手机号/证件号正则）以及手机号、证件类型+号码
+ * 的重复校验都在服务端，前端再写一遍就是第二个真相源。失败信息由调用方 toast。
  */
 export type QuickCreateValues = {
   member: NewMemberFields;

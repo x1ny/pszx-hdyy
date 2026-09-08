@@ -11,6 +11,7 @@ import {
   type SegmentMemberRole,
   segmentMember,
 } from "./schema";
+import { duplicateMobileMessage, findDuplicateMobile } from "./duplicates";
 
 /**
  * 人员分层的**唯一写入入口**。
@@ -169,6 +170,11 @@ export async function createMemberInTx(
   fields: NewMemberFields,
   userId: string,
 ): Promise<number> {
+  const duplicateMobile = await findDuplicateMobile(tx, fields.mobile);
+  if (duplicateMobile) {
+    fail(duplicateMobileMessage(duplicateMobile.name));
+  }
+
   if (fields.idType && fields.idNumber) {
     const [dup] = await tx
       .select({ id: member.id, name: member.name })

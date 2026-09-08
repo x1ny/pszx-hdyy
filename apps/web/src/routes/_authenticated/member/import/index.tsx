@@ -461,7 +461,7 @@ function MemberImportPage() {
                   <TriangleAlertIcon />
                   <AlertTitle>可以导入，但需要确认警告</AlertTitle>
                   <AlertDescription>
-                    重复手机号、邮箱、姓名加团体以及自动新建团体不会阻止导入；提交前会再次确认。
+                    重复手机号会阻止导入；重复邮箱、姓名加团体以及自动新建团体会在提交前再次确认。
                   </AlertDescription>
                 </Alert>
               ) : (

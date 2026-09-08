@@ -16,6 +16,10 @@ import {
   segmentMember,
 } from "./schema";
 import {
+  duplicateMobileMessage,
+  findDuplicateMobile,
+} from "./duplicates";
+import {
   CreateMemberInput,
   ListMemberCandidatesInput,
   ListMembersInput,
@@ -485,6 +489,12 @@ export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
     if (!(await organizationExists(input.organizationId))) {
       return c.json(organizationBindingNotFound());
     }
+    const duplicateMobile = await findDuplicateMobile(db, input.mobile);
+    if (duplicateMobile) {
+      return c.json(
+        validationError(duplicateMobileMessage(duplicateMobile.name)),
+      );
+    }
     if (await hasDuplicateIdDocument(input.idType, input.idNumber)) {
       return c.json(validationError("相同证件类型和证件号码的人员已存在"));
     }
@@ -515,6 +525,22 @@ export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
     const { id, ...input } = c.req.valid("json");
     if (!(await organizationExists(input.organizationId))) {
       return c.json(organizationBindingNotFound());
+    }
+    const [current] = await db
+      .select({ id: member.id, mobile: member.mobile })
+      .from(member)
+      .where(eq(member.id, id))
+      .limit(1);
+    if (!current) return c.json(notFound());
+
+    const duplicateMobile =
+      current.mobile === input.mobile
+        ? undefined
+        : await findDuplicateMobile(db, input.mobile, id);
+    if (duplicateMobile) {
+      return c.json(
+        validationError(duplicateMobileMessage(duplicateMobile.name)),
+      );
     }
     if (await hasDuplicateIdDocument(input.idType, input.idNumber, id)) {
       return c.json(validationError("相同证件类型和证件号码的人员已存在"));

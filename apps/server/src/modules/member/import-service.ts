@@ -1,6 +1,7 @@
 import { inArray, or, type SQL } from "drizzle-orm";
 import { db } from "../../infra/db";
 import { organization } from "../organization/schema";
+import { duplicateMobileMessage } from "./duplicates";
 import {
   buildMemberImportPlan,
   type MemberImportContext,
@@ -153,6 +154,22 @@ export async function commitMemberImport(
         updatedBy: userId,
       };
     });
+
+    const mobiles = uniqueValues(
+      values.map((value) => value.mobile ?? ""),
+    );
+    if (mobiles.length > 0) {
+      const [duplicate] = await tx
+        .select({ name: member.name })
+        .from(member)
+        .where(inArray(member.mobile, mobiles))
+        .limit(1);
+      if (duplicate) {
+        throw new MemberImportCommitError(
+          duplicateMobileMessage(duplicate.name),
+        );
+      }
+    }
 
     await tx.insert(member).values(values);
 
