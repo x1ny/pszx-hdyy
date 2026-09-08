@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { desc } from "drizzle-orm";
 import { db } from "../../infra/db";
 import { venueCountFields } from "./routes";
+import { activityVenueRemovalPatch } from "./routes.activity";
 import { venue } from "./schema";
 
 /**
@@ -34,5 +35,14 @@ describe("venueCountFields", () => {
   test("没有退化成裸列名", () => {
     // 出现这个片段就说明 buildSelection 又把列名降级了。
     expect(rendered).not.toContain(`where "venue_id" = "id"`);
+  });
+});
+
+describe("activityVenueRemovalPatch", () => {
+  test("移除活动场地只禁用快照，不物理删除历史引用", () => {
+    expect(activityVenueRemovalPatch("operator-1")).toEqual({
+      status: "disabled",
+      updatedBy: "operator-1",
+    });
   });
 });

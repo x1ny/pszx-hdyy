@@ -320,6 +320,7 @@ export const activityVenue = pgTable(
     /** 本活动对这个场地的使用说明。拷贝下来之后才有的字段，场地库那边没有。 */
     note: text("note"),
 
+    /** `disabled` 同时表示从本活动当前空间移除；历史引用仍保留这份快照。 */
     status: text("status")
       .$type<ActivityVenueStatus>()
       .notNull()

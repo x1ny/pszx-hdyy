@@ -72,6 +72,12 @@ const notFound = (message = "活动场地不存在") =>
 const invalid = (message: string) =>
   err({ code: "VALIDATION_ERROR" as const, message });
 
+/** 移除只改变当前活动的可见状态，不能破坏仍被历史排位引用的快照。 */
+export const activityVenueRemovalPatch = (userId: string) => ({
+  status: "disabled" as const,
+  updatedBy: userId,
+});
+
 export const activityVenueRoutes = new Hono<{ Variables: AuthedVariables }>()
   .use(requireUser)
 
@@ -87,13 +93,25 @@ export const activityVenueRoutes = new Hono<{ Variables: AuthedVariables }>()
     const venues = await db
       .select(activityVenueFields)
       .from(activityVenue)
-      .where(eq(activityVenue.activityId, activityId))
+      .where(
+        and(
+          eq(activityVenue.activityId, activityId),
+          eq(activityVenue.status, "active"),
+        ),
+      )
       .orderBy(asc(activityVenue.ordinal), asc(activityVenue.id));
 
     const [zones, layouts] = await Promise.all([
       db
         .select(activityZoneFields)
         .from(activityVenueZone)
+        .innerJoin(
+          activityVenue,
+          and(
+            eq(activityVenue.id, activityVenueZone.activityVenueId),
+            eq(activityVenue.status, "active"),
+          ),
+        )
         .where(eq(activityVenueZone.activityId, activityId))
         .orderBy(asc(activityVenueZone.ordinal), asc(activityVenueZone.id)),
       venues.length
@@ -107,9 +125,17 @@ export const activityVenueRoutes = new Hono<{ Variables: AuthedVariables }>()
             .from(activityVenueLayout)
             .innerJoin(
               activityVenue,
-              eq(activityVenue.id, activityVenueLayout.activityVenueId),
+              and(
+                eq(activityVenue.id, activityVenueLayout.activityVenueId),
+                eq(activityVenue.status, "active"),
+              ),
             )
-            .where(eq(activityVenue.activityId, activityId))
+            .where(
+              and(
+                eq(activityVenue.activityId, activityId),
+                eq(activityVenue.status, "active"),
+              ),
+            )
         : [],
     ]);
 
@@ -130,7 +156,12 @@ export const activityVenueRoutes = new Hono<{ Variables: AuthedVariables }>()
     const [venueRow] = await db
       .select({ total: count() })
       .from(activityVenue)
-      .where(eq(activityVenue.activityId, activityId));
+      .where(
+        and(
+          eq(activityVenue.activityId, activityId),
+          eq(activityVenue.status, "active"),
+        ),
+      );
 
     const [zoneRow] = await db
       .select({
@@ -141,6 +172,13 @@ export const activityVenueRoutes = new Hono<{ Variables: AuthedVariables }>()
           filter (where ${activityVenueZone.status} = 'active'), 0)::int`,
       })
       .from(activityVenueZone)
+      .innerJoin(
+        activityVenue,
+        and(
+          eq(activityVenue.id, activityVenueZone.activityVenueId),
+          eq(activityVenue.status, "active"),
+        ),
+      )
       .where(eq(activityVenueZone.activityId, activityId));
 
     return c.json(
@@ -173,12 +211,8 @@ export const activityVenueRoutes = new Hono<{ Variables: AuthedVariables }>()
         .from(venue)
         .where(eq(venue.id, venueId));
       if (!source) return { ok: false as const, error: "场地不存在" };
-      if (source.status === "disabled") {
-        return { ok: false as const, error: "该场地已停用，不能引用" };
-      }
-
       const [dup] = await tx
-        .select({ id: activityVenue.id })
+        .select({ id: activityVenue.id, status: activityVenue.status })
         .from(activityVenue)
         .where(
           and(
@@ -186,7 +220,32 @@ export const activityVenueRoutes = new Hono<{ Variables: AuthedVariables }>()
             eq(activityVenue.sourceVenueId, venueId),
           ),
         );
-      if (dup) return { ok: false as const, error: "这个场地已经引用过了" };
+      if (dup) {
+        if (dup.status === "disabled") {
+          const [restored] = await tx
+            .update(activityVenue)
+            .set({ status: "active", updatedBy: userId })
+            .where(eq(activityVenue.id, dup.id))
+            .returning(activityVenueFields);
+          if (!restored) return { ok: false as const, error: "恢复失败" };
+
+          const existingZones = await tx
+            .select({ id: activityVenueZone.id })
+            .from(activityVenueZone)
+            .where(eq(activityVenueZone.activityVenueId, restored.id));
+
+          return {
+            ok: true as const,
+            venue: restored,
+            zones: existingZones.length,
+          };
+        }
+
+        return { ok: false as const, error: "这个场地已经引用过了" };
+      }
+      if (source.status === "disabled") {
+        return { ok: false as const, error: "该场地已停用，不能引用" };
+      }
 
       const [maxRow] = await tx
         .select({
@@ -292,17 +351,25 @@ export const activityVenueRoutes = new Hono<{ Variables: AuthedVariables }>()
   })
 
   /**
-   * 移除一个引用的场地，连带它的区域和画布。
+   * 从当前活动空间移除一个场地。
    *
-   * ⚠️ 有排位方案引用它下面的区域时**不能删**——但那个检查在 seating 侧，
-   * 这里查不到（单向依赖）。数据库那边 `segment_seating_plan` 对
-   * `activity_venue_zone` 的外键会把这次删除挡下来，报的是外键冲突。
-   * 前端在调用前先问一次 seating 有没有引用，好给出人话提示。
+   * 这里必须是软移除：活动场地下面的区域可能仍被作废方案和操作日志作为历史
+   * 快照引用。物理删除会撞 `segment_seating_plan -> activity_venue_zone` 外键，
+   * 而且会让历史排位失去可追溯的场地名称、区域和画布。
+   *
+   * 列表和统计只读 `active` 场地，所以调用方看到的效果仍然是移除；保留下来的
+   * `disabled` 行可以在重新引用同一个场地时恢复，避免唯一键让用户无法找回快照。
    */
   .post("/remove", jsonBody(ActivityVenueIdInput), async (c) => {
     const [row] = await db
-      .delete(activityVenue)
-      .where(eq(activityVenue.id, c.req.valid("json").id))
+      .update(activityVenue)
+      .set(activityVenueRemovalPatch(c.get("authedUser").id))
+      .where(
+        and(
+          eq(activityVenue.id, c.req.valid("json").id),
+          eq(activityVenue.status, "active"),
+        ),
+      )
       .returning({ id: activityVenue.id });
 
     return row ? c.json(ok(row)) : c.json(notFound());
@@ -390,7 +457,12 @@ export const activityVenueRoutes = new Hono<{ Variables: AuthedVariables }>()
       const [exists] = await tx
         .select({ id: activityVenue.id, activityId: activityVenue.activityId })
         .from(activityVenue)
-        .where(eq(activityVenue.id, input.activityVenueId));
+        .where(
+          and(
+            eq(activityVenue.id, input.activityVenueId),
+            eq(activityVenue.status, "active"),
+          ),
+        );
       if (!exists) return null;
 
       const counts = await applyActivityLayout(tx, exists.activityId, input);

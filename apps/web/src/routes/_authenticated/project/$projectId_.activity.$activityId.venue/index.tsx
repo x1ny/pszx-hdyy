@@ -104,11 +104,7 @@ function ActivityVenuePage() {
       toast.success("已移除这个场地");
       invalidate();
     },
-    onError: () =>
-      // 数据库那边有排位方案引用时会报外键冲突，翻译成人话。
-      toast.error(
-        "移除失败。这个场地下面可能还有区域正被环节排位引用，请先作废那些方案",
-      ),
+    onError: (error) => toast.error(error.message),
   });
 
   const updateZoneMutation = useMutation({
@@ -144,13 +140,17 @@ function ActivityVenuePage() {
   /** 区域 id → 引用它的环节名。原型那一列叫「引用环节」。 */
   const usageByZone = useMemo(() => {
     const map = new Map<number, string[]>();
+    const visibleZoneIds = new Set(
+      (bundle?.zones ?? []).map((zone) => zone.id),
+    );
     for (const row of usageQuery.data?.list ?? []) {
+      if (!visibleZoneIds.has(row.activityVenueZoneId)) continue;
       const list = map.get(row.activityVenueZoneId) ?? [];
       list.push(row.segmentName);
       map.set(row.activityVenueZoneId, list);
     }
     return map;
-  }, [usageQuery.data]);
+  }, [usageQuery.data, bundle?.zones]);
 
   const venueNameById = useMemo(
     () => new Map((bundle?.venues ?? []).map((v) => [v.id, v.name])),
@@ -242,18 +242,27 @@ function ActivityVenuePage() {
                   projectId={projectId}
                   activityId={activityIdParam}
                   onRemove={() => {
+                    const hasActivePlan = (
+                      zonesByVenue.get(venue.id) ?? []
+                    ).some((zone) => usageByZone.has(zone.id));
+                    if (hasActivePlan) {
+                      toast.error(
+                        "移除失败。这个场地下面可能还有区域正被环节排位引用，请先作废那些方案",
+                      );
+                      return;
+                    }
                     if (
                       !window.confirm(
                         `移除「${venue.name}」？它下面的 ${
                           (zonesByVenue.get(venue.id) ?? []).length
-                        } 个活动区域会一起删除。`,
+                        } 个活动区域会从当前空间移除，历史排位记录会保留。`,
                       )
                     ) {
                       return;
                     }
                     removeMutation.mutate(venue.id);
                   }}
-                  removing={removeMutation.isPending}
+                  removing={removeMutation.isPending || usageQuery.isLoading}
                 />
               ))}
             </div>

@@ -330,12 +330,10 @@ export const activityConfigRoutes = new Hono<{ Variables: AuthedVariables }>()
         // ——两边各写一次，迟早出现汇总页说还差 1 项、总览说全配齐了。
         summarizeDemands(activityId),
         /**
-         * 场地的三个数一次查完，**都按 `status = active` 的区域算**。
+         * 场地的三个数一次查完，按 `status = active` 的场地和区域算。
          *
-         * 口径要和排位区域选择器逐字一致：它挑区域时只看 `zone.status`，
-         * 不看所属场地的状态（seating-zone-picker.tsx）。这里要是多加一个
-         * 场地状态的条件，就会出现"总览说场地没配好、选择器里区域好好
-         * 摆着"——同一件事两处口径，正是 resource/stats.ts 那条注释在防的。
+         * 已从活动空间移除的场地不再属于当前配置，不能继续贡献区域和点位；
+         * 排位选择器本身仍可读取历史快照，避免作废方案失去追溯能力。
          *
          * 场地数取**拥有可用区域的场地数**（distinct），而不是另查一次场地表：
          * 三个数出自同一行过滤，显示上不会自相矛盾（否则场地停用、区域还开着
@@ -348,10 +346,18 @@ export const activityConfigRoutes = new Hono<{ Variables: AuthedVariables }>()
             capacity: sql<number>`coalesce(sum(${activityVenueZone.capacity}), 0)::int`,
           })
           .from(activityVenueZone)
+          .innerJoin(
+            activityVenue,
+            and(
+              eq(activityVenue.id, activityVenueZone.activityVenueId),
+              eq(activityVenue.activityId, activityVenueZone.activityId),
+            ),
+          )
           .where(
             and(
               eq(activityVenueZone.activityId, activityId),
               eq(activityVenueZone.status, "active"),
+              eq(activityVenue.status, "active"),
             ),
           ),
         // 只为了把"一个场地都没引用"和"引用了但区域都停用了"分开说——两种
@@ -359,7 +365,12 @@ export const activityConfigRoutes = new Hono<{ Variables: AuthedVariables }>()
         db
           .select({ n: count() })
           .from(activityVenue)
-          .where(eq(activityVenue.activityId, activityId)),
+          .where(
+            and(
+              eq(activityVenue.activityId, activityId),
+              eq(activityVenue.status, "active"),
+            ),
+          ),
         // 同 summarizeDemands：「哪些环节算开了排位」只有 seating/stats.ts
         // 一处定义，排位页和这里是同一条规则的两个读者。
         summarizeSeating(activityId),
