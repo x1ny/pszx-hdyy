@@ -6,6 +6,7 @@ import {
   dayKeyOf,
   dayLabelOf,
   isScheduled,
+  splitTimeRangeByDay,
   statusOf,
   timeOf,
   uniqueDays,
@@ -44,7 +45,14 @@ export function ScheduleList({
   );
 
   const agendaDays = useMemo(
-    () => uniqueDays(agenda.map((item) => dayKeyOf(item.startTime))),
+    () =>
+      uniqueDays(
+        agenda.flatMap((item) =>
+          splitTimeRangeByDay(item.startTime, item.endTime).map(
+            (part) => part.dayKey,
+          ),
+        ),
+      ),
     [agenda],
   );
 
@@ -80,12 +88,19 @@ export function ScheduleList({
     };
 
     for (const item of agenda) {
-      push(dayKeyOf(item.startTime), {
-        kind: "agenda",
-        key: `agenda-${item.id}`,
-        time: timeOf(item.startTime),
-        item,
-      });
+      for (const part of splitTimeRangeByDay(
+        item.startTime,
+        item.endTime,
+      )) {
+        push(part.dayKey, {
+          kind: "agenda",
+          key: `agenda-${item.id}-${part.dayKey}`,
+          time: part.startTime,
+          startTime: part.startTime,
+          endTime: part.endTime,
+          item,
+        });
+      }
     }
 
     // 过期只算到「天」，和日卡上的「已结束」同一粒度 —— 精确到分钟会让页面在

@@ -14,7 +14,14 @@ import { PillTag } from "./pill-tag";
 
 /** 融合时间轴上的一行。`time`（`HH:mm`）是当天内的排序键。 */
 export type DayEntry =
-  | { kind: "agenda"; key: string; time: string; item: AgendaItem }
+  | {
+      kind: "agenda";
+      key: string;
+      time: string;
+      startTime: string;
+      endTime: string;
+      item: AgendaItem;
+    }
   | { kind: "trip"; key: string; time: string; trip: Trip; finished: boolean }
   | { kind: "car"; key: string; time: string; car: Car; finished: boolean };
 
@@ -53,6 +60,8 @@ export function DayTimeline({
             <AgendaRow
               key={entry.key}
               item={entry.item}
+              startTime={entry.startTime}
+              endTime={entry.endTime}
               status={status(entry.item)}
               {...shared}
             />
@@ -152,11 +161,15 @@ function Row({
 
 function AgendaRow({
   item,
+  startTime,
+  endTime,
   status,
   index,
   isLast,
 }: {
   item: AgendaItem;
+  startTime: string;
+  endTime: string;
   status: AgendaStatus;
   index: number;
   isLast: boolean;
@@ -164,8 +177,8 @@ function AgendaRow({
   return (
     <Row index={index} isLast={isLast}>
       <TimeRail
-        top={timeOf(item.startTime)}
-        bottom={timeOf(item.endTime)}
+        top={startTime}
+        bottom={endTime}
         isLast={isLast}
         finished={status === "finished"}
       />

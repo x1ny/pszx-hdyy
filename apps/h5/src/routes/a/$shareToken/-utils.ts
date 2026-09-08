@@ -83,6 +83,103 @@ export const parseDayKey = (dayKey: string) =>
 export const timeOf = (iso: string | null | undefined) =>
   zonedParts(iso)?.time ?? "";
 
+export interface TimeRangeDayPart {
+  /** 这个时间片所属的 Asia/Shanghai 自然日。 */
+  dayKey: string;
+  /** 这个自然日里的开始展示时刻。 */
+  startTime: string;
+  /** 这个自然日里的结束展示时刻。 */
+  endTime: string;
+}
+
+const DAY_MS = 86_400_000;
+
+/** 把 `YYYY-MM-DD` 当成 UTC 日期处理，避免调用方机器的本地时区介入。 */
+const utcDayTimestamp = (dayKey: string) => {
+  const [year, month, day] = dayKey.split("-").map(Number);
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(day)
+  ) {
+    return null;
+  }
+
+  const timestamp = Date.UTC(year, month - 1, day);
+  return Number.isNaN(timestamp) ? null : timestamp;
+};
+
+const dayKeyFromUtcTimestamp = (timestamp: number) =>
+  new Date(timestamp).toISOString().slice(0, 10);
+
+/** 列出两个自然日之间的所有日期（含首尾）。 */
+const dayKeysBetween = (startDay: string, endDay: string) => {
+  const start = utcDayTimestamp(startDay);
+  const end = utcDayTimestamp(endDay);
+  if (start === null || end === null || end < start) return [];
+
+  const days: string[] = [];
+  for (let timestamp = start; timestamp <= end; timestamp += DAY_MS) {
+    days.push(dayKeyFromUtcTimestamp(timestamp));
+  }
+  return days;
+};
+
+/**
+ * 把一个议程的完整时间段拆成按自然日展示的时间片。
+ *
+ * 跨天环节不能把 `14:00–08:00` 原样放在开始日：那既会让时间看起来倒流，
+ * 也会让结束日没有任何记录。展示层按活动时区切开，首日用 `24:00` 收尾，
+ * 中间日展示 `00:00–24:00`，末日从 `00:00` 开始。数据库里的原始时刻不改，
+ * 这样状态判断和接口语义仍然对应同一个完整环节。
+ */
+export function splitTimeRangeByDay(
+  startIso: string | null | undefined,
+  endIso: string | null | undefined,
+): TimeRangeDayPart[] {
+  const start = zonedParts(startIso);
+  if (!start) return [];
+
+  const end = zonedParts(endIso);
+  if (!end) {
+    return [{ dayKey: start.dayKey, startTime: start.time, endTime: "" }];
+  }
+
+  const startTimestamp = Date.parse(startIso ?? "");
+  const endTimestamp = Date.parse(endIso ?? "");
+  const dayKeys = dayKeysBetween(start.dayKey, end.dayKey);
+
+  // 正常数据由服务端保证 end >= start。异常数据或同日零时长仍保留一行，
+  // 避免展示层因为防御性处理把一个接口返回的环节静默吞掉。
+  if (
+    !Number.isFinite(startTimestamp) ||
+    !Number.isFinite(endTimestamp) ||
+    endTimestamp <= startTimestamp ||
+    start.dayKey === end.dayKey ||
+    dayKeys.length < 2
+  ) {
+    return [
+      { dayKey: start.dayKey, startTime: start.time, endTime: end.time },
+    ];
+  }
+
+  // 结束时刻正好落在某日 00:00 时，前一天的 24:00 已经完整覆盖了这个
+  // 时间段，不再生成一条 00:00–00:00 的空记录。
+  const endAtMidnight =
+    end.time === "00:00" &&
+    endTimestamp === Date.parse(`${end.dayKey}T00:00:00+08:00`);
+  const visibleDays = endAtMidnight ? dayKeys.slice(0, -1) : dayKeys;
+
+  return visibleDays.map((dayKey, index) => ({
+    dayKey,
+    startTime: index === 0 ? start.time : "00:00",
+    endTime:
+      index === visibleDays.length - 1 && !endAtMidnight
+        ? end.time
+        : "24:00",
+  }));
+}
+
 /** 今天（Asia/Shanghai），用来判断哪些日子已经过去。 */
 export const todayKey = () => dayKeyOf(new Date().toISOString());
 
