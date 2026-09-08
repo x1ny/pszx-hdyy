@@ -9,6 +9,7 @@ import {
 } from "../-utils";
 import { Copyable } from "./copyable";
 import { Icon, type IconName } from "./icon";
+import { NavigationPicker } from "./navigation-picker";
 import { PhoneChip } from "./phone-chip";
 import { PillTag } from "./pill-tag";
 
@@ -399,12 +400,18 @@ function CarBody({ car }: { car: Car }) {
         </div>
       )}
 
-      {car.location && (
+      {(car.location || car.locationPoint) && (
         <div className="mt-1 flex min-w-0 items-center gap-1">
           <Icon name="map-pin" size={12} className="shrink-0 text-ink-3" />
           <span className="truncate text-caption text-ink-3">
-            集合：{car.location}
+            集合：{car.location ?? car.locationPoint?.name}
           </span>
+          {car.locationPoint && (
+            <NavigationPicker
+              point={car.locationPoint}
+              locationText={car.location}
+            />
+          )}
         </div>
       )}
 

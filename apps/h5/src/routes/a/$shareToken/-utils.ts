@@ -317,6 +317,99 @@ export const isScheduled = (car: Car) =>
   Boolean(car.startTime && Number.isFinite(Date.parse(car.startTime)));
 
 /* ------------------------------------------------------------------ */
+/* 地图导航                                                            */
+/* ------------------------------------------------------------------ */
+
+type LocationPoint = NonNullable<Car["locationPoint"]>;
+
+/**
+ * 后台百度 JSAPI 保存的是 BD-09；高德 URI 则使用 GCJ-02。
+ *
+ * 只在浏览器本地做这一次坐标换算，不再把嘉宾的当前位置传回服务端。常量和
+ * 公式是公开的 BD-09 ↔ GCJ-02 换算方式；它仅用于导航入口，定位点数据库
+ * 仍然原样保存百度坐标，避免丢精度或混用坐标系。
+ */
+const BD09_X_PI = (Math.PI * 3000.0) / 180.0;
+
+function bd09ToGcj02(longitude: number, latitude: number) {
+  const x = longitude - 0.0065;
+  const y = latitude - 0.006;
+  const distance = Math.sqrt(x * x + y * y) - 0.00002 * Math.sin(y * BD09_X_PI);
+  const angle = Math.atan2(y, x) - 0.000003 * Math.cos(x * BD09_X_PI);
+
+  return {
+    longitude: distance * Math.cos(angle),
+    latitude: distance * Math.sin(angle),
+  };
+}
+
+const baiduDirectionParams = (point: LocationPoint) =>
+  new URLSearchParams({
+    origin: "我的位置",
+    destination: `name:${point.name}|latlng:${point.latitude},${point.longitude}`,
+    mode: "driving",
+    coord_type: point.coordinateSystem,
+    src: "webapp.pszx.itinerary",
+  });
+
+/**
+ * 百度地图 Web URI。起点交由手机地图处理「我的位置」，终点始终使用后台
+ * 已确认的 BD-09 坐标；`src` 和 `coord_type` 都是百度 URI 的必填信息。
+ */
+export function buildBaiduNavigationHref(point: LocationPoint): string {
+  const params = baiduDirectionParams(point);
+  params.set("output", "html");
+  return `https://api.map.baidu.com/direction?${params}`;
+}
+
+/** 安装了百度地图时优先使用其原生导航页。 */
+export function buildBaiduMapAppHref(point: LocationPoint): string {
+  return `baidumap://map/direction?${baiduDirectionParams(point)}`;
+}
+
+/**
+ * 尝试打开原生应用；若浏览器仍留在当前页面，短暂等待后转到网页地图兜底。
+ * 不能、也不需要探测手机已安装的应用；这两个结果正是靠页面是否转入后台来区分。
+ */
+export function openMapAppWithFallback(appHref: string, fallbackHref: string) {
+  let fallbackTimer: number | undefined;
+  const cancelFallback = () => {
+    if (fallbackTimer !== undefined) window.clearTimeout(fallbackTimer);
+    document.removeEventListener("visibilitychange", onVisibilityChange);
+    window.removeEventListener("pagehide", cancelFallback);
+  };
+  const onVisibilityChange = () => {
+    if (document.visibilityState === "hidden") cancelFallback();
+  };
+
+  document.addEventListener("visibilitychange", onVisibilityChange);
+  window.addEventListener("pagehide", cancelFallback, { once: true });
+  fallbackTimer = window.setTimeout(() => {
+    cancelFallback();
+    if (document.visibilityState === "visible") {
+      window.location.assign(fallbackHref);
+    }
+  }, 1200);
+  window.location.assign(appHref);
+}
+
+/**
+ * 高德 URI 在移动端省略起点时会读取用户当前位置。`callnative=1` 尝试交给
+ * 已安装的高德地图，不能调起时仍会保留在网页地图中展示路线。
+ */
+export function buildAmapNavigationHref(point: LocationPoint): string {
+  const destination = bd09ToGcj02(point.longitude, point.latitude);
+  const params = new URLSearchParams({
+    to: `${destination.longitude},${destination.latitude},${point.name}`,
+    mode: "car",
+    policy: "1",
+    src: "pszx-h5",
+    callnative: "1",
+  });
+  return `https://uri.amap.com/navigation?${params}`;
+}
+
+/* ------------------------------------------------------------------ */
 /* 平台动作：电话 / 剪贴板                                              */
 /* ------------------------------------------------------------------ */
 

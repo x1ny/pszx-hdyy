@@ -20,11 +20,15 @@ AK 是 Vite **构建时配置**。本地 `bun run build` 会读取 `apps/web/.en
 
 ## 移动端衔接
 
-用车行程接口已返回 `locationPoint`。本次实现后台选点与数据链路，未新增 H5 导航按钮。后续接百度导航 URI 时显式声明 `coord_type=bd09ll`；接其他地图时必须按服务商支持的坐标系处理，不能把 BD-09 直接当作 GCJ-02 或 WGS84。无定位的旧记录继续显示集合说明。
+用车行程接口返回 `locationPoint` 后，H5 只在该字段存在时显示「导航」按钮；旧记录和仅填写文字集合说明的记录不显示按钮。点击后可选择百度地图或高德地图：百度先尝试原生 URI，未离开当前页面时自动转到 HTTPS 网页地图；高德使用其支持 `callnative=1` 的 HTTPS URI。两者在未安装时都会继续在浏览器打开地图路线。无需在 H5 申请或配置地图 AK。
+
+后台保存的是百度 BD-09 坐标。百度 URI 显式传 `coord_type=bd09ll`；高德 URI 在浏览器本地换算为 GCJ-02 后再传，不能把 BD-09 直接当作 GCJ-02 或 WGS84。
 
 ## 官方参考
 
 - [JSAPI 4.0 准备工作](https://lbs.baidu.com/docs/jsapi?title=jsapi4/quickstart/prepare)
+- [百度地图调起 API（Web 端）](https://lbsyun.baidu.com/docs/webapi?title=mapadjustment%2Furi%2Fweb)
+- [高德 URI API：路径规划](https://lbs.amap.com/api/uri-api/guide/travel/route)
 - [GCJ-02 坐标模式](https://lbs.baidu.com/docs/jsapi?title=jsapi4/guide/map/gcj02)
 - [LocalSearch 搜索](https://lbs.baidu.com/jsapi/refdoc/v4/classes/BMap.LocalSearch.html)
 - [Geocoder 逆地理编码](https://lbs.baidu.com/jsapi/refdoc/v4/classes/BMap.Geocoder.html)

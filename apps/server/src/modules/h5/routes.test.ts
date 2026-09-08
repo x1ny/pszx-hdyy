@@ -138,6 +138,12 @@ describe("交通两个来源各自的范围", () => {
     expect(rendered.params).toContain("active");
   });
 
+  test("用车带回后台确认的定位点，供移动端显示导航入口", () => {
+    expect(itineraryCarsQuery(9).toSQL().sql).toContain(
+      '"activity_resource"."location_point"',
+    );
+  });
+
   test("用车走 inner join，没绑人的资源不会漏给所有人", () => {
     expect(itineraryCarsQuery(9).toSQL().sql).not.toContain("left join");
   });
