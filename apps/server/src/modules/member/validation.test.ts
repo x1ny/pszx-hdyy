@@ -147,6 +147,17 @@ describe("CreateMemberInput 的证件完整性", () => {
   });
 });
 
+describe("CreateMemberInput 的多条职务", () => {
+  test("按行清理职务并保留换行展示", () => {
+    const result = CreateMemberInput.parse({
+      ...base,
+      companyPosition: "  董事长  \n\n 秘书长 ",
+    });
+
+    expect(result.companyPosition).toBe("董事长\n秘书长");
+  });
+});
+
 describe("ListMembersInput 的团体筛选", () => {
   test("接受正整数团体 ID，缺省时不过滤", () => {
     expect(

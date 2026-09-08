@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { normalizeCompanyPositions } from "#/features/member/utils.ts";
 import { Button } from "#/shared/components/ui/button.tsx";
 import {
   Dialog,
@@ -22,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "#/shared/components/ui/select.tsx";
+import { Textarea } from "#/shared/components/ui/textarea.tsx";
 import type { NewMemberFields } from "./relation-queries";
 
 /**
@@ -123,7 +125,8 @@ export function MemberQuickCreateDialog({
               onSubmit({
                 name: form.name.trim(),
                 gender: (form.gender || undefined) as NewMemberFields["gender"],
-                companyPosition: form.companyPosition.trim() || undefined,
+                companyPosition:
+                  normalizeCompanyPositions(form.companyPosition) || undefined,
                 idType: (form.idType || undefined) as NewMemberFields["idType"],
                 idNumber: form.idNumber.trim() || undefined,
                 mobile: form.mobile.trim() || undefined,
@@ -134,98 +137,105 @@ export function MemberQuickCreateDialog({
                 「间距为什么由组件自己兜」。gap-5 对齐 member-form-dialog 的
                 节奏；extraFields 传进来的也自带 FieldGroup，嵌套后仍然均匀。 */}
             <FieldGroup className="gap-5">
-            <Field>
-              <FieldLabel htmlFor="qc-name">
-                姓名 <span className="text-destructive">*</span>
-              </FieldLabel>
-              <Input
-                id="qc-name"
-                required
-                value={form.name}
-                onChange={(event) => set({ name: event.target.value })}
-              />
-            </Field>
-
-            <div className="grid grid-cols-2 gap-4">
               <Field>
-                <FieldLabel htmlFor="qc-gender">性别</FieldLabel>
-                <Select
-                  items={GENDERS}
-                  value={form.gender || null}
-                  onValueChange={(value) => set({ gender: String(value ?? "") })}
-                >
-                  <SelectTrigger id="qc-gender" className="w-full">
-                    <SelectValue placeholder="未填写" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={null}>未填写</SelectItem>
-                    {GENDERS.map((g) => (
-                      <SelectItem key={g.value} value={g.value}>
-                        {g.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="qc-mobile">手机号码</FieldLabel>
+                <FieldLabel htmlFor="qc-name">
+                  姓名 <span className="text-destructive">*</span>
+                </FieldLabel>
                 <Input
-                  id="qc-mobile"
-                  inputMode="numeric"
-                  value={form.mobile}
-                  onChange={(event) => set({ mobile: event.target.value })}
+                  id="qc-name"
+                  required
+                  value={form.name}
+                  onChange={(event) => set({ name: event.target.value })}
                 />
               </Field>
-            </div>
 
-            <Field>
-              <FieldLabel htmlFor="qc-position">企业（社会）职务</FieldLabel>
-              <Input
-                id="qc-position"
-                value={form.companyPosition}
-                onChange={(event) =>
-                  set({ companyPosition: event.target.value })
-                }
-              />
-            </Field>
+              <div className="grid grid-cols-2 gap-4">
+                <Field>
+                  <FieldLabel htmlFor="qc-gender">性别</FieldLabel>
+                  <Select
+                    items={GENDERS}
+                    value={form.gender || null}
+                    onValueChange={(value) =>
+                      set({ gender: String(value ?? "") })
+                    }
+                  >
+                    <SelectTrigger id="qc-gender" className="w-full">
+                      <SelectValue placeholder="未填写" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={null}>未填写</SelectItem>
+                      {GENDERS.map((g) => (
+                        <SelectItem key={g.value} value={g.value}>
+                          {g.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="qc-mobile">手机号码</FieldLabel>
+                  <Input
+                    id="qc-mobile"
+                    inputMode="numeric"
+                    value={form.mobile}
+                    onChange={(event) => set({ mobile: event.target.value })}
+                  />
+                </Field>
+              </div>
 
-            <div className="grid grid-cols-2 gap-4">
               <Field>
-                <FieldLabel htmlFor="qc-idtype">证件类型</FieldLabel>
-                <Select
-                  items={ID_TYPES}
-                  value={form.idType || null}
-                  onValueChange={(value) => set({ idType: String(value ?? "") })}
-                >
-                  <SelectTrigger id="qc-idtype" className="w-full">
-                    <SelectValue placeholder="未填写" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={null}>未填写</SelectItem>
-                    {ID_TYPES.map((t) => (
-                      <SelectItem key={t.value} value={t.value}>
-                        {t.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="qc-idnumber">证件号码</FieldLabel>
-                <Input
-                  id="qc-idnumber"
-                  value={form.idNumber}
-                  onChange={(event) => set({ idNumber: event.target.value })}
+                <FieldLabel htmlFor="qc-position">企业（社会）职务</FieldLabel>
+                <Textarea
+                  id="qc-position"
+                  rows={3}
+                  maxLength={255}
+                  placeholder="每行填写一个职务，可填写多个"
+                  value={form.companyPosition}
+                  onChange={(event) =>
+                    set({ companyPosition: event.target.value })
+                  }
                 />
               </Field>
-            </div>
 
-            {extraFields}
+              <div className="grid grid-cols-2 gap-4">
+                <Field>
+                  <FieldLabel htmlFor="qc-idtype">证件类型</FieldLabel>
+                  <Select
+                    items={ID_TYPES}
+                    value={form.idType || null}
+                    onValueChange={(value) =>
+                      set({ idType: String(value ?? "") })
+                    }
+                  >
+                    <SelectTrigger id="qc-idtype" className="w-full">
+                      <SelectValue placeholder="未填写" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={null}>未填写</SelectItem>
+                      {ID_TYPES.map((t) => (
+                        <SelectItem key={t.value} value={t.value}>
+                          {t.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="qc-idnumber">证件号码</FieldLabel>
+                  <Input
+                    id="qc-idnumber"
+                    value={form.idNumber}
+                    onChange={(event) => set({ idNumber: event.target.value })}
+                  />
+                </Field>
+              </div>
 
-            <p className="text-muted-foreground text-xs">
-              保存后会同时写入全量人员库。籍贯、国别、邮箱、语种等其余信息请到「人员管理
-              / 全量人员库」补全。
-            </p>
+              {extraFields}
+
+              <p className="text-muted-foreground text-xs">
+                保存后会同时写入全量人员库。籍贯、国别、邮箱、语种等其余信息请到「人员管理
+                / 全量人员库」补全。
+              </p>
             </FieldGroup>
           </form>
         </DialogBody>

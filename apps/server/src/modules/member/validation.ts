@@ -39,6 +39,22 @@ const optionalText = (label: string, max: number) =>
     .optional()
     .transform((value) => value || null);
 
+/** 多个职务使用换行分隔，写入前统一清理空行和每行首尾空白。 */
+const optionalMultilineText = (label: string, max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max, `${label}过长`)
+    .optional()
+    .transform((value) => {
+      const normalized = value
+        ?.split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .join("\n");
+      return normalized || null;
+    });
+
 const optionalPattern = (pattern: RegExp, message: string, max: number) =>
   z
     .string()
@@ -189,7 +205,7 @@ const MemberFields = z.object({
     Boolean(findProvince(code)),
   ),
   nativeCityCode: dictCode("籍贯城市", (code) => Boolean(findCity(code))),
-  companyPosition: optionalText("企业（社会）职务", 255),
+  companyPosition: optionalMultilineText("企业（社会）职务", 255),
   idType: MemberIdTypeEnum.optional(),
   idNumber: optionalText("证件号码", 64),
   mobile: optionalPattern(/^1\d{10}$/, "请输入正确的手机号", 20),

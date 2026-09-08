@@ -11,6 +11,7 @@ import { z } from "zod";
 import {
   MEMBER_STATUS_LABELS,
   MEMBER_STATUS_VALUES,
+  normalizeCompanyPositions,
 } from "#/features/member/utils.ts";
 import { Button } from "#/shared/components/ui/button.tsx";
 import {
@@ -219,7 +220,7 @@ function MemberForm({
     countryRegionCode: member ? (member.countryRegionCode ?? "") : CHINA_CODE,
     nativeProvinceCode: member?.nativeProvinceCode ?? "",
     nativeCityCode: member?.nativeCityCode ?? "",
-    companyPosition: member?.companyPosition ?? "",
+    companyPosition: normalizeCompanyPositions(member?.companyPosition),
     idType: member?.idType ?? "",
     idNumber: member?.idNumber ?? "",
     mobile: member?.mobile ?? "",
@@ -235,7 +236,12 @@ function MemberForm({
       onChange: MemberFormSchema,
       onSubmit: MemberFormSchema,
     },
-    onSubmit: ({ value }) => onSubmit(value),
+    onSubmit: ({ value }) =>
+      onSubmit({
+        ...value,
+        companyPosition:
+          normalizeCompanyPositions(value.companyPosition) || undefined,
+      }),
   });
 
   const countryRegionCode = useStore(
@@ -519,12 +525,24 @@ function MemberForm({
 
           <form.Field name="companyPosition">
             {(field) => (
-              <TextField
-                field={field}
-                label="企业（社会）职务"
-                placeholder="请输入企业（社会）职务"
-                className="sm:col-span-2"
-              />
+              <Field className="sm:col-span-2">
+                <FieldLabel htmlFor={field.name}>企业（社会）职务</FieldLabel>
+                <Textarea
+                  id={field.name}
+                  name={field.name}
+                  rows={3}
+                  maxLength={255}
+                  placeholder="每行填写一个职务，可填写多个"
+                  value={field.state.value ?? ""}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.target.value)}
+                  aria-invalid={hasError(field)}
+                />
+                <FieldDescription>
+                  多个职务请分行填写，合计不超过 255 个字符。
+                </FieldDescription>
+                <FieldError errors={fieldErrors(field)} />
+              </Field>
             )}
           </form.Field>
 

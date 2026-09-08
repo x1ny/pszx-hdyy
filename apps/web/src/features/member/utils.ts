@@ -20,6 +20,14 @@ export const MEMBER_STATUS_DOT = {
   disabled: "bg-muted-foreground/40",
 } as const satisfies Record<MemberStatus, string>;
 
+/** 企业（社会）职务按行存储和展示；兼容历史数据中的 Windows 换行。 */
+export const normalizeCompanyPositions = (value: string | null | undefined) =>
+  value
+    ?.split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join("\n") ?? "";
+
 /**
  * 籍贯的显示串。
  *

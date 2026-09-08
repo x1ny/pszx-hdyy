@@ -108,7 +108,9 @@ export function MemberDetailDialog({
                   <Row label="姓名">{member.name || "-"}</Row>
                   <Row label="性别">{member.gender || "-"}</Row>
                   <Row label="企业（社会）职务">
-                    {member.companyPosition || "-"}
+                    <span className="whitespace-pre-line">
+                      {member.companyPosition || "-"}
+                    </span>
                   </Row>
                   <Row label="所属团体">
                     {member.organizationName || "未加入团体"}

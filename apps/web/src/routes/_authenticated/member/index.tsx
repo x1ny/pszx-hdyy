@@ -13,7 +13,6 @@ import { z } from "zod";
 import { MemberDetailDialog } from "#/features/member/member-detail-dialog.tsx";
 import {
   formatDateTime,
-  formatNativePlace,
   MEMBER_STATUS_CHIP,
   MEMBER_STATUS_DOT,
   MEMBER_STATUS_LABELS,
@@ -104,6 +103,7 @@ const STATUS_FILTER_ITEMS = [
 ];
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50];
+const MEMBER_LIST_COLUMN_COUNT = 10;
 
 function MemberPage() {
   const search = Route.useSearch();
@@ -352,9 +352,9 @@ function MemberPage() {
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-16 text-center">序号</TableHead>
               <TableHead className="min-w-28">姓名</TableHead>
+              <TableHead className="w-20">性别</TableHead>
               <TableHead className="min-w-48">企业（社会）职务</TableHead>
               <TableHead className="min-w-36">所属团体</TableHead>
-              <TableHead className="min-w-28">籍贯</TableHead>
               <TableHead className="min-w-32">手机号码</TableHead>
               <TableHead className="w-28 text-center">参与活动数</TableHead>
               <TableHead className="min-w-44">创建时间</TableHead>
@@ -367,17 +367,20 @@ function MemberPage() {
               Array.from({ length: 5 }, (_, index) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
                 <TableRow key={index}>
-                  {Array.from({ length: 10 }, (_, cell) => (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
-                    <TableCell key={cell}>
-                      <Skeleton className="h-5 w-full" />
-                    </TableCell>
-                  ))}
+                  {Array.from(
+                    { length: MEMBER_LIST_COLUMN_COUNT },
+                    (_, cell) => (
+                      // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
+                      <TableCell key={cell}>
+                        <Skeleton className="h-5 w-full" />
+                      </TableCell>
+                    ),
+                  )}
                 </TableRow>
               ))
             ) : list.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10}>
+                <TableCell colSpan={MEMBER_LIST_COLUMN_COUNT}>
                   <Empty className="border-0">
                     <EmptyHeader>
                       <EmptyMedia variant="icon">
@@ -398,17 +401,12 @@ function MemberPage() {
                     {(search.page - 1) * search.pageSize + index + 1}
                   </TableCell>
                   <TableCell className="font-medium">{member.name}</TableCell>
-                  <TableCell className="max-w-60 truncate">
+                  <TableCell>{member.gender || "-"}</TableCell>
+                  <TableCell className="whitespace-pre-line break-words">
                     {member.companyPosition || "-"}
                   </TableCell>
                   <TableCell>
                     {member.organizationName || "未加入团体"}
-                  </TableCell>
-                  <TableCell>
-                    {formatNativePlace(
-                      member.nativeProvince,
-                      member.nativeCity,
-                    )}
                   </TableCell>
                   <TableCell className="tabular-nums">
                     {maskPhone(member.mobile)}

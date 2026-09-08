@@ -23,7 +23,7 @@ export class MemberImportWorkbookError extends Error {
 const columnNotes = {
   name: "必填，最多 64 个字符。",
   gender: "选填，只能从下拉列表中选择。",
-  companyPosition: "选填，最多 255 个字符。",
+  companyPosition: "选填，可填写多个，每个职务一行，合计最多 255 个字符。",
   organizationName: "选填。系统中不存在时会提示，并在确认导入后自动创建团体。",
   countryRegion: "选填，填写“数据字典”工作表中的标准中文名称。",
   nativeProvince: "选填，仅中国籍人员填写标准省级名称。",
