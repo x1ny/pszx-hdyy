@@ -54,6 +54,22 @@ bun run docker:build-push v0.1.0
 不传版本号时用最新 Git tag。单架构镜像先 `--load` 到本地再 push，多架构由
 Buildx 直接推。`BUN_IMAGE` / `NPM_REGISTRY` 两个环境变量会透传成 `--build-arg`。
 
+### 百度地图浏览器端 AK
+
+地图选点使用 `VITE_BAIDU_MAP_AK`，它是构建时变量，会写进管理端的静态资源；
+运行中的容器设置该变量不会改变已经构建好的地图 AK。本地开发由
+`apps/web/.env.local` 自动读取，Docker 构建机则先设置同名环境变量：
+
+```powershell
+$env:VITE_BAIDU_MAP_AK = "<百度地图浏览器端 AK>"
+bun run docker:build-push v0.1.0
+```
+
+`build-push` 会将变量以无值的 `--build-arg VITE_BAIDU_MAP_AK` 传给 Docker，
+不会把 AK 拼到命令日志中。使用普通 `docker buildx build` 时同样传这个 build arg。
+AK 是浏览器端公开配置，应在百度地图控制台的 Referer 白名单中配置本地地址和
+各个正式管理端域名；不要使用服务端 AK。
+
 ## 发布版本
 
 ```bash
