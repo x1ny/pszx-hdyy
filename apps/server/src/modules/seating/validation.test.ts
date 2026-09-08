@@ -2,8 +2,10 @@ import { describe, expect, test } from "bun:test";
 import {
   AssignInput,
   AssignOrganizationInput,
+  CreatePlanInput,
   ListPlansInput,
   OrganizationSeatBatchInput,
+  SavePlanLayoutInput,
   UnassignOrganizationInput,
 } from "./validation";
 
@@ -91,4 +93,42 @@ describe("团体批量占位 validation", () => {
       UnassignOrganizationInput.parse({ planId: 1, organizationId: 2 }),
     ).toEqual({ planId: 1, organizationId: 2 });
   });
+});
+test("create, save and organization selection preserve a 1000-seat layout", () => {
+  const seats = Array.from({ length: 1000 }, (_, i) => ({
+    externalId: `s-${i}`,
+    label: `A${i + 1}`,
+    ordinal: i,
+  }));
+  const layout = {
+    rendererKind: "svg-canvas-v1",
+    rendererVersion: 1,
+    data: {},
+  };
+  expect(
+    CreatePlanInput.parse({
+      segmentId: 1,
+      activityVenueZoneId: 1,
+      layout,
+      seats,
+    }).seats,
+  ).toHaveLength(1000);
+  expect(
+    SavePlanLayoutInput.parse({ planId: 1, layout, seats }).seats,
+  ).toHaveLength(1000);
+  expect(
+    OrganizationSeatBatchInput.parse({
+      planId: 1,
+      organizationId: 1,
+      targetMode: "remaining",
+      orderedSeatIds: seats.map((_, i) => i + 1),
+    }).orderedSeatIds,
+  ).toHaveLength(1000);
+  expect(
+    SavePlanLayoutInput.safeParse({
+      planId: 1,
+      layout,
+      seats: [...seats, seats[0]],
+    }).success,
+  ).toBe(false);
 });

@@ -1,5 +1,5 @@
-import type { CanvasDoc, CanvasSeat, CanvasZone } from "./core/document";
-import { seatFieldPitch } from "./core/geometry";
+import type { CanvasDoc, CanvasSeat } from "./core/document";
+import { seatContentBounds, seatFieldPitch } from "./core/geometry";
 import {
   DEFAULT_OCCUPIED_EXPORT_COLOR,
   NAME_READABLE_PITCH_PX,
@@ -66,7 +66,6 @@ export type SeatingPlanRasterLimits = {
   desiredScale: number;
   maxDimension: number;
   maxPixels: number;
-  minReadableScale: number;
 };
 
 export type SeatingPlanRasterPlan = {
@@ -110,7 +109,6 @@ export const DEFAULT_SEATING_PLAN_RASTER_LIMITS = {
   desiredScale: 2,
   maxDimension: 8192,
   maxPixels: 24_000_000,
-  minReadableScale: 0.75,
 } as const satisfies SeatingPlanRasterLimits;
 
 type SeatingPlanJpegOptions = {
@@ -138,7 +136,7 @@ export function escapeXml(value: string): string {
 }
 
 function finiteNumber(value: number): string {
-  return Number.isFinite(value) ? Number(value.toFixed(3)).toString() : "0";
+  return Number.isFinite(value) ? value.toString() : "0";
 }
 
 function exportColor(color: string, fallback: string): string {
@@ -169,7 +167,6 @@ export function planSeatingPlanRaster(
   assertPositiveFinite(limits.desiredScale, "目标清晰度");
   assertPositiveFinite(limits.maxDimension, "最大边长");
   assertPositiveFinite(limits.maxPixels, "最大像素数");
-  assertPositiveFinite(limits.minReadableScale, "最小可读清晰度");
 
   const dimensionScale = Math.min(
     limits.maxDimension / logicalSize.width,
@@ -180,12 +177,7 @@ export function planSeatingPlanRaster(
   );
   const scale = Math.min(limits.desiredScale, dimensionScale, areaScale);
 
-  if (scale < limits.minReadableScale) {
-    throw new Error(
-      `排位画布过大（${Math.ceil(logicalSize.width)} × ${Math.ceil(logicalSize.height)}），` +
-        "在浏览器安全像素上限内无法保证文字可读，请缩小活动区域后重试",
-    );
-  }
+  // JPG 是有界像素总览；大布局允许继续降采样，细节由 SVG 矢量图提供。
 
   const width = Math.max(1, Math.floor(logicalSize.width * scale));
   const height = Math.max(1, Math.floor(logicalSize.height * scale));
@@ -200,43 +192,6 @@ export function planSeatingPlanRaster(
   };
 }
 
-function renderZone(
-  zone: CanvasZone,
-  planScale: number,
-  showName: boolean,
-): string {
-  const shape = zone.shape;
-  const fill = exportColor(zone.fill, "#E2E8F0");
-  const stroke = exportColor(zone.stroke, EXPORT_COLORS.border);
-  // 世界组整体被 planScale 放大，所以线宽和字号要先除回去，
-  // 否则纸放大一倍、边框和区域名也跟着粗一倍。
-  const common = `fill="${fill}" fill-opacity="0.14" stroke="${stroke}" stroke-width="${finiteNumber(2 / planScale)}"`;
-  let geometry: string;
-
-  if (shape.type === "ellipse") {
-    geometry = `<ellipse cx="${finiteNumber(shape.x + shape.width / 2)}" cy="${finiteNumber(shape.y + shape.height / 2)}" rx="${finiteNumber(shape.width / 2)}" ry="${finiteNumber(shape.height / 2)}" ${common}/>`;
-  } else if (shape.type === "polygon") {
-    const points = shape.points
-      .map(
-        (point) =>
-          `${finiteNumber(shape.x + point.x)},${finiteNumber(shape.y + point.y)}`,
-      )
-      .join(" ");
-    geometry = `<polygon points="${points}" ${common}/>`;
-  } else {
-    geometry = `<rect x="${finiteNumber(shape.x)}" y="${finiteNumber(shape.y)}" width="${finiteNumber(shape.width)}" height="${finiteNumber(shape.height)}" ${common}/>`;
-  }
-
-  const name = showName
-    ? `<text x="${finiteNumber(shape.x + 12 / planScale)}" y="${finiteNumber(shape.y + 22 / planScale)}" font-size="${finiteNumber(14 / planScale)}" font-weight="650" fill="${EXPORT_COLORS.foreground}">${escapeXml(zone.name)}</text>`
-    : "";
-
-  return `<g data-export-zone-id="${escapeXml(zone.externalId)}">
-    ${geometry}
-    ${name}
-  </g>`;
-}
-
 function occupantTitle(occupant: SeatOccupantVisual): string {
   return occupant.kind === "organization"
     ? occupant.primaryLabel
@@ -247,13 +202,12 @@ function occupantTitle(occupant: SeatOccupantVisual): string {
 
 function renderSeat(
   seat: CanvasSeat,
-  zone: CanvasZone,
   status: SeatingPlanExportSeatStatus | undefined,
   spec: SeatRenderSpec,
   planScale: number,
 ): string {
-  const cx = zone.shape.x + seat.x;
-  const cy = zone.shape.y + seat.y;
+  const cx = seat.x;
+  const cy = seat.y;
   const occupant = status?.occupant;
   const disabled = status?.disabled === true;
   const vip = seat.rank === "vip";
@@ -383,51 +337,73 @@ export function buildSeatingPlanSvg(
   input: SeatingPlanSvgInput,
   rasterOverrides: Partial<SeatingPlanRasterLimits> = {},
 ): SeatingPlanSvgDocument {
-  assertPositiveFinite(input.doc.world.width, "画布宽度");
-  assertPositiveFinite(input.doc.world.height, "画布高度");
   const showTitle = input.showTitle ?? true;
   const showZoneNames = input.showZoneNames ?? true;
-  const trimmedSubtitle = input.subtitle?.trim();
+  const subtitleText = input.subtitle?.trim();
+  const byZone = new Map<string, CanvasSeat[]>();
+  for (const seat of input.doc.seats) {
+    const list = byZone.get(seat.zoneExternalId);
+    if (list) list.push(seat);
+    else byZone.set(seat.zoneExternalId, [seat]);
+  }
 
-  /**
-   * 纸面按"姓名写得下"反推，而不是死死按 1:1 铺。
-   *
-   * 以前导出图是最容易撞名字的地方——屏幕上还能放大看，纸上放不大。
-   * 现在先算这份布局有多密，密到写不下姓名就把整张纸等比放大，
-   * 直到座距够写下三个汉字为止。只放大、不缩小。
-   */
-  const worldPitch = seatFieldPitch(
-    input.doc.seats.map((seat) => {
-      const zone = input.doc.zones.find(
-        (item) => item.externalId === seat.zoneExternalId,
-      );
-      return {
-        x: (zone?.shape.x ?? 0) + seat.x,
-        y: (zone?.shape.y ?? 0) + seat.y,
-      };
-    }),
+  // 每个区域的座位独立排布。即使旧快照仍带有外层 world/shape，也不参与范围计算。
+  const sections = input.doc.zones.map((zone) => {
+    const seats = byZone.get(zone.externalId) ?? [];
+    const pitch = seatFieldPitch(seats);
+    const planScale = Math.max(1, scaleForPitch(pitch, NAME_READABLE_PITCH_PX));
+    const bounds = seatContentBounds(seats, pitch);
+    return {
+      zone,
+      seats,
+      bounds,
+      planScale,
+      spec: seatRenderSpec(pitch * planScale),
+    };
+  });
+  const contentWidth = sections.reduce(
+    (width, section) =>
+      Math.max(width, section.bounds.width * section.planScale),
+    MIN_CONTENT_WIDTH,
   );
-  const planScale = Math.max(
-    1,
-    Math.min(4, scaleForPitch(worldPitch, NAME_READABLE_PITCH_PX)),
-  );
-  const seatSpec = seatRenderSpec(worldPitch * planScale);
-
-  const worldWidth = input.doc.world.width * planScale;
-  const worldHeight = input.doc.world.height * planScale;
-  const contentWidth = Math.max(MIN_CONTENT_WIDTH, worldWidth);
   const logicalWidth = contentWidth + PAGE_PADDING * 2;
-  const worldX = PAGE_PADDING + (contentWidth - worldWidth) / 2;
-  const headerHeight = showTitle || trimmedSubtitle ? HEADER_HEIGHT : 0;
-  const worldY = PAGE_PADDING + headerHeight;
+  let sectionY = PAGE_PADDING + (showTitle || subtitleText ? HEADER_HEIGHT : 0);
+  const content = sections
+    .map(({ zone, seats, bounds, planScale, spec }) => {
+      const name = showZoneNames
+        ? `<text x="${PAGE_PADDING}" y="${finiteNumber(sectionY + 18)}" font-size="14" font-weight="650" fill="${EXPORT_COLORS.foreground}">${escapeXml(zone.name)}</text>`
+        : "";
+      if (showZoneNames) sectionY += 36;
+      const x = PAGE_PADDING + (contentWidth - bounds.width * planScale) / 2;
+      const y = sectionY;
+      sectionY += bounds.height * planScale + LEGEND_GAP;
+      const nodes = seats
+        .map((seat) =>
+          renderSeat(
+            seat,
+            input.seatStatus?.get(seat.externalId),
+            spec,
+            planScale,
+          ),
+        )
+        .join("\n");
+      return `<g data-export-zone-id="${escapeXml(zone.externalId)}">
+      ${name}
+      <g transform="translate(${finiteNumber(x)} ${finiteNumber(y)})">
+        <g data-export-plan-scale="${finiteNumber(planScale)}" transform="scale(${finiteNumber(planScale)})">
+          <g transform="translate(${finiteNumber(-bounds.x)} ${finiteNumber(-bounds.y)})">${nodes}</g>
+        </g>
+      </g>
+    </g>`;
+    })
+    .join("\n");
   const organizations = organizationSeatLegend(
-    input.seatStatus?.values()
+    input.seatStatus
       ? [...input.seatStatus.values()].map((status) => status.occupant)
       : [],
   );
-  const items = legendItems(organizations);
-  const legendRows = layoutLegend(items, contentWidth);
-  const legendY = worldY + worldHeight + LEGEND_GAP;
+  const legendRows = layoutLegend(legendItems(organizations), contentWidth);
+  const legendY = sectionY;
   const logicalHeight =
     legendY +
     LEGEND_TITLE_HEIGHT +
@@ -437,28 +413,6 @@ export function buildSeatingPlanSvg(
     { width: logicalWidth, height: logicalHeight },
     rasterOverrides,
   );
-  const zonesById = new Map(
-    input.doc.zones.map((zone) => [zone.externalId, zone]),
-  );
-  const zones = input.doc.zones
-    .map((zone) => renderZone(zone, planScale, showZoneNames))
-    .join("\n");
-  const seats = input.doc.seats
-    .flatMap((seat) => {
-      const zone = zonesById.get(seat.zoneExternalId);
-      return zone
-        ? [
-            renderSeat(
-              seat,
-              zone,
-              input.seatStatus?.get(seat.externalId),
-              seatSpec,
-              planScale,
-            ),
-          ]
-        : [];
-    })
-    .join("\n");
   const legend = legendRows
     .flatMap((row, rowIndex) =>
       row.map(({ item, x }) =>
@@ -473,29 +427,22 @@ export function buildSeatingPlanSvg(
   const title = showTitle
     ? `<text x="${PAGE_PADDING}" y="${PAGE_PADDING + 20}" font-size="22" font-weight="700" fill="${EXPORT_COLORS.foreground}">${escapeXml(input.title)}</text>`
     : "";
-  const subtitle = trimmedSubtitle
-    ? `<text x="${PAGE_PADDING}" y="${PAGE_PADDING + 42}" font-size="13" fill="${EXPORT_COLORS.mutedForeground}">${escapeXml(trimmedSubtitle)}</text>`
+  const subtitle = subtitleText
+    ? `<text x="${PAGE_PADDING}" y="${PAGE_PADDING + 42}" font-size="13" fill="${EXPORT_COLORS.mutedForeground}">${escapeXml(subtitleText)}</text>`
     : "";
 
+  // width/height 只控制初始展示尺寸；viewBox 和全部文字、座位仍然是完整矢量对象。
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${raster.width}" height="${raster.height}" viewBox="0 0 ${finiteNumber(logicalWidth)} ${finiteNumber(logicalHeight)}" role="img" aria-label="${escapeXml(input.title)}">
   <style>text { font-family: ${EXPORT_FONT_FAMILY}; }</style>
   <rect data-export-background="true" x="0" y="0" width="${finiteNumber(logicalWidth)}" height="${finiteNumber(logicalHeight)}" fill="${EXPORT_COLORS.background}"/>
-  ${title}
-  ${subtitle}
-  <g data-export-world="true" transform="translate(${finiteNumber(worldX)} ${finiteNumber(worldY)})">
-    <rect x="0" y="0" width="${finiteNumber(worldWidth)}" height="${finiteNumber(worldHeight)}" fill="${EXPORT_COLORS.background}" stroke="${EXPORT_COLORS.border}" stroke-width="1.5"/>
-    <g data-export-plan-scale="${finiteNumber(planScale)}" transform="scale(${finiteNumber(planScale)})">
-      ${zones}
-      ${seats}
-    </g>
-  </g>
+  ${title}${subtitle}
+  <g data-export-world="true">${content}</g>
   <g data-export-legend="true">
     <text x="${PAGE_PADDING}" y="${finiteNumber(legendY + 16)}" font-size="14" font-weight="650" fill="${EXPORT_COLORS.foreground}">图例</text>
     ${legend}
   </g>
 </svg>`;
-
   return { svg, raster };
 }
 
@@ -569,7 +516,9 @@ export const browserSeatingPlanJpegBridge: SeatingPlanJpegBridge = {
           (value) =>
             value
               ? resolve(value)
-              : reject(new Error("浏览器生成 JPG 失败，请缩小活动区域后重试")),
+              : reject(
+                  new Error("浏览器生成 JPG 失败，请重试或导出 SVG 矢量图"),
+                ),
           input.mimeType,
           input.quality,
         );

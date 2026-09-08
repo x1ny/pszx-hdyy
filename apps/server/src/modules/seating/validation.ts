@@ -109,7 +109,7 @@ export const CreatePlanInput = z
     segmentId: id,
     activityVenueZoneId: id,
     layout: LayoutBlobInput,
-    seats: z.array(PlanSeatDraftInput).max(5000, "位置数量超出上限"),
+    seats: z.array(PlanSeatDraftInput),
   })
   .superRefine(uniqueSeats);
 
@@ -117,7 +117,7 @@ export const SavePlanLayoutInput = z
   .object({
     planId: id,
     layout: LayoutBlobInput,
-    seats: z.array(PlanSeatDraftInput).max(5000, "位置数量超出上限"),
+    seats: z.array(PlanSeatDraftInput),
   })
   .superRefine(uniqueSeats);
 
@@ -164,7 +164,7 @@ export const OrganizationSeatBatchInput = z
   .object({
     planId: id,
     organizationId: id,
-    orderedSeatIds: z.array(id).max(5000, "位置数量超出上限"),
+    orderedSeatIds: z.array(id),
   })
   .and(OrganizationSeatTargetInput)
   .superRefine((input, ctx) => {

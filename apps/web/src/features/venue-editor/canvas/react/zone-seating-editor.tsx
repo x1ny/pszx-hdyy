@@ -1,6 +1,7 @@
 import { useGesture } from "@use-gesture/react";
 import {
   ArrowLeftIcon,
+  HandIcon,
   LayoutTemplateIcon,
   MousePointer2Icon,
   RedoIcon,
@@ -11,6 +12,10 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, buttonVariants } from "#/shared/components/ui/button.tsx";
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from "#/shared/components/ui/toggle-group.tsx";
 import { cn } from "#/shared/lib/utils.ts";
 import {
   addSeat,
@@ -22,6 +27,7 @@ import type { CanvasDoc, CanvasZone } from "../core/document";
 import {
   normalizeRect,
   type Point,
+  seatContentBounds,
   seatFieldPitch,
   toWorld,
 } from "../core/geometry";
@@ -50,9 +56,9 @@ import {
   scaleForPitch,
   seatRenderSpec,
 } from "../seat-occupant-visual";
-import { SeatNode, ZoneGeometry } from "./canvas-view";
+import { SeatNode } from "./canvas-view";
 import { TemplateDialog } from "./template-dialog";
-import { useViewport } from "./use-viewport";
+import { useViewport, type Viewport } from "./use-viewport";
 
 /**
  * 排位画布——两级架构的**第二层**，进入一个区域之后才会看到。
@@ -62,13 +68,12 @@ import { useViewport } from "./use-viewport";
  * 两个完全不同的编辑范围——这里唯一能选中的对象是座位，没有"区域"，
  * 所以工具集、拖拽判定（`resolveSeatDragSubject`）、渲染都比顶层简单。
  *
- * 坐标系是这个组件成立的关键：座位的 x/y 本来就存的是**相对区域左上角**的坐标
- * （`document.ts` 里 `CanvasSeat.x` 的注释），所以这里可以把"整块区域的大小"
- * 直接当成画布的世界尺寸，座位坐标原样使用，不用像顶层那样处理"区域在世界
- * 里的位置"。少一层换算，也少一类可能算错的地方。
+ * 每个区域拥有独立座位坐标，支持负坐标。适配只看座位内容，不读取外层区域尺寸。
+ * 历史座位坐标原样使用；视角仅保留在当前编辑会话中，不写回布局。
  */
 
 const TAP_THRESHOLD_PX = 4;
+const SEAT_ORIGIN = { x: 0, y: 0 };
 
 /**
  * 这次选择变化是**怎么来的**。
@@ -85,6 +90,7 @@ export type SelectionChangeOrigin = "tap" | "marquee" | "clear";
 const TOOL_ITEMS: { value: SeatTool; label: string; icon: typeof SofaIcon }[] =
   [
     { value: "select", label: "选择", icon: MousePointer2Icon },
+    { value: "pan", label: "平移", icon: HandIcon },
     { value: "seat", label: "点放位置", icon: SofaIcon },
   ];
 
@@ -109,6 +115,7 @@ export function ZoneSeatingEditor({
   seatStatus,
   assignOnly,
   pickMode,
+  viewportMemory,
 }: {
   zone: CanvasZone;
   state: EditorState;
@@ -155,7 +162,7 @@ export function ZoneSeatingEditor({
    * 面板入座——布局这时候已经从活动空间那份拷贝定下来了，改动几何要回活动
    * 空间的编辑器去做，不在这里。
    *
-   * 传了这个 flag 之后：工具栏只剩"选择"和"适配"，点放位置/撤销/重做/导入
+   * 传了这个 flag 之后：保留选择、平移和视角操作，点放位置/撤销/重做/导入
    * 模板全部不渲染；拖一个已选中的座位不再触发移动，退化成一次纯点击。
    * 场地库和活动空间两处仍然全功能编辑，不传这个 prop。
    */
@@ -168,21 +175,14 @@ export function ZoneSeatingEditor({
    * 选中态跟平时的"当前查看的座位"长得不一样。
    */
   pickMode?: boolean;
+  /** 外层编辑会话持有，退出整个编辑器即释放，避免跨场地记忆视角。 */
+  viewportMemory?: Map<string, Viewport>;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [tool, setTool] = useState<SeatTool>("select");
   const [spaceDown, setSpaceDown] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
-
-  const zoneSize = useMemo(
-    () => ({ width: zone.shape.width, height: zone.shape.height }),
-    [zone.shape.width, zone.shape.height],
-  );
-  const { viewport, panBy, zoomAt, zoomToScale, fit } = useViewport(
-    zoneSize,
-    containerRef,
-  );
 
   const zoneSeats = useMemo(
     () =>
@@ -194,10 +194,27 @@ export function ZoneSeatingEditor({
    * 这片座位有多密——**整个呈现层唯一的输入量**。跟着座位集合变，
    * 不跟着缩放变，所以只在增删座位时重算一次。
    */
-  const worldPitch = useMemo(
-    () => seatFieldPitch(zoneSeats.map((seat) => ({ x: seat.x, y: seat.y }))),
-    [zoneSeats],
+  const worldPitch = useMemo(() => seatFieldPitch(zoneSeats), [zoneSeats]);
+  const contentBounds = useMemo(
+    () => seatContentBounds(zoneSeats, worldPitch),
+    [zoneSeats, worldPitch],
   );
+  const {
+    viewport,
+    panBy,
+    zoomAt,
+    zoomToScale,
+    fit: fitSeats,
+  } = useViewport(contentBounds, containerRef, {
+    preserveView: true,
+    initialViewport: viewportMemory?.get(zone.externalId),
+    onViewportChange: (next) => viewportMemory?.set(zone.externalId, next),
+    maxScale: scaleForPitch(worldPitch, NAME_READABLE_PITCH_PX),
+  });
+  const [templateRevision, setTemplateRevision] = useState(0);
+  useEffect(() => {
+    if (templateRevision > 0) fitSeats();
+  }, [templateRevision, fitSeats]);
   /**
    * 当前密度下该画多大、写得下几个字。整片区域共用一个对象，
    * `SeatNode` 的 `memo` 才不会因为每个座位各拿一个新对象而全部失效。
@@ -220,11 +237,11 @@ export function ZoneSeatingEditor({
   const localDoc: CanvasDoc = useMemo(
     () => ({
       schemaVersion: 1,
-      world: zoneSize,
+      world: contentBounds,
       zones: [{ ...zone, shape: { ...zone.shape, x: 0, y: 0 } }],
       seats: zoneSeats,
     }),
-    [zone, zoneSize, zoneSeats],
+    [zone, contentBounds, zoneSeats],
   );
 
   const live = useRef({
@@ -258,6 +275,8 @@ export function ZoneSeatingEditor({
     delta: Point;
     current: Point;
     movedPx: number;
+    startClient: Point;
+    lastClient: Point;
   };
   const dragRef = useRef<DragState | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -313,6 +332,8 @@ export function ZoneSeatingEditor({
           delta: { x: 0, y: 0 },
           current: point,
           movedPx: 0,
+          startClient: { x: pointer.clientX, y: pointer.clientY },
+          lastClient: { x: pointer.clientX, y: pointer.clientY },
         });
       },
 
@@ -321,6 +342,23 @@ export function ZoneSeatingEditor({
         const { viewport: vp } = live.current;
         const active = dragRef.current;
         if (!active) return;
+
+        if (active.subject.kind === "pan") {
+          const currentClient = { x: pointer.clientX, y: pointer.clientY };
+          panBy({
+            x: currentClient.x - active.lastClient.x,
+            y: currentClient.y - active.lastClient.y,
+          });
+          setDragState({
+            ...active,
+            lastClient: currentClient,
+            movedPx: Math.hypot(
+              currentClient.x - active.startClient.x,
+              currentClient.y - active.startClient.y,
+            ),
+          });
+          return;
+        }
 
         // 位移自己算，不用手势库的 movement——它在合成事件下恒为 0，
         // 这条坑是画区域分布画布时踩出来的（见 canvas-editor.tsx 同名注释）。
@@ -336,16 +374,14 @@ export function ZoneSeatingEditor({
           current,
           movedPx: Math.hypot(delta.x, delta.y) * vp.scale,
         });
-
-        if (active.subject.kind === "pan") {
-          panBy({ x: delta.x * vp.scale, y: delta.y * vp.scale });
-        }
       },
 
       onDragEnd: () => {
         const finished = dragRef.current;
         setDragState(null);
         if (!finished) return;
+        // 平移工具和临时空格/中键平移，即便只点一下也不改变选择或点放座位。
+        if (finished.subject.kind === "pan") return;
 
         const { localDoc: d, tool: t } = live.current;
         const delta = finished.delta;
@@ -386,7 +422,7 @@ export function ZoneSeatingEditor({
     },
     // 同 canvas-editor.tsx：filterTaps 开着会让纯点击不触发 drag，
     // "点一下选中/放座位"就整个失效，tap 判定自己按位移阈值做。
-    { drag: { filterTaps: false } },
+    { drag: { filterTaps: false, pointer: { buttons: [1, 4] } } },
   );
 
   useEffect(() => {
@@ -497,7 +533,14 @@ export function ZoneSeatingEditor({
     return normalizeRect(drag.subject.start, drag.current);
   }, [drag]);
 
-  const cursor = spaceDown ? "grab" : tool === "seat" ? "copy" : "default";
+  const cursor =
+    spaceDown || tool === "pan"
+      ? drag
+        ? "grabbing"
+        : "grab"
+      : tool === "seat"
+        ? "copy"
+        : "default";
   const selectedSeats = new Set(selection.seatIds);
 
   const showLabels = renderSpec.seatLabelChars > 0;
@@ -541,22 +584,33 @@ export function ZoneSeatingEditor({
       <div className="flex min-h-0 flex-1 gap-3">
         <div className="flex min-w-0 flex-1 flex-col gap-3">
           <div className="flex flex-wrap items-center gap-1 rounded-lg border bg-card px-2 py-1.5 shadow-sm">
-            {(assignOnly
-              ? TOOL_ITEMS.filter((item) => item.value === "select")
-              : TOOL_ITEMS
-            ).map((item) => (
-              <Button
-                key={item.value}
-                type="button"
-                variant={tool === item.value ? "default" : "ghost"}
-                size="sm"
-                className={cn(tool !== item.value && "text-muted-foreground")}
-                onClick={() => setTool(item.value)}
-              >
-                <item.icon />
-                {item.label}
-              </Button>
-            ))}
+            <ToggleGroup
+              value={[tool]}
+              onValueChange={(values) => {
+                if (values.length) setTool(values[0] as SeatTool);
+              }}
+              size="sm"
+              aria-label="画布工具"
+            >
+              {(assignOnly
+                ? TOOL_ITEMS.filter((item) => item.value !== "seat")
+                : TOOL_ITEMS
+              ).map((item) => (
+                <ToggleGroupItem
+                  key={item.value}
+                  type="button"
+                  value={item.value}
+                  title={
+                    item.value === "pan"
+                      ? "平移画布（也可按住空格或鼠标中键拖动）"
+                      : item.label
+                  }
+                >
+                  <item.icon data-icon="inline-start" />
+                  {item.label}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
 
             {!assignOnly && (
               <>
@@ -599,7 +653,7 @@ export function ZoneSeatingEditor({
               size="sm"
               className="text-muted-foreground"
               title="缩放到合适大小"
-              onClick={fit}
+              onClick={fitSeats}
             >
               <ScanIcon />
               适配
@@ -651,24 +705,13 @@ export function ZoneSeatingEditor({
                 <g
                   transform={`translate(${viewport.x} ${viewport.y}) scale(${viewport.scale})`}
                 >
-                  <rect
-                    x={0}
-                    y={0}
-                    width={zoneSize.width}
-                    height={zoneSize.height}
-                    fill="var(--card)"
-                    stroke="var(--border)"
-                  />
-                  {/* 区域自己的形状画在背景做参照，不可交互——真正能选中/拖动的只有座位。 */}
-                  <ZoneGeometry zone={localDoc.zones[0]} />
-
                   {zoneSeats.map((seat) => {
                     const status = seatStatus?.get(seat.externalId);
                     return (
                       <SeatNode
                         key={seat.externalId}
                         seat={seat}
-                        origin={{ x: 0, y: 0 }}
+                        origin={SEAT_ORIGIN}
                         selected={selectedSeats.has(seat.externalId)}
                         picking={pickMode}
                         offset={
@@ -714,11 +757,13 @@ export function ZoneSeatingEditor({
           open={templateOpen}
           onOpenChange={setTemplateOpen}
           existingSeatCount={zoneSeats.length}
-          onApply={(preset, params) =>
+          onApply={(preset, params) => {
+            setTemplateRevision((current) => current + 1);
             onCommand((s) =>
               execute(s, applyLayoutToZone(zone.externalId, preset, params)),
-            )
-          }
+            );
+            onSelectionChange(EMPTY_SELECTION, "clear");
+          }}
         />
       )}
     </div>

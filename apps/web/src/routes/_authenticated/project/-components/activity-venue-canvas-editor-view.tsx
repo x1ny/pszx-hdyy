@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeftIcon, Loader2Icon, SaveIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { canvasEditor } from "#/features/venue-editor/canvas";
 import {
@@ -29,6 +29,7 @@ import {
   SeatPropertyPanel,
   ZonePropertyPanel,
 } from "#/features/venue-editor/canvas/react/property-panel";
+import type { Viewport } from "#/features/venue-editor/canvas/react/use-viewport";
 import { ZoneSeatingEditor } from "#/features/venue-editor/canvas/react/zone-seating-editor";
 import { Button, buttonVariants } from "#/shared/components/ui/button.tsx";
 import { cn } from "#/shared/lib/utils.ts";
@@ -80,6 +81,7 @@ export function ActivityVenueCanvasEditorView({
   const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
   const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
 
+  const viewportMemory = useRef(new Map<string, Viewport>());
   const doc = state.doc;
   const activeZone =
     doc.zones.find((zone) => zone.externalId === activeZoneId) ?? null;
@@ -209,6 +211,7 @@ export function ActivityVenueCanvasEditorView({
         <ZoneSeatingEditor
           key={activeZone.externalId}
           zone={activeZone}
+          viewportMemory={viewportMemory.current}
           state={state}
           selection={selection}
           onSelectionChange={setSelection}

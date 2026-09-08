@@ -245,8 +245,8 @@ export function resizeRect(
 // 进入区域之后：排位画布
 // ---------------------------------------------------------------------------
 
-/** 排位画布的工具：选择或点放。没有画形状——区域形状在上一层已经定了。 */
-export const SEAT_TOOLS = ["select", "seat"] as const;
+/** 排位画布只操作座位和视野，不编辑外层区域形状。 */
+export const SEAT_TOOLS = ["select", "seat", "pan"] as const;
 export type SeatTool = (typeof SEAT_TOOLS)[number];
 
 export type SeatDragSubject =
@@ -324,7 +324,7 @@ export function resolveSeatDragSubject(input: {
 }): SeatDragSubject {
   const { point, doc, selection, tool, forcePan, hitRadius } = input;
 
-  if (forcePan) return { kind: "pan" };
+  if (forcePan || tool === "pan") return { kind: "pan" };
   if (tool === "seat") return { kind: "none" };
 
   const seatId = hitSeat(doc, point, hitRadius);

@@ -74,11 +74,8 @@ export type CanvasSeat = {
   rank: SeatRank;
   ordinal: number;
   /**
-   * **相对所属区域左上角**的坐标。
-   *
-   * 存相对值而不是世界坐标：移动区域时座位天然跟着走，一行代码都不用写；
-   * 缩放区域时按比例重算（`scalePoint`）。存绝对坐标的话，每次动区域都要遍历
-   * 它的全部座位改一遍，而那正是最容易漏掉边界情况的地方。
+   * 所属区域内部的独立座位坐标，可向四周延伸，不受外层 shape 约束。
+   * 历史数据仍原样读取，不重排、不重建 externalId；区域归属只由 zoneExternalId 决定。
    */
   x: number;
   y: number;
@@ -86,7 +83,7 @@ export type CanvasSeat = {
 
 export type CanvasDoc = {
   schemaVersion: 1;
-  /** 画布世界尺寸，所有坐标都在这个空间里。 */
+  /** 外层区域分布图尺寸，内层座位画布不使用它作为边界。 */
   world: { width: number; height: number };
   zones: CanvasZone[];
   seats: CanvasSeat[];
@@ -337,15 +334,21 @@ export function canvasDocFromProjection(
 
   const zoneById = new Map(zones.map((zone) => [zone.externalId, zone]));
   const placed = new Map<string, number>();
+  const counts = new Map<string, number>();
+  for (const seat of projection.seats)
+    counts.set(seat.zoneExternalId, (counts.get(seat.zoneExternalId) ?? 0) + 1);
 
   const seats: CanvasSeat[] = projection.seats.flatMap((seat) => {
     const zone = zoneById.get(seat.zoneExternalId);
     if (!zone) return [];
 
-    // 在区域内铺成网格，行宽按区域宽度自适应。
+    // 无几何的旧结构按人数铺成近方形网格，与区域示意图宽度无关。
     const index = placed.get(zone.externalId) ?? 0;
     placed.set(zone.externalId, index + 1);
-    const perRow = Math.max(1, Math.floor((zone.shape.width - 40) / 34));
+    const perRow = Math.max(
+      1,
+      Math.ceil(Math.sqrt(counts.get(zone.externalId) ?? 1)),
+    );
 
     return [
       {

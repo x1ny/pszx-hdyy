@@ -95,17 +95,13 @@ const LayoutBlobInput = z.object({
   }),
 });
 
-/**
- * 上界不是防御性编程，是防止一次请求把整张表写爆。2000 是
- * docs/场地排位底层设计.md §13.0 里"该重新评估 Konva"的信号线，
- * 留一倍余量到 5000——真撞上说明该换渲染方案了，不该靠放大上限硬扛。
- */
+/** 座位数量不设固定上限；数据库写入按批次执行，语义校验仍逐项检查。 */
 export const SaveVenueLayoutInput = z
   .object({
     venueId: id,
     layout: LayoutBlobInput,
     zones: z.array(ZoneDraftInput).max(200, "区域数量超出上限"),
-    seats: z.array(SeatDraftInput).max(5000, "位置数量超出上限"),
+    seats: z.array(SeatDraftInput),
   })
   .superRefine((input, ctx) => {
     // 这四条是"投影出来的语义"层面的校验。放 superRefine 而不是 handler：

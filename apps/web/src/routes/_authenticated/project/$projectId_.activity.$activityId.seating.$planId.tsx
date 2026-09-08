@@ -35,6 +35,7 @@ import {
   type SeatOccupantVisual,
 } from "#/features/venue-editor/canvas/seat-occupant-visual";
 import { downloadSeatingPlanJpeg } from "#/features/venue-editor/canvas/seating-plan-jpeg";
+import { downloadSeatingPlanSvg } from "#/features/venue-editor/canvas/seating-plan-svg";
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import { Skeleton } from "#/shared/components/ui/skeleton.tsx";
@@ -494,12 +495,12 @@ function SeatingCanvasPage() {
     onError: (error) => toast.error(error.message),
   });
 
-  const exportJpeg = async () => {
+  const exportPlan = async (format: "jpg" | "svg") => {
     if (!doc || !bundle) return;
 
     setIsExporting(true);
     try {
-      const result = await downloadSeatingPlanJpeg({
+      const input = {
         doc,
         seatStatus,
         title: `${bundle.plan.segmentName} · ${bundle.plan.zoneName} 排位图`,
@@ -508,14 +509,20 @@ function SeatingCanvasPage() {
           .join(" / "),
         segmentName: bundle.plan.segmentName,
         zoneName: bundle.plan.zoneName,
-      });
+      };
+      if (format === "svg") {
+        downloadSeatingPlanSvg(input);
+        toast.success("已导出 SVG 矢量图");
+        return;
+      }
+      const result = await downloadSeatingPlanJpeg(input);
       toast.success(
         result.raster.downsampled
-          ? "已导出 JPG（已在浏览器安全像素范围内缩放）"
+          ? "已导出 JPG 总览，放大查看细节可导出 SVG"
           : "已导出 JPG",
       );
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "导出 JPG 失败");
+      toast.error(error instanceof Error ? error.message : "导出排位图失败");
     } finally {
       setIsExporting(false);
     }
@@ -672,7 +679,17 @@ function SeatingCanvasPage() {
               variant="ghost"
               size="sm"
               disabled={isExporting}
-              onClick={exportJpeg}
+              onClick={() => exportPlan("svg")}
+            >
+              <DownloadIcon data-icon="inline-start" />
+              导出 SVG
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={isExporting}
+              onClick={() => exportPlan("jpg")}
             >
               <DownloadIcon data-icon="inline-start" />
               {isExporting ? "正在导出…" : "导出 JPG"}

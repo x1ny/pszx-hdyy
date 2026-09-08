@@ -304,21 +304,20 @@ describe("geometry", () => {
 // ---------------------------------------------------------------------------
 
 describe("layout 预设", () => {
-  const size = { width: 600, height: 400 };
-
   test("剧场预设产出 rows × cols 个座位", () => {
     const params: LayoutParams = { ...DEFAULT_LAYOUT_PARAMS, rows: 4, cols: 8 };
-    const seats = generateLayout("theater", params, size);
+    const seats = generateLayout("theater", params);
     expect(seats).toHaveLength(32);
     expect(countLayout("theater", params)).toBe(32);
   });
 
   test("剧场预设的编号按排字母 + 列号", () => {
-    const seats = generateLayout(
-      "theater",
-      { ...DEFAULT_LAYOUT_PARAMS, rows: 2, cols: 3, aisleEvery: 0 },
-      size,
-    );
+    const seats = generateLayout("theater", {
+      ...DEFAULT_LAYOUT_PARAMS,
+      rows: 2,
+      cols: 3,
+      aisleEvery: 0,
+    });
     expect(seats.map((seat) => seat.label)).toEqual([
       "A1",
       "A2",
@@ -330,11 +329,12 @@ describe("layout 预设", () => {
   });
 
   test("剧场预设的过道让两侧座位分开", () => {
-    const withAisle = generateLayout(
-      "theater",
-      { ...DEFAULT_LAYOUT_PARAMS, rows: 1, cols: 4, aisleEvery: 2 },
-      size,
-    );
+    const withAisle = generateLayout("theater", {
+      ...DEFAULT_LAYOUT_PARAMS,
+      rows: 1,
+      cols: 4,
+      aisleEvery: 2,
+    });
     const gapInside = withAisle[1].x - withAisle[0].x;
     const gapAcross = withAisle[2].x - withAisle[1].x;
     expect(gapAcross).toBeGreaterThan(gapInside);
@@ -347,21 +347,21 @@ describe("layout 预设", () => {
       seatsPerTable: 4,
       numbering: "tableSeat",
     };
-    const seats = generateLayout("banquet", params, size);
+    const seats = generateLayout("banquet", params);
     expect(seats).toHaveLength(8);
     expect(seats[0].label).toBe("1桌1号");
     expect(seats[4].label).toBe("2桌1号");
   });
 
   test("秀场双边中间留出 T 台，两侧各一半", () => {
-    const seats = generateLayout(
-      "runway",
-      { ...DEFAULT_LAYOUT_PARAMS, rows: 2, cols: 3 },
-      size,
-    );
+    const seats = generateLayout("runway", {
+      ...DEFAULT_LAYOUT_PARAMS,
+      rows: 2,
+      cols: 3,
+    });
     expect(seats).toHaveLength(12);
-    const runwayStart = 28 + (size.width - 56) / 3;
-    const runwayEnd = runwayStart + (size.width - 56) / 3;
+    const runwayStart = 2 * 48;
+    const runwayEnd = runwayStart + 160;
     const inRunway = seats.filter(
       (seat) => seat.x > runwayStart + 1 && seat.x < runwayEnd - 1,
     );
@@ -369,34 +369,58 @@ describe("layout 预设", () => {
   });
 
   test("自由排座不生成任何座位", () => {
-    expect(generateLayout("free", DEFAULT_LAYOUT_PARAMS, size)).toEqual([]);
+    expect(generateLayout("free", DEFAULT_LAYOUT_PARAMS)).toEqual([]);
     expect(countLayout("free", DEFAULT_LAYOUT_PARAMS)).toBe(0);
   });
 
   test("行数或列数为 0 时不产出座位，也不报错", () => {
     expect(
-      generateLayout("theater", { ...DEFAULT_LAYOUT_PARAMS, rows: 0 }, size),
+      generateLayout("theater", { ...DEFAULT_LAYOUT_PARAMS, rows: 0 }),
     ).toEqual([]);
   });
 
-  test("所有生成的座位都落在区域内", () => {
-    for (const preset of ["theater", "banquet", "runway"] as const) {
-      const seats = generateLayout(preset, DEFAULT_LAYOUT_PARAMS, size);
-      for (const seat of seats) {
-        expect(seat.x).toBeGreaterThanOrEqual(0);
-        expect(seat.y).toBeGreaterThanOrEqual(0);
-        expect(seat.x).toBeLessThanOrEqual(size.width);
-        expect(seat.y).toBeLessThanOrEqual(size.height);
-      }
-    }
+  test("扩展到 1000 个座位时保持间距和已有排布", () => {
+    const small = generateLayout("theater", {
+      ...DEFAULT_LAYOUT_PARAMS,
+      rows: 2,
+      cols: 10,
+    });
+    const large = generateLayout("theater", {
+      ...DEFAULT_LAYOUT_PARAMS,
+      rows: 100,
+      cols: 10,
+    });
+    expect(large).toHaveLength(1000);
+    expect(large.slice(0, small.length)).toEqual(small);
+    expect(large[10].y - large[0].y).toBe(64);
+    expect(large[1].x - large[0].x).toBe(48);
+    const tall = generateLayout("theater", {
+      ...DEFAULT_LAYOUT_PARAMS,
+      rows: 703,
+      cols: 1,
+    });
+    expect(tall[702].label).toBe("AAA1");
+  });
+
+  test("宴会每桌席位增加时扩大座位环，桌间保留通道", () => {
+    const seats = generateLayout("banquet", {
+      ...DEFAULT_LAYOUT_PARAMS,
+      tableCount: 4,
+      seatsPerTable: 20,
+    });
+    expect(
+      Math.hypot(seats[1].x - seats[0].x, seats[1].y - seats[0].y),
+    ).toBeCloseTo(48);
+    expect(seats[20].x - seats[0].x).toBeGreaterThan(300);
   });
 
   test("排字母超过 Z 之后不产出乱码", () => {
-    const seats = generateLayout(
-      "theater",
-      { ...DEFAULT_LAYOUT_PARAMS, rows: 28, cols: 1, aisleEvery: 0 },
-      { width: 400, height: 2000 },
-    );
+    const seats = generateLayout("theater", {
+      ...DEFAULT_LAYOUT_PARAMS,
+      rows: 28,
+      cols: 1,
+      aisleEvery: 0,
+    });
     expect(seats[26].label).toBe("AA1");
   });
 });
@@ -613,28 +637,60 @@ describe("commands · 座位（排位画布用）", () => {
     expect(state.doc.seats).toHaveLength(4);
   });
 
-  test("新增座位被夹在所属区域内", () => {
+  test("新增座位可超出区域尺寸，也可位于负坐标", () => {
     let state = initialState(docWithRectZone());
     const zoneId = state.doc.zones[0].externalId;
-    state = execute(state, addSeat(zoneId, { x: 99999, y: 99999 }, "A1"));
-    const zone = state.doc.zones[0];
-    expect(state.doc.seats[0].x).toBeLessThanOrEqual(zone.shape.width);
-    expect(state.doc.seats[0].y).toBeLessThanOrEqual(zone.shape.height);
+    state = execute(state, addSeat(zoneId, { x: -99999, y: 99999 }, "A1"));
+    expect(state.doc.seats[0]).toMatchObject({
+      x: -99999,
+      y: 99999,
+      zoneExternalId: zoneId,
+    });
+    expect(parseCanvasDoc(JSON.parse(JSON.stringify(state.doc)))).toEqual(
+      state.doc,
+    );
   });
 
-  test("拖动座位被夹在所属区域内", () => {
+  test("整组跨过旧区域边界仍保留间距，撤销恢复原布局", () => {
     let state = initialState(docWithRectZone());
     const zoneId = state.doc.zones[0].externalId;
     state = execute(state, addSeat(zoneId, { x: 50, y: 50 }, "A1"));
-
+    state = execute(state, addSeat(zoneId, { x: 100, y: 50 }, "A2"));
+    const before = state.doc;
     state = execute(
       state,
-      moveSeats([state.doc.seats[0].externalId], { x: 99999, y: 99999 }),
+      moveSeats(
+        state.doc.seats.map((seat) => seat.externalId),
+        { x: -99999, y: 99999 },
+      ),
     );
+    expect(state.doc.seats.map((seat) => ({ x: seat.x, y: seat.y }))).toEqual([
+      { x: -99949, y: 100049 },
+      { x: -99899, y: 100049 },
+    ]);
+    expect(undo(state).doc).toEqual(before);
+  });
 
-    const zone = state.doc.zones[0];
-    expect(state.doc.seats[0].x).toBeLessThanOrEqual(zone.shape.width);
-    expect(state.doc.seats[0].y).toBeLessThanOrEqual(zone.shape.height);
+  test("外层缩放不修改任何座位，模板排布也不依赖外层大小", () => {
+    let state = initialState(docWithRectZone());
+    const zoneId = state.doc.zones[0].externalId;
+    state = execute(
+      state,
+      applyLayoutToZone(zoneId, "theater", DEFAULT_LAYOUT_PARAMS),
+    );
+    const seats = state.doc.seats;
+    state = execute(
+      state,
+      resizeZone(zoneId, { x: 0, y: 0, width: 60, height: 60 }),
+    );
+    expect(state.doc.seats).toEqual(seats);
+    state = execute(
+      state,
+      applyLayoutToZone(zoneId, "theater", DEFAULT_LAYOUT_PARAMS),
+    );
+    expect(state.doc.seats.map(({ x, y, label }) => ({ x, y, label }))).toEqual(
+      seats.map(({ x, y, label }) => ({ x, y, label })),
+    );
   });
 
   test("批量改等级", () => {
@@ -1300,19 +1356,34 @@ describe("投影与序列化", () => {
     expect(projectCanvas(upgraded)).toEqual(projection);
   });
 
-  test("升级后的座位落在各自区域内", () => {
-    const upgraded = canvasDocFromProjection(projectCanvas(richDoc()));
-    const zoneById = new Map(
-      upgraded.zones.map((zone) => [zone.externalId, zone]),
+  test("结构投影恢复区域归属，外层区域大小不改变座位间距", () => {
+    const projection = projectCanvas(richDoc());
+    const zone = projection.zones[0];
+    projection.seats = Array.from({ length: 64 }, (_, index) => ({
+      externalId: `restored-${index}`,
+      zoneExternalId: zone.externalId,
+      label: `S${index + 1}`,
+      kind: "seat",
+      rank: "normal",
+      ordinal: index,
+    }));
+    const upgraded = canvasDocFromProjection(projection);
+    expect(projectCanvas(upgraded)).toEqual(projection);
+    const crowded = canvasDocFromProjection({
+      ...projection,
+      zones: [
+        zone,
+        ...Array.from({ length: 15 }, (_, index) => ({
+          ...zone,
+          externalId: `extra-zone-${index}`,
+          ordinal: index + 1,
+        })),
+      ],
+    });
+    expect(crowded.zones[0].shape.width).not.toBe(
+      upgraded.zones[0].shape.width,
     );
-
-    for (const seat of upgraded.seats) {
-      const zone = zoneById.get(seat.zoneExternalId);
-      expect(zone).toBeDefined();
-      if (!zone) continue;
-      expect(seat.x).toBeLessThanOrEqual(zone.shape.width);
-      expect(seat.y).toBeLessThanOrEqual(zone.shape.height);
-    }
+    expect(crowded.seats).toEqual(upgraded.seats);
   });
 
   test("生成出来的文档能通过共用校验", () => {

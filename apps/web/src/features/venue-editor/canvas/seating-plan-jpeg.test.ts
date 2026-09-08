@@ -15,6 +15,7 @@ import {
   type SeatingPlanExportSeatStatus,
   type SeatingPlanJpegBridge,
 } from "./seating-plan-jpeg";
+import { downloadSeatingPlanSvg } from "./seating-plan-svg";
 
 const doc: CanvasDoc = {
   schemaVersion: 1,
@@ -148,17 +149,17 @@ describe("seating plan JPEG export", () => {
     expect(escapeXml(`&<>"'`)).toBe("&amp;&lt;&gt;&quot;&apos;");
   });
 
-  it("从完整世界坐标生成独立 SVG，包含区域、座位、占用标签与去重图例", () => {
+  it("按独立座位布局生成无框 SVG，保留区域名、占用标签和图例", () => {
     const { svg, raster } = buildSeatingPlanSvg(jpegInput);
 
     expect(svg).toContain('xmlns="http://www.w3.org/2000/svg"');
     expect(svg).toContain('data-export-background="true"');
     expect(svg).toContain('fill="#FFFFFF"');
     expect(svg).toContain('data-export-world="true"');
-    expect(svg).toContain('width="520" height="320"');
-    expect(svg).toContain("<ellipse");
-    expect(svg).toContain("<polygon");
-    expect(svg).toContain('points="390,170 490,180 460,270"');
+    expect(svg).not.toContain('width="520" height="320"');
+    expect(svg).not.toContain("<ellipse");
+    expect(svg).not.toContain("<polygon");
+    expect(svg).not.toContain('points="390,170 490,180 460,270"');
     expect(svg).toContain('data-export-zone-id="zone-rect"');
     expect(svg).toContain("主会场 &amp; 嘉宾区");
     expect(svg).toContain("闭幕式 &lt;最终排位&gt;");
@@ -188,8 +189,8 @@ describe("seating plan JPEG export", () => {
     expect(svg).not.toMatch(
       /data-export-occupant-label="primary"[^>]*font-weight/,
     );
-    expect(raster.width).toBe(raster.logicalWidth * 2);
-    expect(raster.height).toBe(raster.logicalHeight * 2);
+    expect(raster.width).toBe(Math.floor(raster.logicalWidth * 2));
+    expect(raster.height).toBe(Math.floor(raster.logicalHeight * 2));
   });
 
   it("支持预览隐藏顶部标题和区域名称", () => {
@@ -206,7 +207,7 @@ describe("seating plan JPEG export", () => {
     expect(svg).toContain('data-export-zone-id="zone-rect"');
   });
 
-  it("按最大边长和像素面积自动降采样，低于可读阈值时给中文错误", () => {
+  it("超大布局继续降采样为安全像素总览，不因文字可读阈值拒绝导出", () => {
     const downsampled = planSeatingPlanRaster({ width: 5000, height: 2000 });
     expect(downsampled).toMatchObject({ downsampled: true });
     expect(downsampled.width).toBeLessThanOrEqual(8192);
@@ -215,12 +216,9 @@ describe("seating plan JPEG export", () => {
       24_000_000,
     );
 
-    expect(() =>
-      planSeatingPlanRaster({ width: 20_000, height: 20_000 }),
-    ).toThrow("排位画布过大");
-    expect(() =>
-      planSeatingPlanRaster({ width: 20_000, height: 20_000 }),
-    ).toThrow("无法保证文字可读");
+    const huge = planSeatingPlanRaster({ width: 200_000, height: 200_000 });
+    expect(huge.scale).toBeLessThan(0.75);
+    expect(huge.width * huge.height).toBeLessThanOrEqual(24_000_000);
   });
 
   it("生成 Windows 安全、带本地时间戳和 .jpg 扩展名的文件名", () => {
@@ -278,5 +276,47 @@ describe("seating plan JPEG export", () => {
       downloaded.blob,
       downloaded.fileName,
     );
+  });
+});
+describe("independent seat export bounds", () => {
+  it("ignores outer shapes and world dimensions without changing existing seat data", () => {
+    const before = JSON.stringify(jpegInput);
+    const changed = {
+      ...doc,
+      world: { width: 1, height: 1 },
+      zones: doc.zones.map((zone) => ({
+        ...zone,
+        shape: { ...zone.shape, x: -10000, y: 50000, width: 1, height: 1 },
+      })),
+    };
+    expect(buildSeatingPlanSvg({ ...jpegInput, doc: changed }).svg).toBe(
+      buildSeatingPlanSvg(jpegInput).svg,
+    );
+    expect(JSON.stringify(jpegInput)).toBe(before);
+  });
+  it("keeps negative and far-away seats in the vector document and a bounded JPEG overview", async () => {
+    const seats = Array.from({ length: 1000 }, (_, i) => ({
+      ...doc.seats[0],
+      externalId: `s-${i}`,
+      x: -240000 + i * 48,
+      y: -2000,
+      label: `A${i + 1}`,
+    }));
+    const input = {
+      ...jpegInput,
+      doc: { ...doc, zones: [doc.zones[0]], seats },
+    };
+    const { svg, raster } = buildSeatingPlanSvg(input);
+    expect(svg.match(/data-export-seat-id=/g)).toHaveLength(1000);
+    expect(svg).toContain('cx="-240000" cy="-2000"');
+    expect(svg).toContain('data-export-seat-id="s-999"');
+    expect(raster.downsampled).toBe(true);
+    expect(raster.width).toBeLessThanOrEqual(8192);
+    const saveFile = vi.fn();
+    const result = downloadSeatingPlanSvg(input, { saveFile });
+    expect(result.fileName.endsWith(".svg")).toBe(true);
+    expect(result.blob.type).toContain("image/svg+xml");
+    expect(await result.blob.text()).toContain('data-export-seat-id="s-999"');
+    expect(saveFile).toHaveBeenCalledWith(result.blob, result.fileName);
   });
 });

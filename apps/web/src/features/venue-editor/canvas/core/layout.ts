@@ -1,7 +1,7 @@
-import type { Point, Size } from "./geometry";
+import type { Point } from "./geometry";
 
 /**
- * 座位布局生成。给定一块区域的尺寸和一组参数，算出每个座位摆在哪、叫什么。
+ * 座位布局生成。按统一默认间距向外展开，不读取外层区域尺寸。
  *
  * **纯函数，不认识 React 也不认识 SVG**——它只产出坐标和编号，怎么画是渲染层的事。
  * 这一层是整个编辑器里最值钱的部分：旧系统那 740 行 `layoutEngine.ts` 的价值全在
@@ -48,17 +48,21 @@ export const DEFAULT_LAYOUT_PARAMS: LayoutParams = {
 
 export type GeneratedSeat = Point & { label: string };
 
-/** 区域内边距：座位不贴边框，留出过道和视觉呼吸。 */
-const PAD = 28;
+/** 示意坐标单位，不表达米或实际场地尺寸。 */
+export const LAYOUT_SPACING = { seat: 48, row: 64, table: 96, runway: 160 };
 
 const rowLetter = (start: string, index: number) => {
   const base = start.toUpperCase().charCodeAt(0);
   const code = Number.isNaN(base) ? 65 : base;
-  // 超过 Z 之后回到 A 并加一位（AA、AB…），别产出 `[1` 这种字符。
-  const offset = code - 65 + index;
-  const cycle = Math.floor(offset / 26);
-  const letter = String.fromCharCode(65 + (offset % 26));
-  return cycle > 0 ? `${String.fromCharCode(64 + cycle)}${letter}` : letter;
+  // A…Z、AA…ZZ、AAA…；取消数量上限后也不能在第 703 排产生乱码。
+  let ordinal = code - 65 + index + 1;
+  let label = "";
+  while (ordinal > 0) {
+    ordinal -= 1;
+    label = String.fromCharCode(65 + (ordinal % 26)) + label;
+    ordinal = Math.floor(ordinal / 26);
+  }
+  return label;
 };
 
 function makeLabeler(params: LayoutParams) {
@@ -76,26 +80,9 @@ function makeLabeler(params: LayoutParams) {
   };
 }
 
-/** 把 n 个点在一段长度上均分居中，返回每个点的中心坐标。 */
-function spread(count: number, length: number): number[] {
-  if (count <= 0) return [];
-  if (count === 1) return [length / 2];
-  const step = length / (count - 1);
-  return Array.from({ length: count }, (_, index) => index * step);
-}
-
-function genTheater(params: LayoutParams, size: Size): GeneratedSeat[] {
+function genTheater(params: LayoutParams): GeneratedSeat[] {
   const { rows, cols, aisleEvery } = params;
   if (rows <= 0 || cols <= 0) return [];
-
-  const innerWidth = Math.max(1, size.width - PAD * 2);
-  const innerHeight = Math.max(1, size.height - PAD * 2);
-
-  // 过道占一个座位宽的位置，所以按"座位数 + 过道数"分配横向空间。
-  const aisles = aisleEvery > 0 ? Math.floor((cols - 1) / aisleEvery) : 0;
-  const slots = cols + aisles;
-  const xs = spread(slots, innerWidth);
-  const ys = spread(rows, innerHeight);
 
   const label = makeLabeler(params);
   const seats: GeneratedSeat[] = [];
@@ -105,8 +92,8 @@ function genTheater(params: LayoutParams, size: Size): GeneratedSeat[] {
     for (let col = 0; col < cols; col += 1) {
       if (aisleEvery > 0 && col > 0 && col % aisleEvery === 0) slot += 1;
       seats.push({
-        x: PAD + (xs[slot] ?? 0),
-        y: PAD + (ys[row] ?? 0),
+        x: slot * LAYOUT_SPACING.seat,
+        y: row * LAYOUT_SPACING.row,
         label: label(row, col),
       });
       slot += 1;
@@ -116,28 +103,27 @@ function genTheater(params: LayoutParams, size: Size): GeneratedSeat[] {
   return seats;
 }
 
-function genBanquet(params: LayoutParams, size: Size): GeneratedSeat[] {
+function genBanquet(params: LayoutParams): GeneratedSeat[] {
   const { tableCount, seatsPerTable } = params;
   if (tableCount <= 0 || seatsPerTable <= 0) return [];
 
-  const innerWidth = Math.max(1, size.width - PAD * 2);
-  const innerHeight = Math.max(1, size.height - PAD * 2);
-
   // 桌子按接近正方形的网格排布，避免一长条。
   const columns = Math.max(1, Math.ceil(Math.sqrt(tableCount)));
-  const rows = Math.ceil(tableCount / columns);
-  const cellWidth = innerWidth / columns;
-  const cellHeight = innerHeight / rows;
-  // 座位环绕的半径：取格子短边的三分之一，桌与桌之间才留得下过道。
-  const radius = Math.max(12, Math.min(cellWidth, cellHeight) / 3);
+  // 用相邻席位的弦长反推半径；每桌席位变多时扩大座位环，避免挤在一起。
+  const radius = Math.max(
+    LAYOUT_SPACING.seat,
+    seatsPerTable > 1
+      ? LAYOUT_SPACING.seat / (2 * Math.sin(Math.PI / seatsPerTable))
+      : 0,
+  );
+  const cellSize = radius * 2 + LAYOUT_SPACING.table;
 
   const label = makeLabeler(params);
   const seats: GeneratedSeat[] = [];
 
   for (let table = 0; table < tableCount; table += 1) {
-    const centerX = PAD + (table % columns) * cellWidth + cellWidth / 2;
-    const centerY =
-      PAD + Math.floor(table / columns) * cellHeight + cellHeight / 2;
+    const centerX = radius + (table % columns) * cellSize;
+    const centerY = radius + Math.floor(table / columns) * cellSize;
 
     for (let seat = 0; seat < seatsPerTable; seat += 1) {
       // 从正上方开始顺时针，跟真实宴会厅的主位习惯一致。
@@ -159,18 +145,11 @@ function genBanquet(params: LayoutParams, size: Size): GeneratedSeat[] {
  * 这是时尚周的主场景，也是从零设计最容易漏掉的一种——旧系统的 `runway` 预设
  * 专门做了它（docs/场地排位模块.md §5.3 特别点了名）。
  */
-function genRunway(params: LayoutParams, size: Size): GeneratedSeat[] {
+function genRunway(params: LayoutParams): GeneratedSeat[] {
   const { rows, cols } = params;
   if (rows <= 0 || cols <= 0) return [];
 
-  const innerWidth = Math.max(1, size.width - PAD * 2);
-  const innerHeight = Math.max(1, size.height - PAD * 2);
-  // T 台占中间三分之一。
-  const runwayWidth = innerWidth / 3;
-  const sideWidth = (innerWidth - runwayWidth) / 2;
-
-  const ys = spread(rows, innerHeight);
-  const sideXs = spread(cols, sideWidth);
+  const sideWidth = (cols - 1) * LAYOUT_SPACING.seat;
   const label = makeLabeler(params);
   const seats: GeneratedSeat[] = [];
 
@@ -178,16 +157,16 @@ function genRunway(params: LayoutParams, size: Size): GeneratedSeat[] {
     // 左侧：从 T 台往外编号，靠台的是 1 号——离舞台越近序号越小，符合看座习惯。
     for (let col = 0; col < cols; col += 1) {
       seats.push({
-        x: PAD + sideWidth - (sideXs[col] ?? 0),
-        y: PAD + (ys[row] ?? 0),
+        x: sideWidth - col * LAYOUT_SPACING.seat,
+        y: row * LAYOUT_SPACING.row,
         label: label(row, col),
       });
     }
     // 右侧
     for (let col = 0; col < cols; col += 1) {
       seats.push({
-        x: PAD + sideWidth + runwayWidth + (sideXs[col] ?? 0),
-        y: PAD + (ys[row] ?? 0),
+        x: sideWidth + LAYOUT_SPACING.runway + col * LAYOUT_SPACING.seat,
+        y: row * LAYOUT_SPACING.row,
         label: label(row, cols + col),
       });
     }
@@ -198,7 +177,7 @@ function genRunway(params: LayoutParams, size: Size): GeneratedSeat[] {
 
 const GENERATORS: Record<
   LayoutPreset,
-  (params: LayoutParams, size: Size) => GeneratedSeat[]
+  (params: LayoutParams) => GeneratedSeat[]
 > = {
   theater: genTheater,
   banquet: genBanquet,
@@ -208,15 +187,13 @@ const GENERATORS: Record<
 };
 
 /**
- * 按预设生成座位。产出的坐标是**相对区域左上角**的，区域移动时座位跟着走，
- * 不需要重算。
+ * 按预设生成独立座位坐标。模板整体替换旧座位，不读取任何外层几何。
  */
 export function generateLayout(
   preset: LayoutPreset,
   params: LayoutParams,
-  size: Size,
 ): GeneratedSeat[] {
-  return GENERATORS[preset](params, size);
+  return GENERATORS[preset](params);
 }
 
 /** 每种预设实际会用到哪几个参数，用来决定参数面板显示哪些输入框。 */

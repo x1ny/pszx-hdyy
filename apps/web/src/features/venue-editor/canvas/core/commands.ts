@@ -11,10 +11,8 @@ import {
 import {
   boundsOf,
   clamp,
-  clampPointToRect,
   type Point,
   type Rect,
-  scalePoint,
   scalePoints,
 } from "./geometry";
 import { generateLayout, type LayoutParams, type LayoutPreset } from "./layout";
@@ -35,10 +33,8 @@ export type Command = {
   apply: (draft: Draft<CanvasDoc>) => void;
 };
 
-/** 区域最小尺寸。再小就点不中、也放不下任何座位。 */
+/** 区域示意图的最小可交互尺寸，与内层座位数量无关。 */
 export const MIN_ZONE_SIZE = 60;
-/** 座位到区域边框的最小距离，跟 layout.ts 的内边距同一个量级。 */
-const SEAT_PAD = 12;
 
 const findZone = (draft: Draft<CanvasDoc>, zoneId: string) =>
   draft.zones.find((zone) => zone.externalId === zoneId);
@@ -138,10 +134,8 @@ export const moveZones = (zoneIds: string[], delta: Point): Command => ({
 });
 
 /**
- * 缩放区域，区域内的座位、多边形顶点都按比例同步。
- *
- * 不同步的话，把区域拉小之后座位会溜到框外——那不是"座位在区域里"这个模型该有的
- * 样子，而且投影出去的数据没错、只有视觉错，最难发现。
+ * 缩放外层区域示意图，只同步多边形顶点。
+ * 内层座位拥有独立坐标，外层尺寸不表达真实容量，也不能改变座位间距。
  */
 export const resizeZone = (zoneId: string, next: Rect): Command => ({
   label: "调整区域大小",
@@ -162,18 +156,6 @@ export const resizeZone = (zoneId: string, next: Rect): Command => ({
 
     if (zone.shape.type === "polygon") {
       zone.shape.points = scalePoints(zone.shape.points, from, to);
-    }
-
-    for (const seat of draft.seats) {
-      if (seat.zoneExternalId !== zoneId) continue;
-      const scaled = scalePoint({ x: seat.x, y: seat.y }, from, to);
-      const clamped = clampPointToRect(
-        scaled,
-        { x: 0, y: 0, width: to.width, height: to.height },
-        SEAT_PAD,
-      );
-      seat.x = clamped.x;
-      seat.y = clamped.y;
     }
   },
 });
@@ -231,10 +213,7 @@ export const applyLayoutToZone = (
     const zone = findZone(draft, zoneId);
     if (!zone) return;
 
-    const generated = generateLayout(preset, params, {
-      width: zone.shape.width,
-      height: zone.shape.height,
-    });
+    const generated = generateLayout(preset, params);
 
     draft.seats = draft.seats.filter((seat) => seat.zoneExternalId !== zoneId);
     generated.forEach((seat, index) => {
@@ -257,11 +236,6 @@ export const addSeat = (zoneId: string, at: Point, label: string): Command => ({
   apply: (draft) => {
     const zone = findZone(draft, zoneId);
     if (!zone) return;
-    const spot = clampPointToRect(
-      at,
-      { x: 0, y: 0, width: zone.shape.width, height: zone.shape.height },
-      SEAT_PAD,
-    );
     draft.seats.push({
       externalId: newId("s"),
       zoneExternalId: zoneId,
@@ -269,40 +243,27 @@ export const addSeat = (zoneId: string, at: Point, label: string): Command => ({
       kind: "seat",
       rank: "normal",
       ordinal: draft.seats.filter((s) => s.zoneExternalId === zoneId).length,
-      x: spot.x,
-      y: spot.y,
+      x: at.x,
+      y: at.y,
     });
   },
 });
 
 /**
- * 拖动座位。位置被夹在所属区域内——**不允许拖出区域**。
- *
- * 座位一旦跑到区域外，"这个位置属于哪个区域"就只剩数据上的答案、视觉上是错的。
- * 排位画布本来就是逐区域进入的，也没有"拖到另一个区域"这个入口。
+ * 在所属区域的独立画布内移动座位，可以向四周延伸。
+ * 整组使用同一个位移，始终保留组内间距和区域归属。
  */
 export const moveSeats = (seatIds: string[], delta: Point): Command => ({
   label: "移动位置",
   apply: (draft) => {
     const targets = new Set(seatIds);
-    const zoneSize = new Map(
-      draft.zones.map((zone) => [
-        zone.externalId,
-        { width: zone.shape.width, height: zone.shape.height },
-      ]),
-    );
+    const zoneIds = new Set(draft.zones.map((zone) => zone.externalId));
 
     for (const seat of draft.seats) {
       if (!targets.has(seat.externalId)) continue;
-      const size = zoneSize.get(seat.zoneExternalId);
-      if (!size) continue;
-      const spot = clampPointToRect(
-        { x: seat.x + delta.x, y: seat.y + delta.y },
-        { x: 0, y: 0, ...size },
-        SEAT_PAD,
-      );
-      seat.x = spot.x;
-      seat.y = spot.y;
+      if (!zoneIds.has(seat.zoneExternalId)) continue;
+      seat.x += delta.x;
+      seat.y += delta.y;
     }
   },
 });

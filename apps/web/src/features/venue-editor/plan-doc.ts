@@ -5,6 +5,7 @@ import {
   type CanvasZone,
   ZONE_KIND_DEFAULT_COLOR,
 } from "./canvas/core/document";
+import { seatContentBounds } from "./canvas/core/geometry";
 import type { SeatKind, SeatRank, ZoneKind } from "./contract";
 
 /**
@@ -15,9 +16,8 @@ import type { SeatKind, SeatRank, ZoneKind } from "./contract";
  * 座位复制过来"这件事，必须发生在前端——服务端收到的是已经投影好的座位清单，
  * 跟 `venue/saveLayout` 收到的是同一种东西。
  *
- * 切出来的文档是**自足**的：区域挪到原点、世界尺寸就是区域尺寸。座位的 x/y
- * 本来就存相对区域左上角的坐标，所以一个字都不用改。之后这份文档跟上游再无
- * 关系——上游底图怎么改，都改不坏已经建好的方案（底层设计 §3.3）。
+ * 切出来的文档保留座位独立坐标和标识。外层区域只保留名称、归属等信息；
+ * 内层显示范围由座位内容计算。之后与上游隔离，上游改图不会修改已有排位方案。
  */
 
 export type PlanSeatDraft = {
@@ -54,8 +54,7 @@ export function buildPlanDoc(input: {
 
   const color = ZONE_KIND_DEFAULT_COLOR[input.zoneKind];
 
-  // 区域挪到原点：方案的世界就是这块区域本身，没有"区域在场地里的位置"这层
-  // 换算。ZoneSeatingEditor 本来就按这个前提工作。
+  // 保留区域元信息；坐标原点规范化不改变任何座位坐标。
   const zone: CanvasZone = sourceZone
     ? { ...sourceZone, shape: { ...sourceZone.shape, x: 0, y: 0 } }
     : {
@@ -72,9 +71,10 @@ export function buildPlanDoc(input: {
     (seat) => seat.zoneExternalId === input.zoneExternalId,
   );
 
+  const bounds = seatContentBounds(seats);
   const doc: CanvasDoc = {
     schemaVersion: 1,
-    world: { width: zone.shape.width, height: zone.shape.height },
+    world: { width: bounds.width, height: bounds.height },
     zones: [zone],
     seats,
   };

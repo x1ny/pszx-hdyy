@@ -6,7 +6,7 @@ import {
   SaveIcon,
   TriangleAlertIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { canvasEditor } from "#/features/venue-editor/canvas";
 import {
@@ -34,6 +34,7 @@ import {
   SeatPropertyPanel,
   ZonePropertyPanel,
 } from "#/features/venue-editor/canvas/react/property-panel";
+import type { Viewport } from "#/features/venue-editor/canvas/react/use-viewport";
 import { ZoneSeatingEditor } from "#/features/venue-editor/canvas/react/zone-seating-editor";
 import { validateProjection } from "#/features/venue-editor/contract";
 import { Button, buttonVariants } from "#/shared/components/ui/button.tsx";
@@ -92,6 +93,7 @@ export function CanvasEditorView({
   const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
   const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
 
+  const viewportMemory = useRef(new Map<string, Viewport>());
   const doc = state.doc;
   const projection = useMemo(() => canvasEditor.project(doc), [doc]);
   const issues = useMemo(() => validateProjection(projection), [projection]);
@@ -198,6 +200,7 @@ export function CanvasEditorView({
         <ZoneSeatingEditor
           key={activeZone.externalId}
           zone={activeZone}
+          viewportMemory={viewportMemory.current}
           state={state}
           selection={selection}
           onSelectionChange={setSelection}

@@ -215,7 +215,7 @@ export const toScreen = (
  * 缩放上限 1：小场地不该被放大到糊，宁可四周留空。
  */
 export function fitViewport(
-  world: Size,
+  world: Size | Rect,
   view: Size,
   pad = 32,
 ): { x: number; y: number; scale: number } {
@@ -229,7 +229,28 @@ export function fitViewport(
 
   return {
     scale,
-    x: (view.width - world.width * scale) / 2,
-    y: (view.height - world.height * scale) / 2,
+    x:
+      (view.width - world.width * scale) / 2 -
+      ("x" in world ? world.x * scale : 0),
+    y:
+      (view.height - world.height * scale) / 2 -
+      ("y" in world ? world.y * scale : 0),
+  };
+}
+
+/** 内层画布只按座位内容适配。空画布的原点位于视口中央，四周都可点放。 */
+export function seatContentBounds(
+  points: readonly Point[],
+  pitch = DEFAULT_SEAT_PITCH,
+): Rect {
+  if (points.length === 0) return { x: -240, y: -160, width: 480, height: 320 };
+  const bounds = boundsOf(points);
+  // 留出符号和两行文字的空间，旧图的坐标和间距无需重写。
+  const pad = Math.max(pitch, DEFAULT_SEAT_PITCH);
+  return {
+    x: bounds.x - pad,
+    y: bounds.y - pad,
+    width: bounds.width + pad * 2,
+    height: bounds.height + pad * 3,
   };
 }

@@ -117,6 +117,10 @@ export function TemplateDialog({
 
   const fields = PRESET_FIELDS[preset];
   const willGenerate = countLayout(preset, params);
+  const validParams =
+    fields.every(
+      (field) => Number.isSafeInteger(params[field]) && params[field] >= 0,
+    ) && Number.isSafeInteger(willGenerate);
 
   const apply = () => {
     onApply(preset, params);
@@ -190,6 +194,7 @@ export function TemplateDialog({
                   id={`param-${field}`}
                   type="number"
                   min={0}
+                  step={1}
                   value={params[field]}
                   onChange={(event) =>
                     setParams({
@@ -233,8 +238,12 @@ export function TemplateDialog({
           ) : (
             <span />
           )}
-          <Button type="button" onClick={apply}>
-            生成 {willGenerate} 个位置
+          <Button
+            type="button"
+            onClick={apply}
+            disabled={!validParams || willGenerate === 0}
+          >
+            {validParams ? `生成 ${willGenerate} 个位置` : "请填写有效数量"}
           </Button>
         </DialogFooter>
       </DialogContent>

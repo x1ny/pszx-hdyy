@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, ilike, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../../infra/db";
+import { batches } from "../../shared/batches";
 import { toLimitOffset } from "../../shared/pagination";
 import { err, ok } from "../../shared/result";
 import { jsonBody } from "../../shared/validate";
@@ -134,8 +135,8 @@ async function applyLayout(
 
   const seatPlan = planSeats(seatRows, seatDrafts);
 
-  if (seatPlan.remove.length) {
-    await tx.delete(venueSeat).where(inArray(venueSeat.id, seatPlan.remove));
+  for (const batch of batches(seatPlan.remove)) {
+    await tx.delete(venueSeat).where(inArray(venueSeat.id, batch));
   }
   for (const { id, draft } of seatPlan.update) {
     await tx
@@ -149,10 +150,10 @@ async function applyLayout(
       })
       .where(eq(venueSeat.id, id));
   }
-  if (seatPlan.insert.length) {
+  for (const batch of batches(seatPlan.insert)) {
     await tx
       .insert(venueSeat)
-      .values(seatPlan.insert.map((draft) => ({ ...draft, venueId })));
+      .values(batch.map((draft) => ({ ...draft, venueId })));
   }
 
   return {

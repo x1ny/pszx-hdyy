@@ -1,6 +1,7 @@
 import { and, asc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../../infra/db";
+import { batches } from "../../shared/batches";
 import { err, ok } from "../../shared/result";
 import { jsonBody } from "../../shared/validate";
 import { activitySegment } from "../agenda/schema";
@@ -267,34 +268,38 @@ async function listOrganizationSeatAvailability(
 ) {
   if (!orderedSeatIds.length) return [];
 
-  const [seats, occupied] = await Promise.all([
-    tx
-      .select({
-        id: segmentSeat.id,
-        enabled: segmentSeat.enabled,
-        removedAt: segmentSeat.removedAt,
-      })
-      .from(segmentSeat)
-      .where(
-        and(
-          eq(segmentSeat.planId, planId),
-          inArray(segmentSeat.id, orderedSeatIds),
+  const bySeatId = new Map<
+    number,
+    { id: number; enabled: boolean; removedAt: Date | null }
+  >();
+  const occupiedSeatIds = new Set<number>();
+  for (const batch of batches(orderedSeatIds)) {
+    const [seats, occupied] = await Promise.all([
+      tx
+        .select({
+          id: segmentSeat.id,
+          enabled: segmentSeat.enabled,
+          removedAt: segmentSeat.removedAt,
+        })
+        .from(segmentSeat)
+        .where(
+          and(eq(segmentSeat.planId, planId), inArray(segmentSeat.id, batch)),
         ),
-      ),
-    tx
-      .select({ seatId: seatAssignment.segmentSeatId })
-      .from(seatAssignment)
-      .where(
-        and(
-          eq(seatAssignment.planId, planId),
-          inArray(seatAssignment.segmentSeatId, orderedSeatIds),
-          liveAssignment,
+      tx
+        .select({ seatId: seatAssignment.segmentSeatId })
+        .from(seatAssignment)
+        .where(
+          and(
+            eq(seatAssignment.planId, planId),
+            inArray(seatAssignment.segmentSeatId, batch),
+            liveAssignment,
+          ),
         ),
-      ),
-  ]);
+    ]);
 
-  const bySeatId = new Map(seats.map((seat) => [seat.id, seat]));
-  const occupiedSeatIds = new Set(occupied.map((row) => row.seatId));
+    for (const seat of seats) bySeatId.set(seat.id, seat);
+    for (const row of occupied) occupiedSeatIds.add(row.seatId);
+  }
 
   return orderedSeatIds.map((seatId) => {
     const seat = bySeatId.get(seatId);
@@ -770,9 +775,9 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
         updatedBy: userId,
       });
 
-      if (input.seats.length) {
+      for (const batch of batches(input.seats)) {
         await tx.insert(segmentSeat).values(
-          input.seats.map((seat) => ({
+          batch.map((seat) => ({
             planId: plan.id,
             externalId: seat.externalId,
             sourceExternalId: seat.sourceExternalId ?? null,
@@ -835,12 +840,12 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
         return { kind: "blocked" as const, blocked: merged.blocked };
       }
 
-      if (merged.remove.length) {
+      for (const batch of batches(merged.remove)) {
         // 软删而不是物理删——这些行被 seat_assignment 引用（哪怕是已撤销的）。
         await tx
           .update(segmentSeat)
           .set({ removedAt: new Date() })
-          .where(inArray(segmentSeat.id, merged.remove));
+          .where(inArray(segmentSeat.id, batch));
       }
       for (const { id, draft } of merged.update) {
         await tx
@@ -854,9 +859,9 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
           })
           .where(eq(segmentSeat.id, id));
       }
-      if (merged.insert.length) {
+      for (const batch of batches(merged.insert)) {
         await tx.insert(segmentSeat).values(
-          merged.insert.map((seat) => ({
+          batch.map((seat) => ({
             planId: input.planId,
             externalId: seat.externalId,
             sourceExternalId: seat.sourceExternalId ?? null,
@@ -1038,18 +1043,19 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
             };
           }
 
-          await tx.insert(seatAssignment).values(
-            checked.preview.plannedSeatIds.map((segmentSeatId) => ({
-              planId: input.planId,
-              segmentId: checked.plan.segmentId,
-              segmentSeatId,
-              occupantType: "organization" as const,
-              segmentMemberId: null,
-              organizationId: input.organizationId,
-              assignedBy: userId,
-            })),
-          );
-
+          for (const batch of batches(checked.preview.plannedSeatIds)) {
+            await tx.insert(seatAssignment).values(
+              batch.map((segmentSeatId) => ({
+                planId: input.planId,
+                segmentId: checked.plan.segmentId,
+                segmentSeatId,
+                occupantType: "organization" as const,
+                segmentMemberId: null,
+                organizationId: input.organizationId,
+                assignedBy: userId,
+              })),
+            );
+          }
           const { wasConfirmed } = await touchPlan(tx, input.planId, userId);
           await writeLog(tx, input.planId, "assign", userId, {
             batch: true,
