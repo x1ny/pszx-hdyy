@@ -343,6 +343,97 @@ function bd09ToGcj02(longitude: number, latitude: number) {
   };
 }
 
+const EARTH_SEMI_MAJOR_AXIS = 6378245.0;
+const ECCENTRICITY_SQUARED = 0.006693421622965943;
+
+const outsideChina = (longitude: number, latitude: number) =>
+  longitude < 72.004 ||
+  longitude > 137.8347 ||
+  latitude < 0.8293 ||
+  latitude > 55.8271;
+
+function transformLatitude(longitude: number, latitude: number) {
+  let result =
+    -100 +
+    2 * longitude +
+    3 * latitude +
+    0.2 * latitude * latitude +
+    0.1 * longitude * latitude +
+    0.2 * Math.sqrt(Math.abs(longitude));
+  result +=
+    ((20 * Math.sin(6 * longitude * Math.PI) +
+      20 * Math.sin(2 * longitude * Math.PI)) *
+      2) /
+    3;
+  result +=
+    ((20 * Math.sin(latitude * Math.PI) +
+      40 * Math.sin((latitude / 3) * Math.PI)) *
+      2) /
+    3;
+  return (
+    result +
+    ((160 * Math.sin((latitude / 12) * Math.PI) +
+      320 * Math.sin((latitude * Math.PI) / 30)) *
+      2) /
+      3
+  );
+}
+
+function transformLongitude(longitude: number, latitude: number) {
+  let result =
+    300 +
+    longitude +
+    2 * latitude +
+    0.1 * longitude * longitude +
+    0.1 * longitude * latitude +
+    0.1 * Math.sqrt(Math.abs(longitude));
+  result +=
+    ((20 * Math.sin(6 * longitude * Math.PI) +
+      20 * Math.sin(2 * longitude * Math.PI)) *
+      2) /
+    3;
+  result +=
+    ((20 * Math.sin(longitude * Math.PI) +
+      40 * Math.sin((longitude / 3) * Math.PI)) *
+      2) /
+    3;
+  return (
+    result +
+    ((150 * Math.sin((longitude / 12) * Math.PI) +
+      300 * Math.sin((longitude / 30) * Math.PI)) *
+      2) /
+      3
+  );
+}
+
+/** GCJ-02 → WGS-84；Apple 地图 URL 使用后者的纬度、经度顺序。 */
+function gcj02ToWgs84(longitude: number, latitude: number) {
+  if (outsideChina(longitude, latitude)) return { longitude, latitude };
+
+  const adjustedLongitude = longitude - 105;
+  const adjustedLatitude = latitude - 35;
+  let deltaLatitude = transformLatitude(adjustedLongitude, adjustedLatitude);
+  let deltaLongitude = transformLongitude(adjustedLongitude, adjustedLatitude);
+  const radians = (latitude / 180) * Math.PI;
+  const sine = Math.sin(radians);
+  const magic = 1 - ECCENTRICITY_SQUARED * sine * sine;
+  const rootMagic = Math.sqrt(magic);
+
+  deltaLatitude =
+    (deltaLatitude * 180) /
+    (((EARTH_SEMI_MAJOR_AXIS * (1 - ECCENTRICITY_SQUARED)) /
+      (magic * rootMagic)) *
+      Math.PI);
+  deltaLongitude =
+    (deltaLongitude * 180) /
+    ((EARTH_SEMI_MAJOR_AXIS / rootMagic) * Math.cos(radians) * Math.PI);
+
+  return {
+    longitude: longitude * 2 - (longitude + deltaLongitude),
+    latitude: latitude * 2 - (latitude + deltaLatitude),
+  };
+}
+
 const baiduDirectionParams = (point: LocationPoint) =>
   new URLSearchParams({
     origin: "我的位置",
@@ -407,6 +498,35 @@ export function buildAmapNavigationHref(point: LocationPoint): string {
     callnative: "1",
   });
   return `https://uri.amap.com/navigation?${params}`;
+}
+
+/**
+ * 苹果地图会在 iOS / iPadOS 打开系统地图。旧版 `daddr` 链接也能兼容较早
+ * 的 iOS，未给起点时由地图以当前位置开始驾车路线。
+ */
+export function buildAppleMapsNavigationHref(point: LocationPoint): string {
+  const gcj02 = bd09ToGcj02(point.longitude, point.latitude);
+  const destination = gcj02ToWgs84(gcj02.longitude, gcj02.latitude);
+  const params = new URLSearchParams({
+    daddr: `${destination.latitude},${destination.longitude}`,
+    dirflg: "d",
+  });
+  return `https://maps.apple.com/?${params}`;
+}
+
+/**
+ * iPadOS 桌面模式把 UA 伪装成 Mac，需要额外以 `MacIntel + 触点` 判断；普通
+ * 桌面浏览器不展示苹果地图，避免给 Android 用户一个无意义的选项。
+ */
+export function supportsAppleMaps(
+  userAgent = navigator.userAgent,
+  platform = navigator.platform,
+  maxTouchPoints = navigator.maxTouchPoints,
+) {
+  return (
+    /iPad|iPhone|iPod/.test(userAgent) ||
+    (platform === "MacIntel" && maxTouchPoints > 1)
+  );
 }
 
 /* ------------------------------------------------------------------ */

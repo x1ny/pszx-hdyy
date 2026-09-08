@@ -24,11 +24,14 @@ AK 是 Vite **构建时配置**。本地 `bun run build` 会读取 `apps/web/.en
 
 后台保存的是百度 BD-09 坐标。百度 URI 显式传 `coord_type=bd09ll`；高德 URI 在浏览器本地换算为 GCJ-02 后再传，不能把 BD-09 直接当作 GCJ-02 或 WGS84。
 
+苹果地图只在 iPhone、iPad 上显示，使用 Apple Maps URL 唤起系统地图，无需 Key 或后台配置。H5 会将 BD-09 依次换算为 GCJ-02、WGS-84，再按纬度、经度传入苹果地图；iPadOS 桌面模式也会被识别为 iPad。
+
 ## 官方参考
 
 - [JSAPI 4.0 准备工作](https://lbs.baidu.com/docs/jsapi?title=jsapi4/quickstart/prepare)
 - [百度地图调起 API（Web 端）](https://lbsyun.baidu.com/docs/webapi?title=mapadjustment%2Furi%2Fweb)
 - [高德 URI API：路径规划](https://lbs.amap.com/api/uri-api/guide/travel/route)
+- [Apple Maps URLs：路线](https://developer.apple.com/documentation/mapkit/unified-map-urls)
 - [GCJ-02 坐标模式](https://lbs.baidu.com/docs/jsapi?title=jsapi4/guide/map/gcj02)
 - [LocalSearch 搜索](https://lbs.baidu.com/jsapi/refdoc/v4/classes/BMap.LocalSearch.html)
 - [Geocoder 逆地理编码](https://lbs.baidu.com/jsapi/refdoc/v4/classes/BMap.Geocoder.html)

@@ -3,12 +3,15 @@ import { useState } from "react";
 import type { Car } from "../-queries";
 import {
   buildAmapNavigationHref,
+  buildAppleMapsNavigationHref,
   buildBaiduMapAppHref,
   buildBaiduNavigationHref,
   copyText,
   openMapAppWithFallback,
+  supportsAppleMaps,
 } from "../-utils";
 import amapMapIcon from "./amap-map-icon.jpg";
+import appleMapsIcon from "./apple-maps-icon.jpg";
 import baiduMapIcon from "./baidu-map-icon.jpg";
 import { Icon } from "./icon";
 import { useToast } from "./toast-layer";
@@ -32,6 +35,7 @@ export function NavigationPicker({
   const toast = useToast();
   const locationDescription = point.address || locationText;
   const baiduWebHref = buildBaiduNavigationHref(point);
+  const canUseAppleMaps = supportsAppleMaps();
 
   const copyLocation = async () => {
     const text = [point.name, locationDescription].filter(Boolean).join("\n");
@@ -108,6 +112,15 @@ export function NavigationPicker({
                     href={buildAmapNavigationHref(point)}
                     bordered
                   />
+                  {canUseAppleMaps && (
+                    <MapOption
+                      name="苹果地图"
+                      hint="使用系统地图驾车前往集合点"
+                      icon={appleMapsIcon}
+                      href={buildAppleMapsNavigationHref(point)}
+                      bordered
+                    />
+                  )}
                 </div>
 
                 <p className="mt-3 text-center text-caption text-ink-3">
