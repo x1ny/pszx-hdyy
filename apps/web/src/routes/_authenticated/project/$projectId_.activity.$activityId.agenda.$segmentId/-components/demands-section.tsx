@@ -385,6 +385,18 @@ function ResourceCard({
         !boundRelationIds.has(member.activityMemberId)),
   );
 
+  // 本环节内、可在此移除的绑定，按 memberKey 索引——多选框的勾选态就是它的键集合。
+  const boundKeyToBinding = new Map(
+    resource.bindings.flatMap((binding) =>
+      binding.inSegment && binding.memberKey !== null
+        ? [[binding.memberKey, binding] as const]
+        : [],
+    ),
+  );
+  const pickerValue = members
+    .filter((member) => boundKeyToBinding.has(member.key))
+    .map((member) => member.key);
+
   return (
     <div className="rounded-lg border bg-card p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -584,34 +596,58 @@ function ResourceCard({
             ) : null}
           </div>
 
-          {candidates.length > 0 ? (
+          {members.length > 0 ? (
             <div className="mt-2">
+              {/* 多选：下拉不随每次勾选关闭，勾一个立刻发一条绑定意图，取消勾选
+                  发一条解绑意图。触发器文案保持不变——已绑名单由上面的 Badge 呈现。 */}
               <Select
-                items={candidates.map((member) => ({
+                multiple
+                items={members.map((member) => ({
                   value: member.key,
                   label: member.name,
                 }))}
-                value=""
-                onValueChange={(value) => {
-                  const member = candidates.find((row) => row.key === value);
-                  if (member) onBindMember(member);
+                value={pickerValue}
+                onValueChange={(next: string[]) => {
+                  const nextSet = new Set(next);
+                  const prevSet = new Set(pickerValue);
+                  for (const key of next) {
+                    if (prevSet.has(key)) continue;
+                    const member = members.find((row) => row.key === key);
+                    if (member) onBindMember(member);
+                  }
+                  for (const key of pickerValue) {
+                    if (nextSet.has(key)) continue;
+                    const binding = boundKeyToBinding.get(key);
+                    if (binding) onUnbindMember(binding.key);
+                  }
                 }}
               >
                 <SelectTrigger className="w-56">
-                  <SelectValue placeholder="＋ 绑定本环节人员" />
+                  <SelectValue>
+                    {() => (
+                      <span className="text-muted-foreground">
+                        ＋ 绑定本环节人员
+                      </span>
+                    )}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {candidates.map((member) => (
+                  {members.map((member) => (
                     <SelectItem key={member.key} value={member.key}>
                       {member.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {candidates.length === 0 ? (
+                <p className="mt-2 text-muted-foreground text-xs">
+                  本环节的人都绑上了。要绑活动里的其他人，去资源台账页。
+                </p>
+              ) : null}
             </div>
           ) : (
             <p className="mt-2 text-muted-foreground text-xs">
-              本环节的人都绑上了。要绑活动里的其他人，去资源台账页。
+              本环节还没有人员，先在上面的"人员"里添加。
             </p>
           )}
         </div>
