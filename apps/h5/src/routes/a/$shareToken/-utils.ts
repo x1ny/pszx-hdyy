@@ -158,9 +158,7 @@ export function splitTimeRangeByDay(
     start.dayKey === end.dayKey ||
     dayKeys.length < 2
   ) {
-    return [
-      { dayKey: start.dayKey, startTime: start.time, endTime: end.time },
-    ];
+    return [{ dayKey: start.dayKey, startTime: start.time, endTime: end.time }];
   }
 
   // 结束时刻正好落在某日 00:00 时，前一天的 24:00 已经完整覆盖了这个
@@ -174,9 +172,7 @@ export function splitTimeRangeByDay(
     dayKey,
     startTime: index === 0 ? start.time : "00:00",
     endTime:
-      index === visibleDays.length - 1 && !endAtMidnight
-        ? end.time
-        : "24:00",
+      index === visibleDays.length - 1 && !endAtMidnight ? end.time : "24:00",
   }));
 }
 
@@ -216,6 +212,13 @@ const CN_NUM = ["一", "二", "三", "四", "五", "六", "七", "八", "九", "
 /** 第 1 天 → 「一」，超过十天退回阿拉伯数字，不硬凑「十一」。 */
 const dayOrdinal = (index: number) => CN_NUM[index] ?? String(index + 1);
 
+/** 两个 `YYYY-MM-DD` 日键之间相差几天。 */
+const dayDistance = (from: string, to: string) =>
+  Math.round(
+    (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) /
+      86400000,
+  );
+
 export function uniqueDays(days: string[]): string[] {
   return Array.from(new Set(days.filter(Boolean))).sort();
 }
@@ -223,18 +226,23 @@ export function uniqueDays(days: string[]): string[] {
 /**
  * 一天在列表里的标题。
  *
- * 有议程的那几天顺序编号「第 N 天」；只有交通没有议程的那天不占编号 —— 前一
- * 晚飞过来叫「出发日」、结束后返程叫「返程日」、夹在中间的空档叫「自由活动」。
- * 把它们也编成「第 N 天」会让嘉宾以为那天有安排。
+ * 以第一天有议程的日期为编号锚点，议程时间范围内的日期按日历顺序编号。这样
+ * 中间即使没有环节、只有交通行程，也仍然是「第 N 天」，不会出现一个让嘉宾
+ * 不理解的「自由活动」标签。议程开始前/结束后的交通日仍单独标为「出发日」/
+ * 「返程日」。
  */
 export function dayLabelOf(day: string, agendaDays: string[]): string {
-  const index = agendaDays.indexOf(day);
-  if (index >= 0) return `第${dayOrdinal(index)}天`;
   const first = agendaDays[0];
   const last = agendaDays[agendaDays.length - 1];
   if (first && day < first) return "出发日";
   if (last && day > last) return "返程日";
-  return "自由活动";
+  if (first) {
+    const distance = dayDistance(first, day);
+    if (Number.isFinite(distance) && distance >= 0) {
+      return `第${dayOrdinal(distance)}天`;
+    }
+  }
+  return "行程日";
 }
 
 /**

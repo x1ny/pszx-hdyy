@@ -24,7 +24,8 @@ import { type DayEntry, DayTimeline } from "./day-timeline";
  * 分天的口径（一律按 Asia/Shanghai，见 -utils）：
  * - 天数取「有议程的日子」∪「有交通的日子」—— 前一晚飞过来的航班因此有自己的
  *   一张日卡，而不是孤零零挂在另一个页签里。
- * - 标题见 `dayLabelOf`（第 N 天 / 出发日 / 返程日 / 自由活动）。
+ * - 标题见 `dayLabelOf`（第 N 天 / 出发日 / 返程日 / 行程日）。议程日期范围内
+ *   的空档日也按日历顺序占用「第 N 天」，不显示「自由活动」。
  * - 比基准日早的那几天默认折叠；只有一天时不套日卡的壳。
  */
 export function ScheduleList({
@@ -88,10 +89,7 @@ export function ScheduleList({
     };
 
     for (const item of agenda) {
-      for (const part of splitTimeRangeByDay(
-        item.startTime,
-        item.endTime,
-      )) {
+      for (const part of splitTimeRangeByDay(item.startTime, item.endTime)) {
         push(part.dayKey, {
           kind: "agenda",
           key: `agenda-${item.id}-${part.dayKey}`,
