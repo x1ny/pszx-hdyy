@@ -453,7 +453,7 @@ export function MemberPickerDialog({
           ) : null}
 
           <TabsContent
-            className="min-h-0 flex-1 overflow-hidden"
+            className="min-h-0 flex flex-1 flex-col overflow-hidden"
             value="members"
           >
             <DialogBody className="flex flex-col gap-4">
@@ -629,7 +629,7 @@ export function MemberPickerDialog({
 
           {organization ? (
             <TabsContent
-              className="min-h-0 flex-1 overflow-hidden"
+              className="min-h-0 flex flex-1 flex-col overflow-hidden"
               value="organization"
             >
               <DialogBody className="flex flex-col gap-4">

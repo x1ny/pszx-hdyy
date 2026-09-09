@@ -116,6 +116,13 @@ function chooseOption(option: string) {
 }
 
 describe("MemberPickerDialog organization mode", () => {
+  it("让选人内容在弹窗剩余高度内滚动，底部操作栏保持可见", () => {
+    renderPicker();
+    fireEvent.click(screen.getByRole("tab", { name: "按团体添加" }));
+
+    expect(screen.getByRole("tabpanel")).toHaveClass("flex", "flex-col");
+  });
+
   it("选中团体后在触发器中回显团体名称", async () => {
     renderPicker();
     fireEvent.click(screen.getByRole("tab", { name: "按团体添加" }));
