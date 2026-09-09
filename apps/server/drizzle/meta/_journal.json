@@ -43,6 +43,13 @@
       "when": 1788849063260,
       "tag": "0005_brown_omega_flight",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788924857314,
+      "tag": "0006_lucky_madelyne_pryor",
+      "breakpoints": true
     }
   ]
 }

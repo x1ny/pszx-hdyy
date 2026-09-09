@@ -1,0 +1,2 @@
+ALTER TABLE "activity_venue" DROP CONSTRAINT "uk_activity_venue_source";--> statement-breakpoint
+CREATE UNIQUE INDEX "uk_activity_venue_source" ON "activity_venue" USING btree ("activity_id","source_venue_id") WHERE "activity_venue"."status" = 'active';

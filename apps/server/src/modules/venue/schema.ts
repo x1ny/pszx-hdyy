@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   bigint,
   foreignKey,
@@ -8,6 +9,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { user } from "../auth/schema";
 import { activity } from "../project/schema";
@@ -346,14 +348,13 @@ export const activityVenue = pgTable(
     index("idx_activity_venue_activity").on(table.activityId),
 
     /**
-     * 同一个场地不重复导入。**打在 sourceVenueId 上**，而 Postgres 的唯一约束
-     * 不约束 NULL——所以场地库那边删了源场地（这一列变 null）之后，多份"来源
-     * 已失效"的拷贝可以共存，正好是想要的行为。
+     * 当前空间里同一个场地只能有一份 active 快照；disabled 行是历史快照，允许
+     * 同一个来源留下多份。重新引用时必须新建快照，不能把旧行改活，否则作废方案
+     * 仍指向的区域会被新场地数据覆盖，历史就不再可追溯。
      */
-    unique("uk_activity_venue_source").on(
-      table.activityId,
-      table.sourceVenueId,
-    ),
+    uniqueIndex("uk_activity_venue_source")
+      .on(table.activityId, table.sourceVenueId)
+      .where(sql`${table.status} = 'active'`),
 
     // 给 activity_venue_zone 的复合外键当靶子。
     unique("uk_activity_venue_id_activity").on(table.id, table.activityId),

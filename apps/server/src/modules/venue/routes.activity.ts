@@ -1,4 +1,4 @@
-import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../../infra/db";
 import { err, ok } from "../../shared/result";
@@ -194,7 +194,8 @@ export const activityVenueRoutes = new Hono<{ Variables: AuthedVariables }>()
    * 从场地库导入一个场地。整份拷贝：主记录、画布 blob、全部区域。
    *
    * 入参只有两个 id，拷什么由服务端当场从场地库读——让前端传的话，这份快照
-   * 到底快照了哪一刻就说不清了。
+   * 到底快照了哪一刻就说不清了。若同一来源只有 disabled 历史快照，这里会新建
+   * 一份 active 快照，而不是恢复旧行，以免作废方案看到的历史区域被覆盖。
    */
   .post("/import", jsonBody(ImportActivityVenueInput), async (c) => {
     const { activityId, venueId } = c.req.valid("json");
@@ -211,41 +212,37 @@ export const activityVenueRoutes = new Hono<{ Variables: AuthedVariables }>()
         .from(venue)
         .where(eq(venue.id, venueId));
       if (!source) return { ok: false as const, error: "场地不存在" };
-      const [dup] = await tx
-        .select({ id: activityVenue.id, status: activityVenue.status })
+      const [activeDup] = await tx
+        .select({ id: activityVenue.id })
         .from(activityVenue)
         .where(
           and(
             eq(activityVenue.activityId, activityId),
             eq(activityVenue.sourceVenueId, venueId),
+            eq(activityVenue.status, "active"),
           ),
         );
-      if (dup) {
-        if (dup.status === "disabled") {
-          const [restored] = await tx
-            .update(activityVenue)
-            .set({ status: "active", updatedBy: userId })
-            .where(eq(activityVenue.id, dup.id))
-            .returning(activityVenueFields);
-          if (!restored) return { ok: false as const, error: "恢复失败" };
-
-          const existingZones = await tx
-            .select({ id: activityVenueZone.id })
-            .from(activityVenueZone)
-            .where(eq(activityVenueZone.activityVenueId, restored.id));
-
-          return {
-            ok: true as const,
-            venue: restored,
-            zones: existingZones.length,
-          };
-        }
-
+      if (activeDup) {
         return { ok: false as const, error: "这个场地已经引用过了" };
       }
       if (source.status === "disabled") {
         return { ok: false as const, error: "该场地已停用，不能引用" };
       }
+
+      // 只继承活动层自己的说明和显示顺序；名称、地址、区域和画布都从源场地
+      // 重新拷贝。旧 disabled 行保留给作废方案和操作日志继续读取。
+      const [previous] = await tx
+        .select({ ordinal: activityVenue.ordinal, note: activityVenue.note })
+        .from(activityVenue)
+        .where(
+          and(
+            eq(activityVenue.activityId, activityId),
+            eq(activityVenue.sourceVenueId, venueId),
+            eq(activityVenue.status, "disabled"),
+          ),
+        )
+        .orderBy(desc(activityVenue.updatedAt), desc(activityVenue.id))
+        .limit(1);
 
       const [maxRow] = await tx
         .select({
@@ -261,7 +258,8 @@ export const activityVenueRoutes = new Hono<{ Variables: AuthedVariables }>()
           sourceVenueId: venueId,
           name: source.name,
           address: source.address,
-          ordinal: maxRow?.next ?? 0,
+          note: previous?.note ?? null,
+          ordinal: previous?.ordinal ?? maxRow?.next ?? 0,
           createdBy: userId,
           updatedBy: userId,
         })
@@ -357,8 +355,8 @@ export const activityVenueRoutes = new Hono<{ Variables: AuthedVariables }>()
    * 快照引用。物理删除会撞 `segment_seating_plan -> activity_venue_zone` 外键，
    * 而且会让历史排位失去可追溯的场地名称、区域和画布。
    *
-   * 列表和统计只读 `active` 场地，所以调用方看到的效果仍然是移除；保留下来的
-   * `disabled` 行可以在重新引用同一个场地时恢复，避免唯一键让用户无法找回快照。
+   * 列表和统计只读 `active` 场地，所以调用方看到的效果仍然是移除；重新引用同一
+   * 来源时会新建一份 active 快照，旧 `disabled` 行继续保留给历史排位读取。
    */
   .post("/remove", jsonBody(ActivityVenueIdInput), async (c) => {
     const [row] = await db
