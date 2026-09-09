@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
 import { Skeleton } from "#/shared/components/ui/skeleton.tsx";
 import { ActivityVenueCanvasEditorView } from "./-components/activity-venue-canvas-editor-view";
 import { ActivityZoneDialog } from "./-components/activity-zone-dialog";
@@ -11,9 +12,14 @@ import {
   updateActivityVenueZone,
 } from "./-venue-queries";
 
+const EditorSearchSchema = z.object({
+  from: z.literal("activity").optional().catch(undefined),
+});
+
 export const Route = createFileRoute(
-  "/_authenticated/project/$projectId_/activity/$activityId/venue/$activityVenueId",
+  "/_authenticated/project/$projectId_/activity/$activityId_/venue/$activityVenueId",
 )({
+  validateSearch: EditorSearchSchema,
   loader: ({ context, params }) =>
     context.queryClient.ensureQueryData(
       activityVenueLayoutQueryOptions(Number(params.activityVenueId)),
@@ -24,7 +30,9 @@ export const Route = createFileRoute(
 /**
  * 活动空间的画布编辑页。跟场地库的 `/venue/$venueId/layout` 是同一个层级
  * ——概览页（多个活动场地的只读快照+业务字段表格）负责"选哪个场地"，
- * 这一页才是真正动几何的地方，进来一个只编辑一个。
+ * 这一页才是真正动几何的地方，进来一个只编辑一个。文件名里的
+ * `$activityId_` 是 TanStack Router 的非嵌套标记：URL 不变，但编辑器不再
+ * 渲染活动详情的头部和标签栏；进入区域后的座位编辑也因此获得完整空间。
  */
 function ActivityVenueLayoutPage() {
   const {
@@ -32,6 +40,7 @@ function ActivityVenueLayoutPage() {
     activityId,
     activityVenueId: activityVenueIdParam,
   } = Route.useParams();
+  const { from } = Route.useSearch();
   const activityVenueId = Number(activityVenueIdParam);
   const queryClient = useQueryClient();
 
@@ -85,6 +94,7 @@ function ActivityVenueLayoutPage() {
         bundle={bundle}
         onSaved={invalidate}
         onOpenBusinessFields={setBusinessFieldsZoneId}
+        from={from}
       />
 
       <ActivityZoneDialog

@@ -98,7 +98,11 @@ export const Route = createFileRoute(
  */
 function SeatingPage() {
   const { projectId, activityId: activityIdParam } = Route.useParams();
-  const { zoneId: fromZoneId, segmentId: fromSegmentId } = Route.useSearch();
+  const {
+    from,
+    zoneId: fromZoneId,
+    segmentId: fromSegmentId,
+  } = Route.useSearch();
   const activityId = Number(activityIdParam);
   const navigate = Route.useNavigate();
   const queryClient = useQueryClient();
@@ -174,6 +178,7 @@ function SeatingPage() {
           activityId: activityIdParam,
           planId: String(result.plan.id),
         },
+        search: from ? { from } : {},
       });
     },
     onError: (error) => toast.error(error.message),
@@ -429,6 +434,7 @@ function SeatingPage() {
                               activityId: activityIdParam,
                               planId: String(row.plan.id),
                             }}
+                            search={from ? { from } : {}}
                             className={cn(
                               buttonVariants({ variant: "ghost", size: "sm" }),
                             )}

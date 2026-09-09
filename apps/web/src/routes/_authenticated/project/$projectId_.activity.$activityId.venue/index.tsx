@@ -66,6 +66,7 @@ export const Route = createFileRoute(
  */
 function ActivityVenuePage() {
   const { projectId, activityId: activityIdParam } = Route.useParams();
+  const { from } = Route.useSearch();
   const activityId = Number(activityIdParam);
   const queryClient = useQueryClient();
 
@@ -241,6 +242,7 @@ function ActivityVenuePage() {
                   onSelectZone={setSelectedExternalId}
                   projectId={projectId}
                   activityId={activityIdParam}
+                  from={from}
                   onRemove={() => {
                     const hasActivePlan = (
                       zonesByVenue.get(venue.id) ?? []
@@ -426,6 +428,7 @@ function VenueSection({
   removing,
   projectId,
   activityId,
+  from,
 }: {
   venue: ActivityVenueRow;
   zones: ActivityVenueZoneRow[];
@@ -436,6 +439,7 @@ function VenueSection({
   removing: boolean;
   projectId: string;
   activityId: string;
+  from?: "activity";
 }) {
   const doc = useMemo(
     () => (layout ? parseSpaceLayout(layout.data) : null),
@@ -468,6 +472,7 @@ function VenueSection({
         <Link
           to="/project/$projectId/activity/$activityId/venue/$activityVenueId"
           params={{ projectId, activityId, activityVenueId: String(venue.id) }}
+          search={from ? { from } : {}}
           className={cn(
             buttonVariants({ variant: "ghost", size: "icon-sm" }),
             "text-muted-foreground",

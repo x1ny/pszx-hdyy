@@ -61,6 +61,7 @@ export function ActivityVenueCanvasEditorView({
   bundle,
   onSaved,
   onOpenBusinessFields,
+  from,
 }: {
   activityVenueId: number;
   projectId: string;
@@ -69,6 +70,7 @@ export function ActivityVenueCanvasEditorView({
   onSaved: () => void;
   /** 打开"活动用途/可用点位"那个业务字段弹窗（现成的 `ActivityZoneDialog`）。 */
   onOpenBusinessFields: (zoneId: number) => void;
+  from?: "activity";
 }) {
   const initialDoc = useMemo<CanvasDoc>(() => {
     if (!bundle.layout) return emptyCanvasDoc();
@@ -171,6 +173,7 @@ export function ActivityVenueCanvasEditorView({
           <Link
             to="/project/$projectId/activity/$activityId/venue"
             params={{ projectId, activityId }}
+            search={from ? { from } : {}}
             className={cn(
               buttonVariants({ variant: "ghost", size: "icon" }),
               "text-muted-foreground",

@@ -95,6 +95,7 @@ export const Route = createFileRoute(
 
 function SegmentConfigPage() {
   const params = Route.useParams();
+  const { from } = Route.useSearch();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -406,6 +407,7 @@ function SegmentConfigPage() {
                     projectId: params.projectId,
                     activityId: params.activityId,
                   },
+                  search: from ? { from } : {},
                 }
               : {
                   to: "/project/$projectId/activity/$activityId/seating/$planId",
@@ -414,6 +416,7 @@ function SegmentConfigPage() {
                     activityId: params.activityId,
                     planId: String(planId),
                   },
+                  search: from ? { from } : {},
                 },
           )
         }

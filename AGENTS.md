@@ -183,7 +183,8 @@ bun run typecheck && bun run test
 
 库清单看 `package.json`，这里只写**从代码里看不出来的约束**：
 
-- **`routeTree.gen.ts` 是生成物，绝对不要手改。** 两个 `vite.config.ts` 里 `tanstackRouter()` 都必须排在 `viteReact()` 前面，否则生成的路由不过 React 转换。
+- **`routeTree.gen.ts` 是生成物，不手改。** `tanstackRouter()` 要先于 `viteReact()`。
+- 大画布编辑器路由用父动态参数尾 `_` 脱离详情布局以节省空间，URL 不变。
 - **表单用 TanStack Form，不用 react-hook-form。** 输入组件全是 Base UI **受控**组件，用 RHF 的话每个 Select 都得包 `Controller`；而 shadcn 的 `base-vega` 注册表根本没有 `form.tsx`，RHF 那点集成优势拿不到。TanStack Form 受控优先、原生吃 Standard Schema（zod 4 直接当 validator），校验错误是 `StandardSchemaV1Issue[]`，正好喂给 `ui/field.tsx` 的 `<FieldError errors={…} />`。
 - **Biome 的缩进：TS/TSX 是 2 空格，不是 tab**——`biome.json` 顶层的 `formatter.indentStyle: "tab"` 被 `javascript.formatter.indentStyle: "space"` 覆盖了，只有 json 之类才是 tab。字符串双引号。
 - **不要把 `bun run check` 当收尾检查。** 根脚本实际是 `biome check --write`，不传路径会扫描并重写全仓所有纳入 Biome 的文件；Windows 上 `core.autocrlf=true` 还会把它放大成大量无关修改标记。日常收尾只跑 `bunx biome check <本次修改文件...>`（不带 `--write`）。确实要全仓格式化时先确认工作树干净，执行后立刻 `git diff --name-only` 核对范围。

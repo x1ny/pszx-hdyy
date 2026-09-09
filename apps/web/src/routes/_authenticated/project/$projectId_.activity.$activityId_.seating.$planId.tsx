@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
 import { canvasEditor } from "#/features/venue-editor/canvas";
 import { initialState } from "#/features/venue-editor/canvas/core/history";
 import {
@@ -66,14 +67,22 @@ import {
   PLAN_STATUS_LABELS,
 } from "./-venue-utils";
 
+const EditorSearchSchema = z.object({
+  from: z.literal("activity").optional().catch(undefined),
+});
+
 export const Route = createFileRoute(
-  "/_authenticated/project/$projectId_/activity/$activityId/seating/$planId",
+  "/_authenticated/project/$projectId_/activity/$activityId_/seating/$planId",
 )({
+  validateSearch: EditorSearchSchema,
   component: SeatingCanvasPage,
 });
 
 /**
  * 环节排位画布。
+ *
+ * 文件名里的 `$activityId_` 是非嵌套标记：保留原来的 URL 和活动权限归属，
+ * 但不把排位编辑器挂到活动详情布局下面，避免活动头部和标签栏挤占画布空间。
  *
  * **这里不能再编辑几何**——布局已经在活动空间那份拷贝里定了下来，进了排位
  * 阶段，画布唯一的用途是选中一个位置、在右边把人放上去。`ZoneSeatingEditor`
@@ -87,6 +96,7 @@ export const Route = createFileRoute(
  */
 function SeatingCanvasPage() {
   const { projectId, activityId, planId: planIdParam } = Route.useParams();
+  const { from } = Route.useSearch();
   const planId = Number(planIdParam);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -536,6 +546,7 @@ function SeatingCanvasPage() {
     navigate({
       to: "/project/$projectId/activity/$activityId/seating",
       params: { projectId, activityId },
+      search: from ? { from } : {},
     });
 
   // 非全屏时提示沿用页面里的原位置；全屏的可视壳只覆盖 ZoneSeatingEditor，
