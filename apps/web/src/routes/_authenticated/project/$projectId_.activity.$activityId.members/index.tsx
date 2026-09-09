@@ -453,13 +453,11 @@ function ActivityMembersPage() {
       </FilterBar>
 
       <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
-        <Table className="min-w-[1240px]">
+        <Table className="min-w-[1000px]">
           <TableHeader className="bg-muted/60">
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-16 text-center">序号</TableHead>
               <TableHead className="min-w-44">人员</TableHead>
-              <TableHead className="min-w-28">来源</TableHead>
-              <TableHead className="min-w-28">分组</TableHead>
               <TableHead className="min-w-24">负责人</TableHead>
               <TableHead className="min-w-28">录入渠道</TableHead>
               <TableHead className="min-w-52">参与环节</TableHead>
@@ -472,7 +470,7 @@ function ActivityMembersPage() {
               Array.from({ length: 5 }, (_, index) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
                 <TableRow key={index}>
-                  {Array.from({ length: 9 }, (_, cell) => (
+                  {Array.from({ length: 7 }, (_, cell) => (
                     // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
                     <TableCell key={cell}>
                       <Skeleton className="h-5 w-full" />
@@ -482,7 +480,7 @@ function ActivityMembersPage() {
               ))
             ) : list.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9}>
+                <TableCell colSpan={7}>
                   <Empty className="border-0">
                     <EmptyHeader>
                       <EmptyMedia variant="icon">
@@ -510,8 +508,6 @@ function ActivityMembersPage() {
                         .join(" · ") || "-"}
                     </div>
                   </TableCell>
-                  <TableCell>{row.source || "-"}</TableCell>
-                  <TableCell>{row.groupName || "-"}</TableCell>
                   <TableCell>{row.ownerName || "-"}</TableCell>
                   <TableCell>
                     <Badge variant="secondary" className="font-normal">
@@ -955,10 +951,6 @@ function ActivityMemberDetailContent({ id }: { id: number }) {
 
       <DetailCard title="当前活动关系">
         <dl className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
-          <DetailField label="来源">{displayValue(detail.source)}</DetailField>
-          <DetailField label="分组">
-            {displayValue(detail.groupName)}
-          </DetailField>
           <DetailField label="负责人">
             {displayValue(detail.ownerName)}
           </DetailField>
@@ -983,6 +975,7 @@ function ActivityMemberDetailContent({ id }: { id: number }) {
 
       <MemberDetailDialog
         memberId={masterMemberId}
+        hideActivityRelationFields
         onOpenChange={(open) => {
           if (!open) setMasterMemberId(undefined);
         }}

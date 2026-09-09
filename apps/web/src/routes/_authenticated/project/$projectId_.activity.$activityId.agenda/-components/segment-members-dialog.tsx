@@ -238,8 +238,6 @@ export function SegmentMembersDialog({
                   <TableRow className="hover:bg-transparent">
                     <TableHead className="min-w-40">人员</TableHead>
                     <TableHead className="w-40">环节身份</TableHead>
-                    <TableHead className="min-w-28">来源</TableHead>
-                    <TableHead className="min-w-28">分组</TableHead>
                     <TableHead className="min-w-24">负责人</TableHead>
                     <TableHead className="min-w-28">录入渠道</TableHead>
                     <TableHead className="w-20 text-center">操作</TableHead>
@@ -250,7 +248,7 @@ export function SegmentMembersDialog({
                     Array.from({ length: 3 }, (_, index) => (
                       // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
                       <TableRow key={index}>
-                        {Array.from({ length: 7 }, (_, cell) => (
+                        {Array.from({ length: 5 }, (_, cell) => (
                           // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
                           <TableCell key={cell}>
                             <Skeleton className="h-5 w-full" />
@@ -260,7 +258,7 @@ export function SegmentMembersDialog({
                     ))
                   ) : list.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7}>
+                      <TableCell colSpan={5}>
                         <Empty className="border-0">
                           <EmptyHeader>
                             <EmptyMedia variant="icon">
@@ -306,8 +304,6 @@ export function SegmentMembersDialog({
                             </SelectContent>
                           </Select>
                         </TableCell>
-                        <TableCell>{row.source || "-"}</TableCell>
-                        <TableCell>{row.groupName || "-"}</TableCell>
                         <TableCell>{row.ownerName || "-"}</TableCell>
                         <TableCell>
                           <div className="flex flex-col items-start gap-1">

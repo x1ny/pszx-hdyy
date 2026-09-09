@@ -58,12 +58,14 @@ const FIELD_GRID =
 type MemberDetailDialogProps = {
   member?: Member;
   memberId?: number;
+  hideActivityRelationFields?: boolean;
   onOpenChange: (open: boolean) => void;
 };
 
 export function MemberDetailDialog({
   member: providedMember,
   memberId,
+  hideActivityRelationFields = false,
   onOpenChange,
 }: MemberDetailDialogProps) {
   const requestedId = providedMember?.id ?? memberId ?? 0;
@@ -161,7 +163,10 @@ export function MemberDetailDialog({
               )}
 
               <Section title="参与信息">
-                <ParticipationList memberId={member.id} />
+                <ParticipationList
+                  memberId={member.id}
+                  hideActivityRelationFields={hideActivityRelationFields}
+                />
               </Section>
 
               <Section title="行程信息">
@@ -246,7 +251,13 @@ const groupIndex = (index: number) =>
  * 时也要渲染（Dialog 靠 open 控制），写在外面就得挂 `enabled: !!member` 再处理
  * id 可能不存在的类型。渲染在 `member &&` 里面的子组件天然拿得到确定的 id。
  */
-function ParticipationList({ memberId }: { memberId: number }) {
+function ParticipationList({
+  memberId,
+  hideActivityRelationFields,
+}: {
+  memberId: number;
+  hideActivityRelationFields: boolean;
+}) {
   const { data, isPending } = useQuery(
     memberParticipationQueryOptions(memberId),
   );
@@ -278,7 +289,12 @@ function ParticipationList({ memberId }: { memberId: number }) {
   return (
     <div className="flex flex-col gap-4">
       {list.map((group, index) => (
-        <ProjectGroup group={group} index={index} key={group.projectId} />
+        <ProjectGroup
+          group={group}
+          hideActivityRelationFields={hideActivityRelationFields}
+          index={index}
+          key={group.projectId}
+        />
       ))}
     </div>
   );
@@ -286,9 +302,11 @@ function ParticipationList({ memberId }: { memberId: number }) {
 
 function ProjectGroup({
   group,
+  hideActivityRelationFields,
   index,
 }: {
   group: MemberParticipation;
+  hideActivityRelationFields: boolean;
   index: number;
 }) {
   return (
@@ -321,8 +339,12 @@ function ProjectGroup({
                 {/* 活动时间最宽的形态是跨天的 `2026/09/01 09:00 - 09/05 18:00`，
                     min-w 卡在不换行的下限上，其余列才好挤。 */}
                 <TableHead className="min-w-44">活动时间</TableHead>
-                <TableHead className="min-w-20">人员分组</TableHead>
-                <TableHead className="min-w-20">人员来源</TableHead>
+                {!hideActivityRelationFields && (
+                  <>
+                    <TableHead className="min-w-20">人员分组</TableHead>
+                    <TableHead className="min-w-20">人员来源</TableHead>
+                  </>
+                )}
                 <TableHead className="min-w-28">参与环节</TableHead>
               </TableRow>
             </TableHeader>
@@ -351,8 +373,12 @@ function ProjectGroup({
                   <TableCell className="tabular-nums">
                     {formatDateTimeRange(row.startTime, row.endTime)}
                   </TableCell>
-                  <TableCell>{row.groupName || "-"}</TableCell>
-                  <TableCell>{row.source || "-"}</TableCell>
+                  {!hideActivityRelationFields && (
+                    <>
+                      <TableCell>{row.groupName || "-"}</TableCell>
+                      <TableCell>{row.source || "-"}</TableCell>
+                    </>
+                  )}
                   <TableCell>
                     {row.segmentNames.length > 0
                       ? row.segmentNames.join("、")

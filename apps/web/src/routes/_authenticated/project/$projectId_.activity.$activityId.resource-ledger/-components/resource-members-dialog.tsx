@@ -125,7 +125,6 @@ export function ResourceMembersDialog({
                       <TableHead>姓名</TableHead>
                       <TableHead>手机号</TableHead>
                       <TableHead>单位 / 职务</TableHead>
-                      <TableHead>分组</TableHead>
                       <TableHead className="text-center">操作</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -139,7 +138,6 @@ export function ResourceMembersDialog({
                           {row.mobile || "-"}
                         </TableCell>
                         <TableCell>{row.companyPosition || "-"}</TableCell>
-                        <TableCell>{row.groupName || "-"}</TableCell>
                         <TableCell className="text-center">
                           <div className="inline-flex items-center gap-1">
                             <Button

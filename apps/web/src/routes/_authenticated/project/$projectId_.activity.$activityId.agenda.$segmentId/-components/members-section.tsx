@@ -125,8 +125,6 @@ export function MembersSection({
                 <TableHead className="min-w-16">性别</TableHead>
                 <TableHead className="min-w-32">手机号码</TableHead>
                 <TableHead className="min-w-40">企业（社会）职务</TableHead>
-                <TableHead className="min-w-28">团体</TableHead>
-                <TableHead className="min-w-28">来源</TableHead>
                 <TableHead className="min-w-40">环节身份</TableHead>
                 <TableHead className="min-w-24">负责人</TableHead>
                 <TableHead className="w-20">操作</TableHead>
@@ -146,8 +144,6 @@ export function MembersSection({
                   <TableCell>{row.gender ?? "-"}</TableCell>
                   <TableCell>{row.mobile ?? "-"}</TableCell>
                   <TableCell>{row.companyPosition ?? "-"}</TableCell>
-                  <TableCell>{row.groupName ?? "-"}</TableCell>
-                  <TableCell>{row.source ?? "-"}</TableCell>
                   <TableCell>
                     <Select
                       items={ROLE_ITEMS}
@@ -189,7 +185,7 @@ export function MembersSection({
       )}
 
       <p className="mt-3 text-muted-foreground text-xs">
-        团体、来源、负责人继承自活动人员，本页只维护环节身份。
+        负责人继承自活动，本页只维护环节身份。
       </p>
 
       <MemberPickerDialog
