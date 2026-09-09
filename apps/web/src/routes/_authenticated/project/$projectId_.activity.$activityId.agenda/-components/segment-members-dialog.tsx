@@ -210,7 +210,7 @@ export function SegmentMembersDialog({
             <div className="flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-muted-foreground text-sm">
               <InfoIcon className="mt-0.5 size-4 shrink-0" />
               <p>
-                可以直接从全量人员库选人，不需要先到活动人员页配置。选中的人若还不在本活动或本项目内，系统会自动补齐这两层关系，并把录入渠道记为「环节入口补齐」。
+                可以直接从全量人员库选人，不需要先到「人员名单」页配置。选中的人若还不在本活动或本项目内，系统会自动补齐这两层关系，并把录入渠道记为「环节入口补齐」。
               </p>
             </div>
 

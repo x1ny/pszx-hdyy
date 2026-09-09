@@ -3,9 +3,7 @@ import { UsersRoundIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { MemberPickerDialog } from "#/features/member/member-picker-dialog.tsx";
-import {
-  resourceTypeLabel,
-} from "#/features/resource/labels.ts";
+import { resourceTypeLabel } from "#/features/resource/labels.ts";
 import {
   activityResourceDetailQueryOptions,
   activityResourceKeys,
@@ -95,9 +93,7 @@ export function ResourceMembersDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>
-              服务名单：{resource?.name ?? "-"}
-            </DialogTitle>
+            <DialogTitle>服务名单：{resource?.name ?? "-"}</DialogTitle>
             <DialogDescription>
               {resource
                 ? `${resourceTypeLabel(resource)} · 绑定后这条安排就算落实到人，关联的环节需求会从"配置中"变成"已配置"。`
@@ -116,7 +112,7 @@ export function ResourceMembersDialog({
                   </EmptyMedia>
                   <EmptyTitle>还没有绑定人员</EmptyTitle>
                   <EmptyDescription>
-                    从活动人员库里选人。人不在库里的话，先到「活动人员」标签页
+                    从活动人员库里选人。人不在库里的话，先到「人员名单」页
                     把他加进这场活动。
                   </EmptyDescription>
                 </EmptyHeader>

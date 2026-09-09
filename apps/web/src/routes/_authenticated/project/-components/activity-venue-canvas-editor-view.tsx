@@ -178,7 +178,7 @@ export function ActivityVenueCanvasEditorView({
               buttonVariants({ variant: "ghost", size: "icon" }),
               "text-muted-foreground",
             )}
-            aria-label="返回场地空间"
+            aria-label="返回活动场地"
           >
             <ArrowLeftIcon />
           </Link>

@@ -216,7 +216,7 @@ function TripPage() {
     <div className="flex flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="font-semibold text-lg">人员行程管理</h2>
+          <h2 className="font-semibold text-lg">交通行程</h2>
           <p className="text-muted-foreground text-sm">
             维护本活动参与人员的出发、到达及交通信息。
           </p>

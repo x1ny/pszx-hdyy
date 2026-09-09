@@ -246,7 +246,7 @@ function SeatingPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-semibold text-lg tracking-tight">排位</h2>
+          <h2 className="font-semibold text-lg tracking-tight">座位安排</h2>
           <p className="text-muted-foreground text-sm">
             按环节各自一份方案 · 共 {visible.length} 个开启排位的环节
           </p>
@@ -277,7 +277,7 @@ function SeatingPage() {
             className={cn(buttonVariants({ variant: "outline" }))}
           >
             <ExternalLinkIcon />
-            场地空间
+            活动场地
           </Link>
         </div>
       </div>
@@ -285,7 +285,7 @@ function SeatingPage() {
       {fromZoneId && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-4 py-2 text-sm">
           <span className="text-muted-foreground">
-            从场地空间的「
+            从「活动场地」的「
             {spaceQuery.data?.zones.find((z) => z.id === fromZoneId)?.name ??
               "某个区域"}
             」进来——给下面任一环节点「选择区域」时，它会排在最前面。

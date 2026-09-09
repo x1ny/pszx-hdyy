@@ -462,7 +462,7 @@ function ResourceLedgerTab() {
                       <EmptyTitle>还没有资源记录</EmptyTitle>
                       <EmptyDescription>
                         资源安排归属活动，不归属环节——一辆接站车可以同时服务
-                        多个环节。点右上角新增，或从「资源需求」页的待办直接
+                        多个环节。点右上角新增，或从「需求总览」页的待办直接
                         带参过来。
                       </EmptyDescription>
                     </EmptyHeader>

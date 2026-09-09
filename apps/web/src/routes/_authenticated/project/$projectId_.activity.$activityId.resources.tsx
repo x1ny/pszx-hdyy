@@ -97,9 +97,8 @@ function ResourceSummaryTab() {
 
   // 筛选控件全部先落在草稿 state 上，点「查询」才写进 URL——这一页的筛选虽然是
   // 前端算的（不发请求），交互也跟其它列表页保持一致，见 filter-bar.tsx。
-  const [resourceTypeDraft, setResourceTypeDraft] = useState<ResourceType | null>(
-    search.resourceType ?? null,
-  );
+  const [resourceTypeDraft, setResourceTypeDraft] =
+    useState<ResourceType | null>(search.resourceType ?? null);
   const [statusDraft, setStatusDraft] = useState<DemandStatus | null>(
     search.status ?? null,
   );
@@ -289,7 +288,7 @@ function ResourceSummaryTab() {
                       </EmptyTitle>
                       <EmptyDescription>
                         {all.length === 0
-                          ? "资源需求由环节声明产生。到「议程 / 环节」标签页，在环节行上点「资源需求」按需开启用车、用餐、住宿或物料。"
+                          ? "资源需求由环节声明产生。到「活动议程」页，在环节行上点「资源需求」按需开启用车、用餐、住宿或物料。"
                           : "换个筛选条件试试，或点上面的重置。"}
                       </EmptyDescription>
                     </EmptyHeader>

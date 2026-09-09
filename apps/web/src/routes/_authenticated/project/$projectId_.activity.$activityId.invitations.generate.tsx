@@ -557,7 +557,7 @@ function GeneratePage() {
                             </EmptyMedia>
                             <EmptyTitle>没有可邀请的活动人员</EmptyTitle>
                             <EmptyDescription>
-                              先到「活动人员」页把人加进来，邀请函只能发给本活动人员。
+                              先到「人员名单」页把人加进来，邀请函只能发给本活动人员。
                             </EmptyDescription>
                           </EmptyHeader>
                         </Empty>

@@ -68,7 +68,7 @@ export function SeatingZonePicker({
             </div>
           ) : zones.length === 0 ? (
             <p className="py-10 text-center text-muted-foreground text-sm">
-              本活动还没有可用的区域。先去「场地空间」从场地库引用一个场地。
+              本活动还没有可用的区域。先去「活动场地」从场地库引用一个场地。
             </p>
           ) : (
             zones.map((zone) => (

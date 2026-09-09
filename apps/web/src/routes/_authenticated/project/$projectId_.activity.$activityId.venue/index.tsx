@@ -169,7 +169,7 @@ function ActivityVenuePage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-semibold text-lg tracking-tight">场地空间</h2>
+          <h2 className="font-semibold text-lg tracking-tight">活动场地</h2>
           <p className="text-muted-foreground text-sm">
             已引用 {venues.length} 个场地 · 共 {zones.length} 个活动区域
           </p>

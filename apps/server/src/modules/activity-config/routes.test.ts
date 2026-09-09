@@ -20,40 +20,29 @@ const seating = (over: Partial<SeatingSummary> = {}): SeatingSummary => ({
 });
 
 describe("checkVenue", () => {
-  test("有可用区域就算配好，哪怕没有环节开排位", () => {
+  test("有可用区域就算配好", () => {
     const item = checkVenue({
       venues: 1,
       zones: 2,
       capacity: 236,
       venueRows: 1,
-      seatingApplicable: 0,
     });
-    // done 的判断必须排在适用性前面：已经做过的事不该被说成"不需要做"。
     expect(item.status).toBe("done");
     expect(item.detail).toContain("236");
   });
 
-  test("没配也没有环节开排位 → 不适用，不进分母", () => {
+  test("零可用区域一律报缺，不看有没有环节开排位", () => {
+    // 曾经这里是 not_applicable（"没有环节开排位就等于不需要场地"）。空活动
+    // 上那个推断一定判错——新建的活动本来就还没有环节，而那正是最该提示
+    // "先把场地配了"的时刻。改动理由见 checkVenue 的注释。
     const item = checkVenue({
       venues: 0,
       zones: 0,
       capacity: 0,
       venueRows: 0,
-      seatingApplicable: 0,
-    });
-    expect(item.status).toBe("not_applicable");
-    expect(item.hint).toBeNull();
-  });
-
-  test("有环节开排位却没引用场地 → 缺", () => {
-    const item = checkVenue({
-      venues: 0,
-      zones: 0,
-      capacity: 0,
-      venueRows: 0,
-      seatingApplicable: 2,
     });
     expect(item.status).toBe("missing");
+    expect(item.status).not.toBe("not_applicable");
     expect(item.hint).toContain("场地库");
   });
 
@@ -65,7 +54,6 @@ describe("checkVenue", () => {
       zones: 0,
       capacity: 0,
       venueRows: 1,
-      seatingApplicable: 1,
     });
     expect(item.status).toBe("missing");
     expect(item.hint).toContain("启用");
@@ -103,19 +91,19 @@ describe("checkSeating", () => {
     expect(item.detail).not.toContain("已确认");
   });
 
-  test("场地没配好时，提示指向场地空间而不是排位页", () => {
-    // 用户点进排位页能做的只有被区域选择器告知"先去场地空间"，那就直接指过去。
+  test("场地没配好时，提示指向活动场地而不是座位安排页", () => {
+    // 用户点进座位安排页能做的只有被区域选择器告知"先去活动场地"，那就直接指过去。
     const item = checkSeating(
       seating({ applicable: 1, unconfigured: 1 }),
       false,
     );
-    expect(item.hint).toContain("场地空间");
+    expect(item.hint).toContain("活动场地");
     // 不能替场地那一项说补法：场地已引用、区域全停用时，"去引用一个场地"
     // 会把人指错地方。具体怎么补归 checkVenue，这里只管把人指过去。
     expect(item.hint).not.toContain("引用一个场地");
     expect(
       checkSeating(seating({ applicable: 1, unconfigured: 1 }), true).hint,
-    ).toContain("排位页");
+    ).toContain("座位安排页");
   });
 });
 
@@ -137,21 +125,16 @@ describe("checkInvitation", () => {
 describe("分母", () => {
   test("not_applicable 不进分母，done 和 missing 才进", () => {
     const items = [
-      checkVenue({
-        venues: 0,
-        zones: 0,
-        capacity: 0,
-        venueRows: 0,
-        seatingApplicable: 0,
-      }),
+      // 没生成过邀请函 → 不适用；没有环节开排位 → 不适用。
+      checkInvitation({ batches: 0, letters: 0 }),
       checkSeating(seating(), false),
-      checkInvitation({ batches: 1, letters: 5 }),
+      // 场地不再有 not_applicable 这一态，零区域就是缺，进分母。
+      checkVenue({ venues: 0, zones: 0, capacity: 0, venueRows: 0 }),
     ];
     const countable = items.filter(
       (i) => i.status === "done" || i.status === "missing",
     );
-    // 场地和排位都不适用，只有发过函的邀请函那一项进分母。
     expect(countable).toHaveLength(1);
-    expect(countable[0]?.key).toBe("invitation");
+    expect(countable[0]?.key).toBe("venue");
   });
 });

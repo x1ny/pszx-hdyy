@@ -361,7 +361,7 @@ function ActivityMembersPage() {
     <div className="flex flex-1 flex-col gap-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="font-semibold text-lg tracking-tight">活动人员</h2>
+          <h2 className="font-semibold text-lg tracking-tight">人员名单</h2>
           <p className="text-muted-foreground text-sm">
             维护本场活动的参与人员及其来源、分组、负责人。人员基础信息在全量人员库维护，这里只管当前活动的参与关系。
           </p>
