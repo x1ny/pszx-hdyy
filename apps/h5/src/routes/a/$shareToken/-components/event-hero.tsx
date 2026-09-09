@@ -70,9 +70,6 @@ export function EventHero({
         <div className="mt-2 flex items-center gap-1.5">
           <Icon name="clock" size={14} className="shrink-0 text-ink-3" />
           <span className="text-body text-ink-2">{dateText}</span>
-          <span className="font-extrabold text-body text-ink-1 tabular-nums">
-            {timeRange}
-          </span>
         </div>
 
         {activity.paragraphs.length > 0 && (
