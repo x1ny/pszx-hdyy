@@ -140,7 +140,9 @@ export async function commitMemberImport(
       throw new MemberImportCommitError("所属团体解析失败，请重新校验");
     }
 
-    const values = plan.preparedRows.map((row) => {
+    // 人员列表按自增 ID 倒序展示。反转仅用于写库，让 Excel 第一行拿到本批最高 ID，
+    // 从而在保持“最新数据优先”的现有列表规则下仍按 Excel 顺序显示。
+    const values = [...plan.preparedRows].reverse().map((row) => {
       const resolved = {
         ...row.values,
         organizationId: row.organizationName
