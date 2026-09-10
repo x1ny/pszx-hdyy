@@ -185,7 +185,14 @@ export function ResourceMembersDialog({
         title="选择服务对象"
         description={`从本活动人员库中选人绑定到「${resource?.name ?? ""}」`}
         scopes={[{ value: "activity", label: "本活动人员", activityId }]}
-        // 已绑的人仍然显示但勾不动，比直接过滤掉更好解释
+        /* 已绑的人仍然显示但勾不动，比直接过滤掉更好解释：这是个整表选人的弹窗，
+           已绑名单在它背后的表格里、被弹窗盖住了，过滤掉的话用户搜一个人搜不到，
+           分不清是"没绑"还是"绑了被藏起来"。
+
+           ⚠️ 环节配置页的绑人下拉是**反过来的**（已绑的直接不出现），不是哪边写漏了：
+           那里已绑名单是一排 Badge、就贴在控件正上方一直看得见，藏与不藏没有歧义，
+           而重复展示反而让人分不清哪些还能选。判据是"已绑名单此刻是否可见"，不是
+           "哪种更统一"。见 agenda.$segmentId/-components/demands-section.tsx。 */
         excludeIds={resource?.members.map((row) => row.memberId) ?? []}
         submitting={bindMutation.isPending}
         onOpenChange={setPickerOpen}

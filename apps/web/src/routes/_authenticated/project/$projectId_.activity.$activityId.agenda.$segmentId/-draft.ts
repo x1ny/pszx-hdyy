@@ -725,6 +725,76 @@ export function unbindMemberFromResource(
   }));
 }
 
+/** 一个还能绑的本环节人员，外加重名时用来区分的副标题。 */
+export type BindCandidate = {
+  member: MemberDraft;
+  /** 只有本环节存在同名的人时才有值；不重名时是 null，一个字都不多显示。 */
+  hint: string | null;
+};
+
+/**
+ * 某条资源当前**还能绑**的本环节人员。
+ *
+ * 排除两类已经绑上的人：本环节自己绑的（按 `memberKey` 认），和**在别的环节**
+ * 绑到同一条资源上的（按 `activityMemberId` 认——这种绑定载入时 `memberKey`
+ * 是 null，只能靠关系 id 认出来）。
+ *
+ * ⚠️ **这个结果必须真的拿去渲染下拉列表。** 这里算对了、却只拿去判断空态提示，
+ * 正是上一版"已绑的人在下拉里重复出现一遍"的根因：已绑的人在上方 Badge 区和
+ * 下拉里各画一次，用户说"不知道哪些能选"。跨环节那一类更隐蔽——它在下拉里显示
+ * 成**未勾选**，点下去 `bindMemberToResource` 判重后静默 return，是一次没有任何
+ * 反馈的空点击。
+ */
+export function selectBindCandidates(
+  members: MemberDraft[],
+  bindings: BindingDraft[],
+): BindCandidate[] {
+  const boundKeys = new Set(
+    bindings.flatMap((binding) =>
+      binding.memberKey === null ? [] : [binding.memberKey],
+    ),
+  );
+  const boundRelationIds = new Set(
+    bindings.flatMap((binding) =>
+      binding.activityMemberId === null ? [] : [binding.activityMemberId],
+    ),
+  );
+
+  // 重名按**本环节全体**判定，不是按候选人判定：已绑的那个同名的人就摆在下拉
+  // 正上方的 Badge 里，只看候选人集合会漏掉"下拉里的张伟和 Badge 里的张伟是不是
+  // 同一个"这种歧义。
+  const nameCounts = new Map<string, number>();
+  for (const member of members) {
+    nameCounts.set(member.name, (nameCounts.get(member.name) ?? 0) + 1);
+  }
+
+  return members
+    .filter(
+      (member) =>
+        !boundKeys.has(member.key) &&
+        (member.activityMemberId === null ||
+          !boundRelationIds.has(member.activityMemberId)),
+    )
+    .map((member) => ({
+      member,
+      hint: (nameCounts.get(member.name) ?? 0) > 1 ? memberHint(member) : null,
+    }));
+}
+
+/**
+ * 重名时的消歧文案。手机号后四位优先——人员主档本来就是按手机号做唯一校验的，
+ * 它是唯一保证能区分开两个同名人的字段；没填手机号才退到单位职务。
+ */
+function memberHint(member: MemberDraft): string | null {
+  const mobile = member.mobile?.trim();
+  if (mobile !== undefined && mobile !== "") return `尾号 ${mobile.slice(-4)}`;
+  const companyPosition = member.companyPosition?.trim();
+  if (companyPosition !== undefined && companyPosition !== "") {
+    return companyPosition;
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // 交给后端
 // ---------------------------------------------------------------------------

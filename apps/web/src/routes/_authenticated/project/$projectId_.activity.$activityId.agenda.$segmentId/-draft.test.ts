@@ -12,6 +12,7 @@ import {
   emptyNewMember,
   isDirty,
   removeMember,
+  selectBindCandidates,
   setMemberRole,
   setResourceField,
   unbindMemberFromResource,
@@ -437,6 +438,64 @@ describe("人员绑定意图", () => {
     const bindings = removed.demands[0].resources[0].bindings;
     expect(bindings).toHaveLength(2);
     expect(bindings.every((binding) => binding.bindingId !== null)).toBe(true);
+  });
+});
+
+/**
+ * 绑人下拉的列表内容。钉住它是因为上一版的 bug 恰恰不是"算错了"而是"算对了
+ * 没用上"——候选人算得好好的，渲染时却把全部人员倒了出去，已绑的人在 Badge 区
+ * 和下拉里各出现一遍。有名字、有测试的导出函数才堵得住同一类失误。
+ */
+describe("绑定候选人", () => {
+  const candidates = (draft: ConfigDraft) =>
+    selectBindCandidates(draft.members, draft.demands[0].resources[0].bindings);
+
+  it("本环节已绑的人不出现在候选里", () => {
+    expect(candidates(load()).map((row) => row.member.name)).toEqual([
+      "蔡丽云",
+    ]);
+  });
+
+  /**
+   * 在别的环节绑到同一条资源上的人也要排除。这种绑定载入时 `memberKey` 是 null，
+   * 只能按 `activityMemberId` 认；漏了他就会在下拉里显示成可选，点下去
+   * `bindMemberToResource` 判重后静默 return——一次没有任何反馈的空点击。
+   */
+  it("在别的环节绑过同一条资源的人也不出现", () => {
+    const crossSegment = structuredClone(config);
+    const binding = crossSegment.demands[0]?.resources[0]?.bindings[1];
+    if (!binding) throw new Error("缺少跨环节绑定测试数据");
+    binding.activityMemberId = 202;
+    expect(candidates(draftFromConfig(crossSegment, "main"))).toEqual([]);
+  });
+
+  it("不重名时不显示副标题", () => {
+    expect(candidates(load())[0]?.hint).toBeNull();
+  });
+
+  /**
+   * 重名按**本环节全体**判定，不是按候选人判定：这里 101 已经绑上了、不在候选
+   * 里，但他就摆在下拉正上方的 Badge 里，不消歧一样分不清哪个"林建辉"。
+   */
+  it("本环节有同名的人时补手机号后四位", () => {
+    const duplicated = structuredClone(config);
+    const second = duplicated.members[1];
+    if (!second) throw new Error("缺少人员测试数据");
+    second.name = "林建辉";
+    expect(
+      candidates(draftFromConfig(duplicated, "main")).map((row) => row.hint),
+    ).toEqual(["尾号 0004"]);
+  });
+
+  it("重名的人没填手机号时退到单位职务", () => {
+    const duplicated = structuredClone(config);
+    const second = duplicated.members[1];
+    if (!second) throw new Error("缺少人员测试数据");
+    second.name = "林建辉";
+    second.mobile = null;
+    expect(candidates(draftFromConfig(duplicated, "main"))[0]?.hint).toBe(
+      "泉州晚报 · 时政部主任",
+    );
   });
 });
 

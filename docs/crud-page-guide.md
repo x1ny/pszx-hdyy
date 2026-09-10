@@ -190,6 +190,25 @@ const applyFilter = (patch: Partial<typeof search>) => {
 - 筛选栏是 `<form>` 了，**里面任何不是「查询」的按钮都要写 `type="button"`**（Base UI
   的 `Button` 恰好默认补了 `type="button"`，但别指望它兜底）。
 
+#### 第二个例外：下拉内部筛候选项，即时过滤、不给查询按钮
+
+一颗下拉/combobox 弹层里的搜索框，输入即筛，**不配「查询」按钮**。首例是环节配置页
+资源安排里的「绑定本环节人员」（`agenda.$segmentId/-components/demands-section.tsx`）。
+
+判据是**这次输入会不会产生一次请求**，不是"看着像不像筛选"：
+
+- 上面那条规则解决的是"改一个控件 = 一次往返 + 一条 history"。下拉里筛的是已经在
+  内存里的候选项数组（这里是环节人员草稿），零请求、零 history，那条规则要挡的成本
+  一个都不存在。
+- 而在一个宽 224px 的弹层里塞蓝色「查询」+ ghost「重置」两颗按钮，是把为整屏筛选栏
+  设计的组件塞进一个不合身的地方；输入完还要移动鼠标点一下才出结果，比即时过滤慢。
+- 过滤由 Base UI 的 Combobox 按 Root 的 `itemToStringLabel` 自己做，**我们没有自己的
+  筛选状态**——连"草稿 vs 生效"这组概念在这里都不存在，无处安放那颗按钮。
+
+**边界：一旦这个搜索框需要发请求（候选项来自服务端、要分页），它就不再是这个例外，
+回到 `<FilterBar>` 那条规则上去**，或者干脆换成 `MemberPickerDialog` 那种整表选人的
+弹窗——那里本来就有 `<FilterBar>` + 「查询」。
+
 ### 表单用 TanStack Form，不用 react-hook-form
 
 这个决定是在写 supplier 表单时现场翻出来的：本项目的 shadcn registry 是 `base-vega`，**没有 `form.tsx`**（只有 `field.tsx`），RHF 在 shadcn 里最大的集成优势拿不到；而且全部输入组件是 Base UI **受控**组件，用 RHF 每个 `Select` 都得包一层 `Controller`。TanStack Form 受控优先，且原生吃 Standard Schema（zod 4 直接当 validator，不需要 `@hookform/resolvers`），校验出来的 `StandardSchemaV1Issue[]` 正好喂给 `ui/field.tsx` 的 `<FieldError errors={…} />`。

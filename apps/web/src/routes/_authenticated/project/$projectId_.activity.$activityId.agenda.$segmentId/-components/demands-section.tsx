@@ -14,6 +14,15 @@ import type {
 import { BaiduLocationPicker } from "#/shared/components/baidu-location-picker";
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxSearchInput,
+  ComboboxTrigger,
+} from "#/shared/components/ui/combobox.tsx";
 import { Field, FieldLabel } from "#/shared/components/ui/field.tsx";
 import { Input } from "#/shared/components/ui/input.tsx";
 import {
@@ -25,11 +34,13 @@ import {
 } from "#/shared/components/ui/select.tsx";
 import { Textarea } from "#/shared/components/ui/textarea.tsx";
 import { cn } from "#/shared/lib/utils.ts";
-import type {
-  DemandDraft,
-  MemberDraft,
-  ResourceDraft,
-  ResourceFieldsDraft,
+import {
+  type BindCandidate,
+  type DemandDraft,
+  type MemberDraft,
+  type ResourceDraft,
+  type ResourceFieldsDraft,
+  selectBindCandidates,
 } from "../-draft";
 import { ResourceLinkDialog } from "./resource-link-dialog";
 import { SectionCard } from "./section-card";
@@ -372,34 +383,7 @@ function ResourceCard({
   const isTransport = resourceType === "transport";
   const canBind = bindable(resourceType);
 
-  const boundKeys = new Set(
-    resource.bindings.flatMap((binding) =>
-      binding.memberKey === null ? [] : [binding.memberKey],
-    ),
-  );
-  const boundRelationIds = new Set(
-    resource.bindings.flatMap((binding) =>
-      binding.activityMemberId === null ? [] : [binding.activityMemberId],
-    ),
-  );
-  const candidates = members.filter(
-    (member) =>
-      !boundKeys.has(member.key) &&
-      (member.activityMemberId === null ||
-        !boundRelationIds.has(member.activityMemberId)),
-  );
-
-  // 本环节内、可在此移除的绑定，按 memberKey 索引——多选框的勾选态就是它的键集合。
-  const boundKeyToBinding = new Map(
-    resource.bindings.flatMap((binding) =>
-      binding.inSegment && binding.memberKey !== null
-        ? [[binding.memberKey, binding] as const]
-        : [],
-    ),
-  );
-  const pickerValue = members
-    .filter((member) => boundKeyToBinding.has(member.key))
-    .map((member) => member.key);
+  const candidates = selectBindCandidates(members, resource.bindings);
 
   return (
     <div className="rounded-lg border bg-card p-3">
@@ -607,59 +591,71 @@ function ResourceCard({
             ) : null}
           </div>
 
-          {members.length > 0 ? (
-            <div className="mt-2">
-              {/* 多选：下拉不随每次勾选关闭，勾一个立刻发一条绑定意图，取消勾选
-                  发一条解绑意图。触发器文案保持不变——已绑名单由上面的 Badge 呈现。 */}
-              <Select
-                multiple
-                items={members.map((member) => ({
-                  value: member.key,
-                  label: member.name,
-                }))}
-                value={pickerValue}
-                onValueChange={(next: string[]) => {
-                  const nextSet = new Set(next);
-                  const prevSet = new Set(pickerValue);
-                  for (const key of next) {
-                    if (prevSet.has(key)) continue;
-                    const member = members.find((row) => row.key === key);
-                    if (member) onBindMember(member);
-                  }
-                  for (const key of pickerValue) {
-                    if (nextSet.has(key)) continue;
-                    const binding = boundKeyToBinding.get(key);
-                    if (binding) onUnbindMember(binding.key);
-                  }
-                }}
-              >
-                <SelectTrigger className="w-56">
-                  <SelectValue>
-                    {() => (
-                      <span className="text-muted-foreground">
-                        ＋ 绑定本环节人员
-                      </span>
-                    )}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {members.map((member) => (
-                    <SelectItem key={member.key} value={member.key}>
-                      {member.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {candidates.length === 0 ? (
-                <p className="mt-2 text-muted-foreground text-xs">
-                  本环节的人都绑上了。要绑活动里的其他人，去资源台账页。
-                </p>
-              ) : null}
-            </div>
-          ) : (
+          {members.length === 0 ? (
             <p className="mt-2 text-muted-foreground text-xs">
               本环节还没有人员，先在上面的"人员"里添加。
             </p>
+          ) : candidates.length === 0 ? (
+            <p className="mt-2 text-muted-foreground text-xs">
+              本环节的人都绑上了。要绑活动里的其他人，去资源台账页。
+            </p>
+          ) : (
+            <div className="mt-2">
+              {/*
+                ⚠️ 资源台账页的选人弹窗是**反过来的**（已绑的仍然显示、只是勾不动），
+                两边不一样是有意的：那边是整表选人、已绑名单被弹窗盖住，过滤掉会让人
+                分不清"没绑"和"绑了被藏起来"；这里已绑名单是一排 Badge、就贴在控件正
+                上方一直看得见，藏起来没有歧义，重复展示反而让人分不清哪些还能选。
+                判据是"已绑名单此刻是否可见"，不是"哪种更统一"。
+
+                纯"加人"菜单：列表里只有还能绑的人（已绑的由上方 Badge 呈现），
+                所以 `value` 恒为空数组，不会渲染出 chip，也不存在"取消勾选"。
+                解绑只走 Badge 上的 ×——一份数据一处入口。
+
+                `multiple` 在这里不是为了多选态，是为了**选完不关弹层**：一辆车
+                绑好几个人是常态，选一个人他立刻从列表里消失，可以接着选下一个。
+              */}
+              <Combobox
+                multiple
+                items={candidates}
+                value={[]}
+                onValueChange={(picked: BindCandidate[]) => {
+                  for (const candidate of picked)
+                    onBindMember(candidate.member);
+                }}
+                // 过滤依据。定成只取姓名 = 搜索只匹配姓名，重名的副标题不参与匹配。
+                itemToStringLabel={(candidate: BindCandidate) =>
+                  candidate.member.name
+                }
+              >
+                <ComboboxTrigger className="w-56">
+                  <span className="text-muted-foreground">
+                    ＋ 绑定本环节人员
+                  </span>
+                </ComboboxTrigger>
+                <ComboboxContent className="w-56">
+                  <ComboboxSearchInput placeholder="搜索姓名" />
+                  <ComboboxEmpty>没有匹配的人员</ComboboxEmpty>
+                  <ComboboxList>
+                    {(candidate: BindCandidate) => (
+                      <ComboboxItem
+                        key={candidate.member.key}
+                        value={candidate}
+                      >
+                        <span className="truncate">
+                          {candidate.member.name}
+                        </span>
+                        {candidate.hint === null ? null : (
+                          <span className="shrink-0 text-muted-foreground text-xs">
+                            {candidate.hint}
+                          </span>
+                        )}
+                      </ComboboxItem>
+                    )}
+                  </ComboboxList>
+                </ComboboxContent>
+              </Combobox>
+            </div>
           )}
         </div>
       ) : null}

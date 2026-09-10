@@ -65,6 +65,63 @@ function ComboboxInput({
   )
 }
 
+/**
+ * 独立的按钮式触发器，配 `ComboboxSearchInput` 用——组成"看起来是个下拉、
+ * 点开之后弹层顶部才是搜索框"的形态（base-ui 管这叫 select-like combobox）。
+ *
+ * 相对 shadcn 原版多出来的第二个部件。为什么不用现成的 `ComboboxInput`：那个
+ * 是常驻输入框，一屏上并排放好几个（比如每张资源卡片一个绑人控件）会多出一排
+ * 空文本框，视觉噪音比一颗小按钮重得多。两种形态各有各的场合，所以是新增部件
+ * 而不是改 `ComboboxInput`。
+ */
+function ComboboxTrigger({
+  className,
+  children,
+  ...props
+}: ComboboxPrimitive.Trigger.Props) {
+  return (
+    <ComboboxPrimitive.Trigger
+      data-slot="combobox-trigger"
+      type="button"
+      className={cn(
+        // cursor-pointer 的理由同 select.tsx 的 SelectTrigger：Tailwind v4 去掉了
+        // button 的默认 pointer 光标，而这里本身就是个 <button>。
+        "flex h-9 w-fit cursor-pointer items-center justify-between gap-1.5 rounded-md border border-input bg-transparent py-2 pr-2 pl-2.5 text-sm whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        className
+      )}
+      {...props}
+    >
+      {children}
+      <ChevronDownIcon className="text-muted-foreground" />
+    </ComboboxPrimitive.Trigger>
+  )
+}
+
+/**
+ * 放在 `ComboboxContent` 顶部的搜索框，配 `ComboboxTrigger` 用。
+ *
+ * 和 `ComboboxInput` 的区别只是位置和样式：它待在弹层里，所以不需要边框和自己的
+ * 触发器按钮，只用一条下边框跟列表分开。过滤仍然由 base-ui 按 Root 的
+ * `itemToStringLabel` 做，这里不接管。
+ */
+function ComboboxSearchInput({
+  className,
+  ...props
+}: ComboboxPrimitive.Input.Props) {
+  return (
+    <div className="border-border border-b p-1">
+      <ComboboxPrimitive.Input
+        data-slot="combobox-search-input"
+        className={cn(
+          "h-8 w-full min-w-0 rounded-sm bg-transparent px-2 text-base outline-none placeholder:text-muted-foreground md:text-sm",
+          className
+        )}
+        {...props}
+      />
+    </div>
+  )
+}
+
 function ComboboxContent({
   className,
   children,
@@ -215,6 +272,8 @@ export {
   ComboboxItem,
   ComboboxLabel,
   ComboboxList,
+  ComboboxSearchInput,
   ComboboxSeparator,
+  ComboboxTrigger,
   ComboboxValue,
 }
