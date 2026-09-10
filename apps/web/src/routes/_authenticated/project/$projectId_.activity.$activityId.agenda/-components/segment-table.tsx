@@ -85,7 +85,6 @@ export function SegmentTable({
             <TableHead>日期</TableHead>
             <TableHead>时间</TableHead>
             <TableHead>地点 / 区域</TableHead>
-            <TableHead>负责人</TableHead>
             <TableHead className="min-w-32">资源需求</TableHead>
             <TableHead>状态</TableHead>
             <TableHead className="text-center">操作</TableHead>
@@ -156,7 +155,6 @@ export function SegmentTable({
                     {formatSegmentRange(segment)}
                   </TableCell>
                   <TableCell>{segment.locationText || "-"}</TableCell>
-                  <TableCell>{segment.ownerName || "-"}</TableCell>
                   <TableCell>
                     {(() => {
                       const demands = demandsBySegment.get(segment.id) ?? [];

@@ -99,7 +99,6 @@ export function SegmentDetailDialog({
                     : "-"}
                 </Row>
                 <Row label="地点 / 区域">{segment.locationText || "-"}</Row>
-                <Row label="负责人">{segment.ownerName || "-"}</Row>
                 <Row label="环节人员">
                   {!segment.memberEnabled
                     ? "未开启"

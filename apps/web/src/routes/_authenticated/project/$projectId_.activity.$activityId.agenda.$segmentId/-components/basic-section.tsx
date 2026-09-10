@@ -220,16 +220,6 @@ export function BasicSection({
           />
         </Field>
 
-        <Field>
-          <FieldLabel htmlFor="segment-owner">环节负责人</FieldLabel>
-          <Input
-            id="segment-owner"
-            placeholder="填写姓名"
-            value={base.ownerName}
-            onChange={(event) => onChange("ownerName", event.target.value)}
-          />
-        </Field>
-
         <Field className="sm:col-span-2">
           <FieldLabel htmlFor="segment-description">环节说明</FieldLabel>
           <Textarea

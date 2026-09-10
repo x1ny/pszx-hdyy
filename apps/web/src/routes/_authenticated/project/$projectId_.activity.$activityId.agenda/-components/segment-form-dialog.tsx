@@ -452,22 +452,6 @@ function SegmentForm({
             )}
           </form.Field>
 
-          <form.Field name="ownerName">
-            {(field) => (
-              <Field>
-                <FieldLabel htmlFor={field.name}>环节负责人</FieldLabel>
-                <Input
-                  id={field.name}
-                  name={field.name}
-                  placeholder="填写姓名"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                />
-              </Field>
-            )}
-          </form.Field>
-
           <div className="flex flex-col gap-3 sm:col-span-2 sm:flex-row sm:gap-8">
             <form.Field name="memberEnabled">
               {(field) => (
