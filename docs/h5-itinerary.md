@@ -24,6 +24,37 @@
 - 字阶一律写 rem（h5 走根字号等比缩放，见
   [architecture-decisions.md](architecture-decisions.md#appsh5-的移动端适配根字号等比缩放)）。
 
+### 底部面板的下溢出（2026-09-10）
+
+**`position: fixed; inset: 0` 在 iOS 26 上盖不满可见区域**：定位块停在浏览器控件条
+/ 底部安全区之上，页面却照样画到屏幕最底下。表现就是底部面板打开后，屏幕最下方留
+一条没被蒙层压暗、还能看见页面内容的缝——只在 iOS 26 上出，所以看着像「部分机型」。
+Safari 26.1 起修了，但线上还有大量 26.0 的机器。
+
+**这不是 Base UI 的锅，它只管行为不管定位**——蒙层和面板的 `fixed inset-0` 是我们
+自己写的皮。Base UI 官方示例里每个 `Drawer.Backdrop` 都挂着一句
+`@supports (-webkit-touch-callout: none) { position: absolute }`，我们照抄样式时漏
+了那一句。
+
+修法**没有跟官方那句走**：`position: absolute` 的包含块是初始包含块（Portal 挂在
+`body` 末尾、`body` 没定位），页面滚动过之后蒙层会停在文档顶部、整块失效；而 Base UI
+在 iOS 上的滚动锁定只是给滚动容器加 `overflow: hidden`，并不把页面拉回顶部。改成两
+边一起**往视口下方多铺 33vh**：
+
+- 蒙层 `fixed inset-x-0 top-0 -bottom-[33vh]`（原来是 `inset-0 min-h-dvh`）；
+- 面板的 `::after` 垫片 `after:h-[33vh]`（原来是 `after:h-12`，只有 3rem，盖不住
+  控件条加安全区的差额）。
+
+fixed 元素不参与视口的可滚动溢出，多铺出去的部分在正常机型上完全看不见。33vh 是
+「比任何浏览器控件条 + 安全区都宽裕、又不至于夸张」的量；缝到底多宽取决于机型和
+浏览器版本，**别改成某个精确的 px 值去凑**。
+
+代价是面板内容会比屏幕底边高出那一截（背景补满，内容不动），这和 Base UI 官方示例
+的 `--bleed` 是同一种取舍。
+
+两个面板组件（`overlay-sheet.tsx`、`navigation-picker.tsx`）各写一份同样的 class，
+**改一个记得改另一个**。
+
 ## 行程展示口径（2026-09-07）
 
 对齐产品 Demo 与时长口径：

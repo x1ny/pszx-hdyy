@@ -29,10 +29,14 @@ export function OverlaySheet({
       <Drawer.Portal>
         {/* 蒙层和面板必须显式给 z-index：Portal 挂在 body 末尾，但页面里
             那些 `z-1` / `z-40` 的定位元素（页签滑块、底部操作条）会盖在
-            `z-index: auto` 的后来者上面——表现是面板半透明地"漏"出页面内容。 */}
-        <Drawer.Backdrop className="fixed inset-0 z-50 min-h-dvh bg-[rgb(16_20_30)] opacity-[calc(0.55*(1-var(--drawer-swipe-progress)))] transition-opacity duration-[450ms] ease-[cubic-bezier(0.32,0.72,0,1)] data-ending-style:opacity-0 data-starting-style:opacity-0 data-swiping:duration-0" />
+            `z-index: auto` 的后来者上面——表现是面板半透明地"漏"出页面内容。
+
+            两者又都往视口下方多铺 33vh：iOS 26 的 fixed 定位块比实际可见区域
+            短一截，`inset-0` 会在屏幕底部留一条没盖住的缝。理由和取值见
+            docs/h5-itinerary.md「底部面板的下溢出」。navigation-picker.tsx 同款。 */}
+        <Drawer.Backdrop className="fixed inset-x-0 top-0 -bottom-[33vh] z-50 bg-[rgb(16_20_30)] opacity-[calc(0.55*(1-var(--drawer-swipe-progress)))] transition-opacity duration-[450ms] ease-[cubic-bezier(0.32,0.72,0,1)] data-ending-style:opacity-0 data-starting-style:opacity-0 data-swiping:duration-0" />
         <Drawer.Viewport className="fixed inset-0 z-50 flex touch-none items-end justify-center">
-          <Drawer.Popup className="relative z-1 flex max-h-[calc(100dvh-2.25rem)] min-h-[60dvh] w-full max-w-[480px] touch-none flex-col overflow-visible rounded-t-2xl bg-surface text-ink-1 outline-none [transform:translateY(var(--drawer-swipe-movement-y))] transition-transform duration-[450ms] ease-[cubic-bezier(0.32,0.72,0,1)] after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-12 after:bg-[inherit] after:content-[''] data-ending-style:[transform:translateY(calc(100%+2px))] data-ending-style:duration-[calc(var(--drawer-swipe-strength)*400ms)] data-starting-style:[transform:translateY(calc(100%+2px))] data-swiping:select-none">
+          <Drawer.Popup className="relative z-1 flex max-h-[calc(100dvh-2.25rem)] min-h-[60dvh] w-full max-w-[480px] touch-none flex-col overflow-visible rounded-t-2xl bg-surface text-ink-1 outline-none [transform:translateY(var(--drawer-swipe-movement-y))] transition-transform duration-[450ms] ease-[cubic-bezier(0.32,0.72,0,1)] after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-[33vh] after:bg-[inherit] after:content-[''] data-ending-style:[transform:translateY(calc(100%+2px))] data-ending-style:duration-[calc(var(--drawer-swipe-strength)*400ms)] data-starting-style:[transform:translateY(calc(100%+2px))] data-swiping:select-none">
             <div className="shrink-0 touch-none select-none border-line border-b px-4 pt-2 pb-1">
               {/* 拖拽把手：告诉用户这块可以往下甩 */}
               <div className="mx-auto mb-1.5 h-1 w-9 rounded-full bg-ink-4/40" />
