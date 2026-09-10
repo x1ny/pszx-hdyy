@@ -4,6 +4,7 @@ import {
   bigint,
   foreignKey,
   index,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -303,6 +304,11 @@ export const activityMember = pgTable(
       .primaryKey()
       .generatedByDefaultAsIdentity(),
 
+    /** 用户可见的人工排序值；数字越小越靠前，NULL 表示尚未设置。 */
+    sortOrder: integer("sort_order"),
+    /** 同值组内的稳定隐藏位置，不能作为客户端输入。 */
+    sortIndex: integer("sort_index").notNull().default(0),
+
     // 下面这四列都**没有单列 .references()**：它们的外键是文件末尾那两条复合
     // 外键，单列外键会和复合外键重复约束同一件事（同 activity_segment 的
     // agendaLineId）。
@@ -396,6 +402,12 @@ export const activityMember = pgTable(
     index("idx_activity_member_organization_activity").on(
       table.organizationId,
       table.activityId,
+    ),
+    index("idx_activity_member_order").on(
+      table.activityId,
+      table.sortOrder,
+      table.sortIndex,
+      table.id,
     ),
 
     // 活动必须真实存在，且这一行冗余的 project_id 必须等于该活动的 project_id。

@@ -213,6 +213,8 @@ export const seed: SeedFn = async (db, { userId }) => {
       projectId: DEMO.projectId,
       projectMemberId: index + 1,
       memberId: index + 1,
+      sortOrder: null,
+      sortIndex: index + 1,
       organizationId: organizationIdAt(index),
       source: SOURCES[index % SOURCES.length],
       groupName: index < 4 ? "嘉宾组" : "工作组",

@@ -2,6 +2,8 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { db } from "../../infra/db";
 import { activitySegment } from "../agenda/schema";
 import { activity, project } from "../project/schema";
+import { allocateActivityMemberPositions } from "./activity-member-ordering";
+import { duplicateMobileMessage, findDuplicateMobile } from "./duplicates";
 import {
   activityMember,
   type MemberIdType,
@@ -11,7 +13,6 @@ import {
   type SegmentMemberRole,
   segmentMember,
 } from "./schema";
-import { duplicateMobileMessage, findDuplicateMobile } from "./duplicates";
 
 /**
  * 人员分层的**唯一写入入口**。
@@ -320,6 +321,28 @@ export async function ensureActivityMembers(
     organizationSnapshots,
   });
 
+  const existingRows = await tx
+    .select({ memberId: activityMember.memberId })
+    .from(activityMember)
+    .where(
+      and(
+        eq(activityMember.activityId, input.activityId),
+        inArray(activityMember.memberId, memberIds),
+      ),
+    );
+  const existingMemberIds = new Set(existingRows.map((row) => row.memberId));
+  const newEntries = entries.filter(
+    (entry) => !existingMemberIds.has(entry.memberId),
+  );
+  const newPositions = await allocateActivityMemberPositions(
+    tx,
+    input.activityId,
+    newEntries.length,
+  );
+  const positionByMember = new Map(
+    newEntries.map((entry, index) => [entry.memberId, newPositions[index]]),
+  );
+
   /**
    * 冲突规则：唯一键已存在时完整保留旧活动关系（包括 organizationId），绝不
    * 用本次从主档读到的新值覆盖。活动关系是独立快照，因此项目关系已经存在且
@@ -339,6 +362,7 @@ export async function ensureActivityMembers(
           organizationSnapshots,
           entry.memberId,
         ),
+        ...(positionByMember.get(entry.memberId) ?? {}),
         source: entry.source ?? null,
         groupName: entry.groupName ?? null,
         ownerName: entry.ownerName ?? null,
@@ -911,7 +935,30 @@ async function writeActivityOrganizationLayer(
     userId: string;
   },
 ): Promise<ActivityRelationByMember> {
-  if (input.memberIds.length === 0) return new Map();
+  const memberIds = [...new Set(input.memberIds)];
+  if (memberIds.length === 0) return new Map();
+
+  const existingRows = await tx
+    .select({ memberId: activityMember.memberId })
+    .from(activityMember)
+    .where(
+      and(
+        eq(activityMember.activityId, input.activityId),
+        inArray(activityMember.memberId, memberIds),
+      ),
+    );
+  const existingMemberIds = new Set(existingRows.map((row) => row.memberId));
+  const newMemberIds = memberIds.filter(
+    (memberId) => !existingMemberIds.has(memberId),
+  );
+  const newPositions = await allocateActivityMemberPositions(
+    tx,
+    input.activityId,
+    newMemberIds.length,
+  );
+  const positionByMember = new Map(
+    newMemberIds.map((memberId, index) => [memberId, newPositions[index]]),
+  );
 
   await tx
     .update(activityMember)
@@ -919,7 +966,7 @@ async function writeActivityOrganizationLayer(
     .where(
       and(
         eq(activityMember.activityId, input.activityId),
-        inArray(activityMember.memberId, [...input.memberIds]),
+        inArray(activityMember.memberId, memberIds),
         isNull(activityMember.organizationId),
       ),
     );
@@ -927,7 +974,7 @@ async function writeActivityOrganizationLayer(
   await tx
     .insert(activityMember)
     .values(
-      input.memberIds.map((memberId) => ({
+      memberIds.map((memberId) => ({
         activityId: input.activityId,
         projectId: input.projectId,
         projectMemberId:
@@ -935,6 +982,7 @@ async function writeActivityOrganizationLayer(
           fail("项目人员关系补齐失败，请重试"),
         memberId,
         organizationId: input.organizationId,
+        ...(positionByMember.get(memberId) ?? {}),
         originType: input.originType,
         createdBy: input.userId,
         updatedBy: input.userId,
@@ -947,11 +995,11 @@ async function writeActivityOrganizationLayer(
   const rows = await loadActivityOrganizationRelations(
     tx,
     input.activityId,
-    input.memberIds,
+    memberIds,
   );
   assertFinalOrganizationRelations(
     rows,
-    input.memberIds,
+    memberIds,
     input.organizationId,
     "活动人员",
   );

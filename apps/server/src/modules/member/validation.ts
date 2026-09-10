@@ -409,6 +409,26 @@ export const AddActivityMembersByOrganizationInput = z.object({
   memberIds: finalMemberIds,
 });
 
+/** 设置活动人员的可见人工排序值；null 表示清除排序，隐藏 sortIndex 只由服务端维护。 */
+export const SetActivityMemberOrderInput = z.object({
+  activityId: id,
+  id,
+  sortOrder: z
+    .number()
+    .int()
+    .min(0, "排序不正确")
+    .max(2_147_483_647, "排序过大")
+    .nullable(),
+});
+
+/** 将一条活动人员关系移动到另一条关系之前或之后。 */
+export const MoveActivityMemberInput = z.object({
+  activityId: id,
+  id,
+  targetId: id,
+  placement: z.enum(["before", "after"], { error: "移动位置不正确" }),
+});
+
 export const UpdateActivityMemberInput = z.object({
   id,
   ...relationFields,

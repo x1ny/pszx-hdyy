@@ -1,4 +1,8 @@
-import { keepPreviousData, queryOptions } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  type QueryClient,
+  queryOptions,
+} from "@tanstack/react-query";
 import type { InferRequestType, InferResponseType } from "hono/client";
 import { type ApiData, api, unwrap } from "#/shared/lib/api";
 
@@ -132,6 +136,18 @@ export type ActivityMemberFilters = InferRequestType<
   typeof api.api.activityMember.list.$post
 >["json"];
 
+export type ActivityMemberSetOrderInput = InferRequestType<
+  typeof api.api.activityMember.setOrder.$post
+>["json"];
+
+export type ActivityMemberMoveInput = InferRequestType<
+  typeof api.api.activityMember.move.$post
+>["json"];
+
+export type ActivityMemberOrderResult = ApiData<
+  InferResponseType<typeof api.api.activityMember.setOrder.$post>
+>;
+
 export type ActivityMemberSources = ApiData<
   InferResponseType<typeof api.api.activityMember.listSources.$post>
 >;
@@ -170,6 +186,27 @@ export const activityMemberListQueryOptions = (
     queryFn: () => unwrap(api.api.activityMember.list.$post({ json: filters })),
     placeholderData: keepPreviousData,
   });
+
+export const setActivityMemberOrder = (json: ActivityMemberSetOrderInput) =>
+  unwrap(api.api.activityMember.setOrder.$post({ json }));
+
+export const moveActivityMember = (json: ActivityMemberMoveInput) =>
+  unwrap(api.api.activityMember.move.$post({ json }));
+
+/**
+ * 排序动作成功后，所有活动人员列表（包括非当前页缓存）都要重新读取；列表的
+ * 顺序和排序数字都是服务端投影，不能用前端局部重排代替失效刷新。
+ */
+export const refreshActivityMemberOrderingQueries = (
+  queryClient: Pick<QueryClient, "invalidateQueries">,
+) =>
+  queryClient.invalidateQueries(
+    {
+      queryKey: activityMemberKeys.all,
+      refetchType: "all",
+    },
+    { throwOnError: true },
+  );
 
 export const activityMemberSnapshotQueryOptions = (activityId: number) =>
   queryOptions({

@@ -1,6 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
+import { refreshActivityMemberOrderingQueries } from "#/features/member/relation-queries.ts";
 import {
   RelationFields,
   type RelationFormValues,
@@ -11,6 +12,15 @@ import {
   refreshActivityMemberEditQueries,
   submitActivityMemberEdit,
 } from "./$projectId_.activity.$activityId.members/-components/activity-member-edit";
+import {
+  createActivityMemberAdjacentMoveIntent,
+  createActivityMemberMoveIntent,
+  createActivityMemberMoveIntentFromSequences,
+  createActivityMemberMoveIntentFromSortableIndex,
+  formatActivityMemberSortOrder,
+  parseActivityMemberSortOrder,
+  resolveActivityMemberDragPlacement,
+} from "./$projectId_.activity.$activityId.members/-components/activity-member-ordering";
 
 const emptyRelation = {
   source: "",
@@ -269,5 +279,162 @@ describe("活动人员参与环节保存", () => {
       message: "字段冲突",
       participationChanged: true,
     });
+  });
+});
+
+describe("活动人员排序交互", () => {
+  test("接受非负安全整数，空值表示未设置", () => {
+    expect(parseActivityMemberSortOrder("0")).toBe(0);
+    expect(parseActivityMemberSortOrder(" 42 ")).toBe(42);
+    expect(parseActivityMemberSortOrder("2147483647")).toBe(2147483647);
+    expect(parseActivityMemberSortOrder("")).toBeNull();
+    expect(parseActivityMemberSortOrder("-")).toBeNull();
+    expect(parseActivityMemberSortOrder("-1")).toBeUndefined();
+    expect(parseActivityMemberSortOrder("1.5")).toBeUndefined();
+    expect(parseActivityMemberSortOrder("2147483648")).toBeUndefined();
+    expect(formatActivityMemberSortOrder(null)).toBe("");
+    expect(formatActivityMemberSortOrder(42)).toBe("42");
+  });
+
+  test("上下移和拖拽只生成稳定关系 ID 的移动意图", () => {
+    const ids = [101, 205, 309];
+
+    expect(createActivityMemberAdjacentMoveIntent(ids, 205, "up")).toEqual({
+      sourceId: 205,
+      targetId: 101,
+      placement: "before",
+    });
+    expect(createActivityMemberAdjacentMoveIntent(ids, 205, "down")).toEqual({
+      sourceId: 205,
+      targetId: 309,
+      placement: "after",
+    });
+    expect(
+      createActivityMemberMoveIntent(ids, 205, 309, "before"),
+    ).toBeUndefined();
+    expect(
+      createActivityMemberMoveIntent(ids, 205, 999, "after"),
+    ).toBeUndefined();
+  });
+
+  test("指针跨过同一目标中心时仍能更新前后位置", () => {
+    const ids = [101, 205, 309];
+    expect(
+      resolveActivityMemberDragPlacement({
+        sourceIndex: 0,
+        targetIndex: 1,
+        positionY: 40,
+        targetCenterY: 50,
+      }),
+    ).toBe("before");
+    expect(
+      createActivityMemberMoveIntent(
+        ids,
+        101,
+        205,
+        resolveActivityMemberDragPlacement({
+          sourceIndex: 0,
+          targetIndex: 1,
+          positionY: 40,
+          targetCenterY: 50,
+        }),
+      ),
+    ).toBeUndefined();
+    expect(
+      resolveActivityMemberDragPlacement({
+        sourceIndex: 0,
+        targetIndex: 1,
+        positionY: 60,
+        targetCenterY: 50,
+      }),
+    ).toBe("after");
+    expect(
+      createActivityMemberMoveIntent(
+        ids,
+        101,
+        205,
+        resolveActivityMemberDragPlacement({
+          sourceIndex: 0,
+          targetIndex: 1,
+          positionY: 60,
+          targetCenterY: 50,
+        }),
+      ),
+    ).toEqual({ sourceId: 101, targetId: 205, placement: "after" });
+    expect(
+      resolveActivityMemberDragPlacement({
+        sourceIndex: 2,
+        targetIndex: 0,
+      }),
+    ).toBe("before");
+  });
+
+  test("键盘连续移动按最终序列压缩为一次稳定锚点", () => {
+    const initialIds = [101, 205, 309, 412];
+
+    expect(
+      createActivityMemberMoveIntentFromSequences(
+        initialIds,
+        [205, 309, 101, 412],
+        101,
+      ),
+    ).toEqual({
+      sourceId: 101,
+      targetId: 309,
+      placement: "after",
+    });
+    expect(
+      createActivityMemberMoveIntentFromSequences(
+        initialIds,
+        [101, 309, 205, 412],
+        205,
+      ),
+    ).toEqual({
+      sourceId: 205,
+      targetId: 309,
+      placement: "after",
+    });
+    expect(
+      createActivityMemberMoveIntentFromSequences(initialIds, initialIds, 205),
+    ).toBeUndefined();
+  });
+
+  test("目标丢失时按最终 sortable index 生成移动意图", () => {
+    const initialIds = [101, 205, 309, 412];
+
+    expect(
+      createActivityMemberMoveIntentFromSortableIndex(initialIds, 101, 2),
+    ).toEqual({
+      sourceId: 101,
+      targetId: 309,
+      placement: "after",
+    });
+    expect(
+      createActivityMemberMoveIntentFromSortableIndex(initialIds, 412, 0),
+    ).toEqual({
+      sourceId: 412,
+      targetId: 101,
+      placement: "before",
+    });
+    expect(
+      createActivityMemberMoveIntentFromSortableIndex(initialIds, 205, 1),
+    ).toBeUndefined();
+    expect(
+      createActivityMemberMoveIntentFromSortableIndex(initialIds, 205, 99),
+    ).toBeUndefined();
+  });
+
+  test("保存排序后等待活动人员相关缓存完成刷新", async () => {
+    const queryClient = new QueryClient();
+    const invalidate = vi
+      .spyOn(queryClient, "invalidateQueries")
+      .mockResolvedValue(undefined);
+
+    await refreshActivityMemberOrderingQueries(queryClient);
+
+    expect(invalidate).toHaveBeenCalledWith(
+      { queryKey: ["activityMember"], refetchType: "all" },
+      { throwOnError: true },
+    );
   });
 });

@@ -42,6 +42,10 @@ import {
 } from "../seating/schema";
 import { memberTrip } from "../trip/schema";
 import { activityVenue, activityVenueZone } from "../venue/schema";
+import {
+  ActivityMemberOrderingError,
+  applyActivityMemberOrder,
+} from "./activity-member-ordering";
 import { findMemberTimeConflicts } from "./conflicts";
 import {
   addActivityMembersByOrganization,
@@ -73,9 +77,11 @@ import {
   ListProjectMembersInput,
   ListSegmentMemberConflictsInput,
   ListSegmentMembersInput,
+  MoveActivityMemberInput,
   RelationIdInput,
   RemoveActivityMemberInput,
   RemoveSegmentMemberInput,
+  SetActivityMemberOrderInput,
   SyncActivityMemberSegmentsInput,
   UpdateActivityMemberInput,
   UpdateProjectMemberInput,
@@ -123,7 +129,8 @@ async function runLadder<T>(
   } catch (error) {
     if (
       error instanceof MemberLadderError ||
-      error instanceof ActivityMemberSegmentSyncError
+      error instanceof ActivityMemberSegmentSyncError ||
+      error instanceof ActivityMemberOrderingError
     ) {
       return { ok: false, message: error.message };
     }
@@ -489,6 +496,7 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
       db
         .select({
           id: activityMember.id,
+          sortOrder: activityMember.sortOrder,
           organizationId: activityMember.organizationId,
           organizationName: organization.name,
           ...identityFields,
@@ -508,7 +516,11 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
           eq(organization.id, activityMember.organizationId),
         )
         .where(where)
-        .orderBy(asc(activityMember.id))
+        .orderBy(
+          asc(activityMember.sortOrder),
+          asc(activityMember.sortIndex),
+          asc(activityMember.id),
+        )
         .limit(limit)
         .offset(offset),
       db
@@ -519,6 +531,42 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
     ]);
 
     return c.json(ok({ list, total: totalRows[0]?.total ?? 0 }));
+  })
+
+  /** 设置一条活动人员关系的可见排序值；null 清除排序，隐藏位置由服务端维护。 */
+  .post("/setOrder", jsonBody(SetActivityMemberOrderInput), async (c) => {
+    const { activityId, id, sortOrder } = c.req.valid("json");
+    const result = await runLadder(() =>
+      db.transaction((tx) =>
+        applyActivityMemberOrder(tx, {
+          activityId,
+          operation: { type: "set", sourceId: id, order: sortOrder },
+          userId: c.get("authedUser").id,
+        }),
+      ),
+    );
+
+    return result.ok
+      ? c.json(ok(result.data))
+      : c.json(validationError(result.message));
+  })
+
+  /** 按稳定的活动人员关系 id 将一行移到目标行之前或之后。 */
+  .post("/move", jsonBody(MoveActivityMemberInput), async (c) => {
+    const { activityId, id, targetId, placement } = c.req.valid("json");
+    const result = await runLadder(() =>
+      db.transaction((tx) =>
+        applyActivityMemberOrder(tx, {
+          activityId,
+          operation: { type: "move", sourceId: id, targetId, placement },
+          userId: c.get("authedUser").id,
+        }),
+      ),
+    );
+
+    return result.ok
+      ? c.json(ok(result.data))
+      : c.json(validationError(result.message));
   })
 
   /**

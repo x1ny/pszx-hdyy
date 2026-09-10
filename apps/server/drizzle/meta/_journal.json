@@ -50,6 +50,20 @@
       "when": 1788924857314,
       "tag": "0006_lucky_madelyne_pryor",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789022609329,
+      "tag": "0007_mature_post",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789031880111,
+      "tag": "0008_lame_maelstrom",
+      "breakpoints": true
     }
   ]
 }

@@ -1,12 +1,22 @@
+import {
+  DragDropProvider,
+  type DragEndEvent,
+  type DragMoveEvent,
+  type DragOverEvent,
+  type DragStartEvent,
+} from "@dnd-kit/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   AlertCircleIcon,
+  ArrowDownIcon,
+  ArrowUpIcon,
+  GripVerticalIcon,
   PlusIcon,
   SearchIcon,
   UsersRoundIcon,
 } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { MemberDetailDialog } from "#/features/member/member-detail-dialog.tsx";
@@ -32,11 +42,14 @@ import {
   addActivityMembersByOrganization,
   addNewActivityMember,
   getActivityMemberImpact,
+  moveActivityMember,
   type NewMemberFields,
   organizationOptionsQueryOptions,
   projectMemberKeys,
   RELATION_ORIGIN_LABELS,
+  refreshActivityMemberOrderingQueries,
   removeActivityMember,
+  setActivityMemberOrder,
 } from "#/features/member/relation-queries.ts";
 import { formatNativePlace } from "#/features/member/utils.ts";
 import {
@@ -101,6 +114,17 @@ import {
   refreshActivityMemberEditQueries,
   submitActivityMemberEdit,
 } from "./-components/activity-member-edit";
+import {
+  type ActivityMemberMoveIntent,
+  ActivityMemberSortableRow,
+  createActivityMemberAdjacentMoveIntent,
+  createActivityMemberMoveIntent,
+  createActivityMemberMoveIntentFromSequences,
+  createActivityMemberMoveIntentFromSortableIndex,
+  formatActivityMemberSortOrder,
+  parseActivityMemberSortOrder,
+  resolveActivityMemberDragPlacement,
+} from "./-components/activity-member-ordering";
 
 const SearchSchema = z.object({
   name: z.string().optional().catch(undefined),
@@ -109,6 +133,22 @@ const SearchSchema = z.object({
   page: z.number().int().min(1).default(1).catch(1),
   pageSize: z.number().int().min(1).max(100).default(10).catch(10),
 });
+
+type ActivityMemberDragSession = {
+  initialIds: readonly number[];
+  currentIds: readonly number[];
+  sourceId: number;
+  targetId?: number;
+  placement?: "before" | "after";
+  /**
+   * dnd-kit only emits dragover when the target ID changes. Keep the latest
+   * pointer and target center so crossing the same row's midpoint still
+   * updates before/after placement.
+   */
+  pointerY?: number;
+  targetCenterY?: number;
+  keyboardActive?: boolean;
+};
 
 export const Route = createFileRoute(
   "/_authenticated/project/$projectId_/activity/$activityId/members/",
@@ -158,12 +198,22 @@ function ActivityMembersPage() {
 
   const [viewing, setViewing] = useState<ActivityMember>();
   const [removing, setRemoving] = useState<ActivityMember>();
+  const [orderDrafts, setOrderDrafts] = useState<Record<number, string>>({});
+  const [orderingRenderKey, setOrderingRenderKey] = useState(0);
+  const dragSessionRef = useRef<ActivityMemberDragSession | null>(null);
 
   const filters: ActivityMemberFilters = { activityId, ...search };
   const listQuery = useQuery(activityMemberListQueryOptions(filters));
   const organizationOptionsQuery = useQuery(organizationOptionsQueryOptions());
   const list = listQuery.data?.list ?? [];
   const total = listQuery.data?.total ?? 0;
+  const visibleIds = useMemo(() => list.map((row) => row.id), [list]);
+  const hasAppliedFilter = Boolean(
+    search.name?.trim() ||
+      search.organizationId !== undefined ||
+      search.ownerName?.trim(),
+  );
+  const hasUnsavedOrderEdits = Object.keys(orderDrafts).length > 0;
   const memberSnapshotQuery = useQuery({
     ...activityMemberSnapshotQueryOptions(activityId),
     enabled: pickerOpen,
@@ -176,21 +226,6 @@ function ActivityMembersPage() {
     ...activityMemberSegmentOptionsQueryOptions(activityId),
     enabled: !!editing,
   });
-
-  const organizationFilterItems = [
-    {
-      value: null,
-      label: organizationOptionsQuery.isPending
-        ? "团体加载中…"
-        : organizationOptionsQuery.isError
-          ? "团体加载失败"
-          : "全部团体",
-    },
-    ...(organizationOptionsQuery.data ?? []).map((item) => ({
-      value: item.id,
-      label: item.name,
-    })),
-  ];
 
   // 详情接口包含作废/关闭人员管理的历史关系；初始化时只把仍可编辑的关系放进
   // checkbox 集合，只读关系由服务端 sync 自动保留，不送进期望集合。
@@ -221,6 +256,21 @@ function ActivityMembersPage() {
     editSegmentOptionsQuery.data,
     editSelectionFor,
   ]);
+  const organizationFilterItems = [
+    {
+      value: null,
+      label: organizationOptionsQuery.isPending
+        ? "团体加载中…"
+        : organizationOptionsQuery.isError
+          ? "团体加载失败"
+          : "全部团体",
+    },
+    ...(organizationOptionsQuery.data ?? []).map((item) => ({
+      value: item.id,
+      label: item.name,
+    })),
+  ];
+
   // 移除前的受影响清单。只在确认弹窗打开时才查——它是"点了移除之后"才需要的
   // 信息，提前查会给每一行都发一个请求。
   const impactQuery = useQuery({
@@ -231,6 +281,8 @@ function ActivityMembersPage() {
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: activityMemberKeys.all });
+
+  const resetDragPreview = () => setOrderingRenderKey((value) => value + 1);
 
   const applyFilter = (patch: Partial<typeof search>) => {
     const next = { ...search, ...patch, page: 1 };
@@ -355,6 +407,390 @@ function ActivityMembersPage() {
     onError: (error) => toast.error(error.message),
   });
 
+  const setOrderMutation = useMutation({
+    mutationFn: (input: { id: number; sortOrder: number | null }) =>
+      setActivityMemberOrder({ activityId, ...input }),
+    onSuccess: async (result, input) => {
+      setOrderDrafts((current) => withoutOrderDraft(current, input.id));
+
+      if (!result.changed) {
+        toast.success("排序未变化");
+        return;
+      }
+
+      try {
+        await refreshActivityMemberOrderingQueries(queryClient);
+        toast.success("排序已保存");
+      } catch (error) {
+        toast.error(
+          `排序已保存，列表刷新失败：${
+            error instanceof Error ? error.message : "请稍后重试"
+          }`,
+        );
+      }
+    },
+    onError: (error) => toast.error(`排序保存失败：${error.message}`),
+  });
+
+  const moveMutation = useMutation({
+    mutationFn: (intent: ActivityMemberMoveIntent) =>
+      moveActivityMember({
+        activityId,
+        id: intent.sourceId,
+        targetId: intent.targetId,
+        placement: intent.placement,
+      }),
+    onSuccess: async (result) => {
+      if (!result.changed) {
+        toast.success("顺序未变化");
+        return;
+      }
+
+      try {
+        await refreshActivityMemberOrderingQueries(queryClient);
+        toast.success("顺序已保存");
+      } catch (error) {
+        toast.error(
+          `排序已保存，列表刷新失败：${
+            error instanceof Error ? error.message : "请稍后重试"
+          }`,
+        );
+      }
+    },
+    onError: async (error) => {
+      // @dnd-kit/react 的 OptimisticSortingPlugin 会在 dragover 期间直接调节
+      // 行 DOM。失败时仅刷新 React 状态可能复用这批已经换位的 <tr>，所以先
+      // 强制重建拖拽树恢复缓存顺序，再从服务端重读，避免页面显示与后端分叉。
+      dragSessionRef.current = null;
+      resetDragPreview();
+      toast.error(`移动保存失败：${error.message}`);
+
+      try {
+        await refreshActivityMemberOrderingQueries(queryClient);
+      } catch (refreshError) {
+        toast.error(
+          `移动失败后的列表刷新也失败：${
+            refreshError instanceof Error ? refreshError.message : "请稍后重试"
+          }`,
+        );
+      }
+    },
+  });
+
+  const mutationsPending =
+    addMutation.isPending ||
+    organizationAddMutation.isPending ||
+    createMutation.isPending ||
+    editMutation.isPending ||
+    removeMutation.isPending ||
+    setOrderMutation.isPending ||
+    moveMutation.isPending;
+
+  const movementDisabled =
+    hasAppliedFilter ||
+    hasUnsavedOrderEdits ||
+    Boolean(editing) ||
+    mutationsPending ||
+    listQuery.isPending ||
+    listQuery.isFetching ||
+    listQuery.isPlaceholderData ||
+    listQuery.isError;
+
+  const handleDragStart = (event: DragStartEvent) => {
+    if (movementDisabled) return;
+
+    const sourceId = readActivityMemberRelationId(event.operation.source?.id);
+    if (sourceId === undefined || !visibleIds.includes(sourceId)) return;
+
+    dragSessionRef.current = {
+      initialIds: [...visibleIds],
+      currentIds: [...visibleIds],
+      sourceId,
+      pointerY: readDragPointerY(
+        event.nativeEvent,
+        event.operation.position.current.y,
+      ),
+    };
+  };
+
+  const handleDragMove = (event: DragMoveEvent) => {
+    const session = dragSessionRef.current;
+    if (!session) return;
+
+    const pointerY = readDragPointerY(
+      event.nativeEvent,
+      event.operation.position.current.y,
+    );
+    const sessionWithPointer =
+      pointerY === undefined ? session : { ...session, pointerY };
+    const keyboardDirection = readKeyboardDirection(event.nativeEvent);
+    if (keyboardDirection) {
+      const sourceId = readActivityMemberRelationId(event.operation.source?.id);
+      if (sourceId !== sessionWithPointer.sourceId) return;
+
+      const sourceIndex = sessionWithPointer.currentIds.indexOf(sourceId);
+      const targetIndex = sourceIndex + (keyboardDirection === "down" ? 1 : -1);
+      if (
+        sourceIndex < 0 ||
+        targetIndex < 0 ||
+        targetIndex >= sessionWithPointer.currentIds.length
+      ) {
+        return;
+      }
+
+      const currentIds = [...sessionWithPointer.currentIds];
+      const [movedId] = currentIds.splice(sourceIndex, 1);
+      currentIds.splice(targetIndex, 0, movedId);
+      dragSessionRef.current = {
+        ...sessionWithPointer,
+        currentIds,
+        keyboardActive: true,
+        targetId: undefined,
+        placement: undefined,
+        targetCenterY: undefined,
+      };
+      return;
+    }
+
+    if (event.operation.target == null) {
+      dragSessionRef.current = {
+        ...sessionWithPointer,
+        targetId: undefined,
+        placement: undefined,
+        targetCenterY: undefined,
+      };
+      return;
+    }
+
+    const operationTargetId = readActivityMemberRelationId(
+      event.operation.target.id,
+    );
+    const operationTargetCenterY = event.operation.target.shape?.center.y;
+    const sessionWithTargetCenter =
+      operationTargetId === sessionWithPointer.targetId &&
+      operationTargetCenterY !== undefined
+        ? { ...sessionWithPointer, targetCenterY: operationTargetCenterY }
+        : sessionWithPointer;
+
+    // The optimistic sorting plugin can make the dragged row the current
+    // operation target after it reorders the DOM. In that state no new
+    // dragover is emitted while the pointer crosses the target row, so derive
+    // the placement from the latest pointer position on every dragmove.
+    if (
+      sessionWithTargetCenter.targetId !== undefined &&
+      sessionWithTargetCenter.targetCenterY !== undefined &&
+      pointerY !== undefined
+    ) {
+      const sourceIndex = sessionWithTargetCenter.initialIds.indexOf(
+        sessionWithTargetCenter.sourceId,
+      );
+      const targetIndex = sessionWithTargetCenter.initialIds.indexOf(
+        sessionWithTargetCenter.targetId,
+      );
+      if (sourceIndex >= 0 && targetIndex >= 0) {
+        dragSessionRef.current = {
+          ...sessionWithTargetCenter,
+          placement: resolveActivityMemberDragPlacement({
+            sourceIndex,
+            targetIndex,
+            positionY: pointerY,
+            targetCenterY: sessionWithTargetCenter.targetCenterY,
+          }),
+        };
+        return;
+      }
+    }
+
+    dragSessionRef.current = sessionWithTargetCenter;
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const session = dragSessionRef.current;
+    if (!session || session.keyboardActive) return;
+
+    const sourceId = readActivityMemberRelationId(event.operation.source?.id);
+    const targetId = readActivityMemberRelationId(event.operation.target?.id);
+    if (
+      sourceId !== session.sourceId ||
+      targetId === undefined ||
+      targetId === sourceId ||
+      !session.initialIds.includes(targetId)
+    ) {
+      if (targetId === undefined) {
+        dragSessionRef.current = {
+          ...session,
+          pointerY: readDragPointerY(
+            undefined,
+            event.operation.position.current.y,
+          ),
+          targetId: undefined,
+          placement: undefined,
+          targetCenterY: undefined,
+        };
+      }
+      return;
+    }
+
+    const sourceIndex = session.initialIds.indexOf(sourceId);
+    const targetIndex = session.initialIds.indexOf(targetId);
+    const targetCenterY = event.operation.target?.shape?.center.y;
+    const pointerY = readDragPointerY(
+      undefined,
+      event.operation.position.current.y,
+    );
+    const placement = resolveActivityMemberDragPlacement({
+      sourceIndex,
+      targetIndex,
+      positionY: pointerY,
+      targetCenterY,
+    });
+
+    dragSessionRef.current = {
+      ...session,
+      targetId,
+      placement,
+      pointerY: pointerY ?? session.pointerY,
+      targetCenterY,
+    };
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const session = dragSessionRef.current;
+    dragSessionRef.current = null;
+    // Once a drag session has started, a query/mutation state change must not
+    // silently discard the drop. The rows may become disabled while the final
+    // event is being delivered, but the session still contains the user's
+    // intended move and can be saved safely.
+    if (!session || event.canceled) return;
+
+    const sourceId = readActivityMemberRelationId(event.operation.source?.id);
+    if (sourceId !== session.sourceId) {
+      resetDragPreview();
+      return;
+    }
+
+    if (session.keyboardActive) {
+      const intent = createActivityMemberMoveIntentFromSequences(
+        session.initialIds,
+        session.currentIds,
+        sourceId,
+      );
+      if (intent) {
+        moveMutation.mutate(intent);
+      } else if (
+        !session.initialIds.every(
+          (id, index) => id === session.currentIds[index],
+        )
+      ) {
+        resetDragPreview();
+      }
+      return;
+    }
+
+    const sortableIndex = readActivityMemberSortableIndex(
+      event.operation.source,
+    );
+    const initialIndex = session.initialIds.indexOf(sourceId);
+    const eventTargetId = readActivityMemberRelationId(
+      event.operation.target?.id,
+    );
+    const pointerDrop = readActivityMemberDropTarget(event.nativeEvent);
+    const targetId = pointerDrop
+      ? pointerDrop.id === sourceId
+        ? (session.targetId ??
+          (eventTargetId !== sourceId ? eventTargetId : undefined))
+        : pointerDrop.id
+      : (session.targetId ??
+        (eventTargetId !== sourceId ? eventTargetId : undefined));
+    // A known pointer position outside every sortable row is an explicit
+    // cancel. Do not fall back to an older target or a plugin index in that
+    // case, otherwise dragging out of the table could save a stale move.
+    if (pointerDrop && pointerDrop.id === undefined) {
+      resetDragPreview();
+      return;
+    }
+    let intent: ActivityMemberMoveIntent | undefined;
+    if (targetId !== undefined) {
+      const sourceIndex = session.initialIds.indexOf(sourceId);
+      const targetIndex = session.initialIds.indexOf(targetId);
+      if (sourceIndex >= 0 && targetIndex >= 0) {
+        const pointerY = readDragPointerY(
+          event.nativeEvent,
+          session.pointerY ?? event.operation.position.current.y,
+        );
+        const targetCenterY =
+          (pointerDrop?.id === targetId ? pointerDrop.centerY : undefined) ??
+          session.targetCenterY ??
+          event.operation.target?.shape?.center.y;
+        const placement =
+          pointerY !== undefined && targetCenterY !== undefined
+            ? resolveActivityMemberDragPlacement({
+                sourceIndex,
+                targetIndex,
+                positionY: pointerY,
+                targetCenterY,
+              })
+            : (session.placement ??
+              resolveActivityMemberDragPlacement({
+                sourceIndex,
+                targetIndex,
+                positionY: pointerY,
+                targetCenterY,
+              }));
+        intent = createActivityMemberMoveIntent(
+          session.initialIds,
+          sourceId,
+          targetId,
+          placement,
+        );
+      }
+    }
+
+    // OptimisticSortingPlugin updates the source sortable's index when it has
+    // already moved the row in the DOM. Prefer that final index whenever it
+    // differs from the initial index: it remains available even if the last
+    // collision target was cleared before dragend.
+    if (sortableIndex !== undefined && sortableIndex !== initialIndex) {
+      intent =
+        createActivityMemberMoveIntentFromSortableIndex(
+          session.initialIds,
+          sourceId,
+          sortableIndex,
+        ) ?? intent;
+    }
+
+    if (intent) {
+      moveMutation.mutate(intent);
+    } else if (sortableIndex !== initialIndex || targetId !== undefined) {
+      // The sortable plugin may have already moved the DOM even when the
+      // release resolves to a no-op. Restore the React order immediately so a
+      // canceled/invalid drop cannot leave a misleading visual preview.
+      resetDragPreview();
+    }
+  };
+
+  const saveOrder = (row: ActivityMember) => {
+    const value = parseActivityMemberSortOrder(
+      orderDrafts[row.id] ?? formatActivityMemberSortOrder(row.sortOrder),
+    );
+    if (value === undefined) {
+      toast.error("排序必须是非负整数，留空表示未设置");
+      return;
+    }
+
+    if (value === row.sortOrder) {
+      cancelOrder(row.id);
+      toast.success("排序未变化");
+      return;
+    }
+
+    setOrderMutation.mutate({ id: row.id, sortOrder: value });
+  };
+
+  const cancelOrder = (id: number) => {
+    setOrderDrafts((current) => withoutOrderDraft(current, id));
+  };
+
   const rangeStart = total === 0 ? 0 : (search.page - 1) * search.pageSize + 1;
   const rangeEnd = Math.min(search.page * search.pageSize, total);
 
@@ -458,137 +894,307 @@ function ActivityMembersPage() {
         />
       </FilterBar>
 
+      {(hasAppliedFilter ||
+        hasUnsavedOrderEdits ||
+        listQuery.isPlaceholderData ||
+        (listQuery.isFetching && !listQuery.isPending)) &&
+        !listQuery.isError && (
+          <Alert>
+            <AlertDescription>
+              {hasUnsavedOrderEdits
+                ? "存在未保存的排序编辑，请先保存或取消后再移动人员。"
+                : hasAppliedFilter
+                  ? "已应用筛选，暂不支持上移、下移或拖拽；仍可编辑排序数字。清除筛选后可移动。"
+                  : "正在读取当前页，完成后恢复移动操作。"}
+            </AlertDescription>
+          </Alert>
+        )}
+
       <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
-        <Table className="min-w-[1140px]">
-          <TableHeader className="bg-muted/60">
-            <TableRow className="hover:bg-transparent">
-              <TableHead className="w-16 text-center">序号</TableHead>
-              <TableHead className="min-w-44">人员</TableHead>
-              <TableHead className="min-w-36">所属团体</TableHead>
-              <TableHead className="min-w-24">负责人</TableHead>
-              <TableHead className="min-w-28">录入渠道</TableHead>
-              <TableHead className="min-w-52">参与环节</TableHead>
-              <TableHead className="min-w-32">备注</TableHead>
-              <TableHead className="w-56 text-center">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {listQuery.isPending ? (
-              Array.from({ length: 5 }, (_, index) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
-                <TableRow key={index}>
-                  {Array.from({ length: 8 }, (_, cell) => (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
-                    <TableCell key={cell}>
-                      <Skeleton className="h-5 w-full" />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : list.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8}>
-                  <Empty className="border-0">
-                    <EmptyHeader>
-                      <EmptyMedia variant="icon">
-                        <UsersRoundIcon />
-                      </EmptyMedia>
-                      <EmptyTitle>本场活动还没有人员</EmptyTitle>
-                      <EmptyDescription>
-                        从全量人员库选人加入本活动，加入后可继续分配到具体环节。
-                      </EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
-                </TableCell>
+        <DragDropProvider
+          key={orderingRenderKey}
+          onDragStart={handleDragStart}
+          onDragMove={handleDragMove}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+        >
+          <Table className="min-w-[1340px]">
+            <TableHeader className="bg-muted/60">
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="w-16 text-center">序号</TableHead>
+                <TableHead className="w-40 text-center">排序</TableHead>
+                <TableHead className="min-w-44">人员</TableHead>
+                <TableHead className="min-w-36">所属团体</TableHead>
+                <TableHead className="min-w-24">负责人</TableHead>
+                <TableHead className="min-w-28">录入渠道</TableHead>
+                <TableHead className="min-w-52">参与环节</TableHead>
+                <TableHead className="min-w-32">备注</TableHead>
+                <TableHead className="min-w-80 text-center">操作</TableHead>
               </TableRow>
-            ) : (
-              list.map((row, index) => (
-                <TableRow key={row.id}>
-                  <TableCell className="text-center text-muted-foreground">
-                    {(search.page - 1) * search.pageSize + index + 1}
-                  </TableCell>
-                  <TableCell>
-                    <div className="font-medium">{row.name}</div>
-                    <div className="text-muted-foreground text-xs">
-                      {[row.companyPosition, row.mobile]
-                        .filter(Boolean)
-                        .join(" · ") || "-"}
-                    </div>
-                  </TableCell>
-                  <TableCell>{row.organizationName || "未加入团体"}</TableCell>
-                  <TableCell>{row.ownerName || "-"}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary" className="font-normal">
-                      {RELATION_ORIGIN_LABELS[row.originType]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {row.segments.length > 0 ? (
-                      <ol className="flex min-w-48 flex-col gap-1">
-                        {row.segments.map((segment, segmentIndex) => (
-                          <li
-                            key={segment.id}
-                            className="flex items-baseline gap-1.5"
-                          >
-                            <span className="w-4 shrink-0 text-right text-muted-foreground text-xs tabular-nums">
-                              {segmentIndex + 1}.
-                            </span>
-                            <span>{segment.name}</span>
-                          </li>
-                        ))}
-                      </ol>
-                    ) : (
-                      "-"
-                    )}
-                  </TableCell>
-                  <TableCell className="max-w-40 truncate text-muted-foreground">
-                    {row.remark || "-"}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-center">
-                    <div className="inline-flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-primary hover:text-primary"
-                        onClick={() => setViewing(row)}
-                      >
-                        详情
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-primary hover:text-primary"
-                        onClick={() => {
-                          setEditSegmentIds([]);
-                          setEditSelectionFor(undefined);
-                          setEditIssue(undefined);
-                          setEditing(row);
-                          setEditForm({
-                            source: row.source ?? "",
-                            groupName: row.groupName ?? "",
-                            ownerName: row.ownerName ?? "",
-                            remark: row.remark ?? "",
-                          });
-                          setEditOwnerPhone(row.ownerPhone ?? "");
-                        }}
-                      >
-                        编辑关系
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => setRemoving(row)}
-                      >
-                        移除
-                      </Button>
-                    </div>
+            </TableHeader>
+            <TableBody>
+              {listQuery.isPending ? (
+                Array.from({ length: 5 }, (_, index) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
+                  <TableRow key={index}>
+                    {Array.from({ length: 9 }, (_, cell) => (
+                      // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
+                      <TableCell key={cell}>
+                        <Skeleton className="h-5 w-full" />
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : listQuery.isError ? (
+                <TableRow>
+                  <TableCell colSpan={9}>
+                    <Alert variant="destructive">
+                      <AlertCircleIcon />
+                      <AlertTitle>人员列表加载失败</AlertTitle>
+                      <AlertDescription className="flex flex-wrap items-center gap-3">
+                        <span>{listQuery.error.message}</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => listQuery.refetch()}
+                        >
+                          重试
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : list.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={9}>
+                    <Empty className="border-0">
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <UsersRoundIcon />
+                        </EmptyMedia>
+                        <EmptyTitle>本场活动还没有人员</EmptyTitle>
+                        <EmptyDescription>
+                          从全量人员库选人加入本活动，加入后可继续分配到具体环节。
+                        </EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                list.map((row, index) => {
+                  const orderDraft = orderDrafts[row.id];
+                  const hasOrderDraft = orderDraft !== undefined;
+
+                  return (
+                    <ActivityMemberSortableRow
+                      key={row.id}
+                      id={row.id}
+                      index={index}
+                      disabled={movementDisabled}
+                    >
+                      {({ handleRef, isDragging }) => (
+                        <>
+                          <TableCell className="text-center text-muted-foreground">
+                            {(search.page - 1) * search.pageSize + index + 1}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-center gap-1.5">
+                              <Input
+                                aria-label={`排序 ${row.name}`}
+                                className="h-8 w-20 text-center tabular-nums"
+                                inputMode="numeric"
+                                placeholder="-"
+                                value={
+                                  orderDraft ??
+                                  formatActivityMemberSortOrder(row.sortOrder)
+                                }
+                                disabled={setOrderMutation.isPending}
+                                onChange={(event) =>
+                                  setOrderDrafts((current) =>
+                                    event.target.value ===
+                                    formatActivityMemberSortOrder(row.sortOrder)
+                                      ? withoutOrderDraft(current, row.id)
+                                      : {
+                                          ...current,
+                                          [row.id]: event.target.value,
+                                        },
+                                  )
+                                }
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    saveOrder(row);
+                                  }
+                                  if (event.key === "Escape") {
+                                    event.preventDefault();
+                                    cancelOrder(row.id);
+                                  }
+                                }}
+                              />
+                              {hasOrderDraft && (
+                                <div className="flex items-center gap-0.5">
+                                  <Button
+                                    variant="ghost"
+                                    size="xs"
+                                    disabled={setOrderMutation.isPending}
+                                    onClick={() => saveOrder(row)}
+                                  >
+                                    保存
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="xs"
+                                    disabled={setOrderMutation.isPending}
+                                    onClick={() => cancelOrder(row.id)}
+                                  >
+                                    取消
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-medium">{row.name}</div>
+                            <div className="text-muted-foreground text-xs">
+                              {[row.companyPosition, row.mobile]
+                                .filter(Boolean)
+                                .join(" · ") || "-"}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {row.organizationName || "未加入团体"}
+                          </TableCell>
+                          <TableCell>{row.ownerName || "-"}</TableCell>
+                          <TableCell>
+                            <Badge variant="secondary" className="font-normal">
+                              {RELATION_ORIGIN_LABELS[row.originType]}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {row.segments.length > 0 ? (
+                              <ol className="flex min-w-48 flex-col gap-1">
+                                {row.segments.map((segment, segmentIndex) => (
+                                  <li
+                                    key={segment.id}
+                                    className="flex items-baseline gap-1.5"
+                                  >
+                                    <span className="w-4 shrink-0 text-right text-muted-foreground text-xs tabular-nums">
+                                      {segmentIndex + 1}.
+                                    </span>
+                                    <span>{segment.name}</span>
+                                  </li>
+                                ))}
+                              </ol>
+                            ) : (
+                              "-"
+                            )}
+                          </TableCell>
+                          <TableCell className="max-w-40 truncate text-muted-foreground">
+                            {row.remark || "-"}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-center">
+                            <div className="inline-flex items-center gap-1">
+                              <Button
+                                ref={handleRef}
+                                variant="ghost"
+                                size="icon-xs"
+                                type="button"
+                                disabled={movementDisabled}
+                                aria-label={`拖动 ${row.name}`}
+                                title={`拖动 ${row.name}`}
+                              >
+                                <GripVerticalIcon />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon-xs"
+                                type="button"
+                                disabled={movementDisabled || index === 0}
+                                aria-label={`上移 ${row.name}`}
+                                title="上移"
+                                onClick={() => {
+                                  const intent =
+                                    createActivityMemberAdjacentMoveIntent(
+                                      visibleIds,
+                                      row.id,
+                                      "up",
+                                    );
+                                  if (intent) moveMutation.mutate(intent);
+                                }}
+                              >
+                                <ArrowUpIcon />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon-xs"
+                                type="button"
+                                disabled={
+                                  movementDisabled || index === list.length - 1
+                                }
+                                aria-label={`下移 ${row.name}`}
+                                title="下移"
+                                onClick={() => {
+                                  const intent =
+                                    createActivityMemberAdjacentMoveIntent(
+                                      visibleIds,
+                                      row.id,
+                                      "down",
+                                    );
+                                  if (intent) moveMutation.mutate(intent);
+                                }}
+                              >
+                                <ArrowDownIcon />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-primary hover:text-primary"
+                                disabled={isDragging}
+                                onClick={() => setViewing(row)}
+                              >
+                                详情
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-primary hover:text-primary"
+                                disabled={isDragging}
+                                onClick={() => {
+                                  setEditSegmentIds([]);
+                                  setEditSelectionFor(undefined);
+                                  setEditIssue(undefined);
+                                  setEditing(row);
+                                  setEditForm({
+                                    source: row.source ?? "",
+                                    groupName: row.groupName ?? "",
+                                    ownerName: row.ownerName ?? "",
+                                    remark: row.remark ?? "",
+                                  });
+                                  setEditOwnerPhone(row.ownerPhone ?? "");
+                                }}
+                              >
+                                编辑关系
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:text-destructive"
+                                disabled={isDragging}
+                                onClick={() => setRemoving(row)}
+                              >
+                                移除
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </>
+                      )}
+                    </ActivityMemberSortableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </DragDropProvider>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1124,4 +1730,117 @@ function maskIdNumber(value: string | null) {
 
 function displayValue(value: string | null | undefined) {
   return value || "-";
+}
+
+function readActivityMemberRelationId(id: string | number | undefined) {
+  return typeof id === "number" && Number.isSafeInteger(id) ? id : undefined;
+}
+
+function readActivityMemberSortableIndex(
+  source: DragEndEvent["operation"]["source"],
+) {
+  if (!source || !("index" in source)) return undefined;
+
+  const index = (source as { index?: unknown }).index;
+  return typeof index === "number" && Number.isInteger(index)
+    ? index
+    : undefined;
+}
+
+function readKeyboardDirection(event: Event | undefined) {
+  const code =
+    event && "code" in event
+      ? String((event as KeyboardEvent).code)
+      : undefined;
+  if (code === "ArrowUp") return "up" as const;
+  if (code === "ArrowDown") return "down" as const;
+  return undefined;
+}
+
+function readDragPointerY(event: Event | undefined, fallback?: number) {
+  const clientY =
+    event && "clientY" in event
+      ? (event as Event & { clientY?: unknown }).clientY
+      : undefined;
+  if (typeof clientY === "number" && Number.isFinite(clientY)) {
+    return clientY;
+  }
+
+  return typeof fallback === "number" && Number.isFinite(fallback)
+    ? fallback
+    : undefined;
+}
+
+function readActivityMemberDropTarget(event: Event | undefined) {
+  const position = readDragPointerPosition(event);
+  if (!position) return undefined;
+
+  const eventTarget = event?.target as
+    | (EventTarget & { ownerDocument?: Document })
+    | null
+    | undefined;
+  const ownerDocument =
+    eventTarget?.ownerDocument ??
+    (typeof document === "undefined" ? undefined : document);
+  if (!ownerDocument) return { id: undefined };
+
+  const element = ownerDocument.elementFromPoint(position.x, position.y);
+  // Table hit testing can return the TABLE element while the sortable plugin is
+  // moving a row. Fall back to its live rectangles so a fast pointerup still
+  // resolves the row that visually contains the pointer.
+  const row =
+    element?.closest<HTMLElement>("[data-activity-member-id]") ??
+    Array.from(
+      ownerDocument.querySelectorAll<HTMLElement>("[data-activity-member-id]"),
+    ).find((candidate) => {
+      const rect = candidate.getBoundingClientRect();
+      return (
+        position.x >= rect.left &&
+        position.x <= rect.right &&
+        position.y >= rect.top &&
+        position.y <= rect.bottom
+      );
+    });
+  const idValue = row?.getAttribute("data-activity-member-id");
+  const id =
+    idValue === null || idValue === undefined ? undefined : Number(idValue);
+  if (id === undefined || !Number.isSafeInteger(id) || !row) {
+    return { id: undefined };
+  }
+
+  const rect = row.getBoundingClientRect();
+  const centerY = rect.top + rect.height / 2;
+  return {
+    id,
+    centerY: Number.isFinite(centerY) ? centerY : undefined,
+  };
+}
+
+function readDragPointerPosition(event: Event | undefined) {
+  const clientX =
+    event && "clientX" in event
+      ? (event as Event & { clientX?: unknown }).clientX
+      : undefined;
+  const clientY =
+    event && "clientY" in event
+      ? (event as Event & { clientY?: unknown }).clientY
+      : undefined;
+  if (
+    typeof clientX !== "number" ||
+    !Number.isFinite(clientX) ||
+    typeof clientY !== "number" ||
+    !Number.isFinite(clientY)
+  ) {
+    return undefined;
+  }
+
+  return { x: clientX, y: clientY };
+}
+
+function withoutOrderDraft(drafts: Record<number, string>, id: number) {
+  if (drafts[id] === undefined) return drafts;
+
+  const next = { ...drafts };
+  delete next[id];
+  return next;
 }
