@@ -2,6 +2,10 @@ import { QueryClient } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import {
+  RelationFields,
+  type RelationFormValues,
+} from "#/features/member/relation-fields.tsx";
+import {
   ActivityMemberEditIssueAlert,
   ActivityMemberParticipationFields,
   refreshActivityMemberEditQueries,
@@ -43,6 +47,30 @@ const blockedResult = {
   ],
   readOnlyRetained: [],
 };
+
+describe("活动人员关系表单", () => {
+  test("新增和编辑暂不展示来源、分组，但仍展示负责人和备注", () => {
+    const value: RelationFormValues = {
+      source: "已有来源",
+      groupName: "已有分组",
+      ownerName: "王芳",
+      remark: "备注",
+    };
+
+    render(
+      <RelationFields
+        value={value}
+        onChange={() => undefined}
+        ownerPhone={{ value: "13720000000", onChange: () => undefined }}
+      />,
+    );
+
+    expect(screen.queryByLabelText("来源")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("分组")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("负责人")).toHaveValue("王芳");
+    expect(screen.getByLabelText("备注")).toHaveValue("备注");
+  });
+});
 
 describe("活动人员参与环节字段", () => {
   test("只回显可编辑关系，并按原因只读展示不可用历史", () => {

@@ -15,12 +15,12 @@ import { Textarea } from "#/shared/components/ui/textarea.tsx";
 import { SEGMENT_MEMBER_ROLE_VALUES } from "./relation-queries";
 
 /**
- * 关系字段的表单片段，三层共用。
+ * 活动人员关系字段的表单片段。
  *
- * 抽在这里而不是各页面各写一份：来源/分组/负责人/备注这四个字段活动人员页的
- * "批量设置关系""编辑关系""手动录入"三个弹窗都要用，环节层将来做关系覆盖时
- * 还要再用一次。四个 Input 抄四遍不算多，但占位文案、字段顺序、将来某个字段
- * 改成下拉，改一处漏三处是必然的。
+ * 来源、分组仍保留在 `RelationFormValues` 和 `toRelationInput` 中，以兼容现有
+ * 接口和编辑时的原值回传；当前活动人员新增/编辑界面暂不展示这两个字段。
+ * 这里集中维护负责人、负责人电话和备注的布局，避免三个弹窗的字段顺序和间距
+ * 各自漂移。
  *
  * ── 间距为什么由这个组件自己兜 ──────────────────────────────────
  *
@@ -84,7 +84,7 @@ export function RelationFields({
    * activity_member 之外没有 owner_phone 这一列（见 schema.ts 的注释），
    * 环节层将来复用这个组件时不传这个 prop，字段就不会出现，不用改这个文件。
    *
-   * 传了就跟"负责人"并排渲染成两列，呼应上面"来源/分组"那一行的排版。
+   * 传了就跟"负责人"并排渲染成两列，保持活动人员表单的紧凑排版。
    */
   ownerPhone?: { value: string; onChange: (next: string) => void };
 }) {
@@ -93,27 +93,6 @@ export function RelationFields({
 
   return (
     <FieldGroup className="gap-5">
-      <div className="grid grid-cols-2 gap-4">
-        <Field>
-          <FieldLabel htmlFor={`${idPrefix}-source`}>来源</FieldLabel>
-          <Input
-            id={`${idPrefix}-source`}
-            placeholder="如：特别重要嘉宾"
-            value={value.source}
-            onChange={(event) => set({ source: event.target.value })}
-          />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor={`${idPrefix}-group`}>分组</FieldLabel>
-          <Input
-            id={`${idPrefix}-group`}
-            placeholder="如：王总客人"
-            value={value.groupName}
-            onChange={(event) => set({ groupName: event.target.value })}
-          />
-        </Field>
-      </div>
-
       <div className={ownerPhone ? "grid grid-cols-2 gap-4" : undefined}>
         <Field>
           <FieldLabel htmlFor={`${idPrefix}-owner`}>负责人</FieldLabel>

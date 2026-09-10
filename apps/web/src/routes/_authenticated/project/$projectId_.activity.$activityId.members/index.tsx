@@ -6,7 +6,7 @@ import {
   SearchIcon,
   UsersRoundIcon,
 } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { MemberDetailDialog } from "#/features/member/member-detail-dialog.tsx";
@@ -28,12 +28,12 @@ import {
   activityMemberListQueryOptions,
   activityMemberSegmentOptionsQueryOptions,
   activityMemberSnapshotQueryOptions,
-  activityMemberSourcesQueryOptions,
   addActivityMembers,
   addActivityMembersByOrganization,
   addNewActivityMember,
   getActivityMemberImpact,
   type NewMemberFields,
+  organizationOptionsQueryOptions,
   projectMemberKeys,
   RELATION_ORIGIN_LABELS,
   removeActivityMember,
@@ -104,9 +104,8 @@ import {
 
 const SearchSchema = z.object({
   name: z.string().optional().catch(undefined),
-  source: z.string().optional().catch(undefined),
-  groupName: z.string().optional().catch(undefined),
   ownerName: z.string().optional().catch(undefined),
+  organizationId: z.number().int().positive().optional().catch(undefined),
   page: z.number().int().min(1).default(1).catch(1),
   pageSize: z.number().int().min(1).max(100).default(10).catch(10),
 });
@@ -128,19 +127,17 @@ function ActivityMembersPage() {
   const queryClient = useQueryClient();
 
   const [nameInput, setNameInput] = useState(search.name ?? "");
-  const [sourceInput, setSourceInput] = useState<string | null>(
-    search.source ?? null,
-  );
-  const [groupInput, setGroupInput] = useState(search.groupName ?? "");
   const [ownerInput, setOwnerInput] = useState(search.ownerName ?? "");
+  const [organizationInput, setOrganizationInput] = useState<number | null>(
+    search.organizationId ?? null,
+  );
 
   // URL 变了就把草稿拉回来对齐（后退、粘链接进来）。
   useEffect(() => {
     setNameInput(search.name ?? "");
-    setSourceInput(search.source ?? null);
-    setGroupInput(search.groupName ?? "");
     setOwnerInput(search.ownerName ?? "");
-  }, [search.name, search.source, search.groupName, search.ownerName]);
+    setOrganizationInput(search.organizationId ?? null);
+  }, [search.name, search.ownerName, search.organizationId]);
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -164,7 +161,7 @@ function ActivityMembersPage() {
 
   const filters: ActivityMemberFilters = { activityId, ...search };
   const listQuery = useQuery(activityMemberListQueryOptions(filters));
-  const sourcesQuery = useQuery(activityMemberSourcesQueryOptions(activityId));
+  const organizationOptionsQuery = useQuery(organizationOptionsQueryOptions());
   const list = listQuery.data?.list ?? [];
   const total = listQuery.data?.total ?? 0;
   const memberSnapshotQuery = useQuery({
@@ -179,6 +176,21 @@ function ActivityMembersPage() {
     ...activityMemberSegmentOptionsQueryOptions(activityId),
     enabled: !!editing,
   });
+
+  const organizationFilterItems = [
+    {
+      value: null,
+      label: organizationOptionsQuery.isPending
+        ? "团体加载中…"
+        : organizationOptionsQuery.isError
+          ? "团体加载失败"
+          : "全部团体",
+    },
+    ...(organizationOptionsQuery.data ?? []).map((item) => ({
+      value: item.id,
+      label: item.name,
+    })),
+  ];
 
   // 详情接口包含作废/关闭人员管理的历史关系；初始化时只把仍可编辑的关系放进
   // checkbox 集合，只读关系由服务端 sync 自动保留，不送进期望集合。
@@ -209,17 +221,6 @@ function ActivityMembersPage() {
     editSegmentOptionsQuery.data,
     editSelectionFor,
   ]);
-  const sourceItems = useMemo(
-    () => [
-      { value: null, label: "全部来源" },
-      ...(sourcesQuery.data ?? []).map((source) => ({
-        value: source,
-        label: source,
-      })),
-    ],
-    [sourcesQuery.data],
-  );
-
   // 移除前的受影响清单。只在确认弹窗打开时才查——它是"点了移除之后"才需要的
   // 信息，提前查会给每一行都发一个请求。
   const impactQuery = useQuery({
@@ -363,7 +364,7 @@ function ActivityMembersPage() {
         <div>
           <h2 className="font-semibold text-lg tracking-tight">人员名单</h2>
           <p className="text-muted-foreground text-sm">
-            维护本场活动的参与人员及其来源、分组、负责人。人员基础信息在全量人员库维护，这里只管当前活动的参与关系。
+            维护本场活动的参与人员及其所属团体、负责人等活动关系。人员基础信息在全量人员库维护，这里只管当前活动的参与关系。
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -394,9 +395,8 @@ function ActivityMembersPage() {
         onSubmit={() =>
           applyFilter({
             name: nameInput.trim() || undefined,
-            source: sourceInput ?? undefined,
-            groupName: groupInput.trim() || undefined,
             ownerName: ownerInput.trim() || undefined,
+            organizationId: organizationInput ?? undefined,
           })
         }
       >
@@ -410,10 +410,14 @@ function ActivityMembersPage() {
           />
         </div>
         <Select
-          items={sourceItems}
-          value={sourceInput}
+          items={organizationFilterItems}
+          value={organizationInput}
+          disabled={
+            organizationOptionsQuery.isPending ||
+            organizationOptionsQuery.isError
+          }
           onValueChange={(value) =>
-            setSourceInput(value === null ? null : String(value))
+            setOrganizationInput(value == null ? null : Number(value))
           }
         >
           <SelectTrigger className="w-44">
@@ -421,7 +425,7 @@ function ActivityMembersPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              {sourceItems.map((item) => (
+              {organizationFilterItems.map((item) => (
                 <SelectItem key={item.value ?? "all"} value={item.value}>
                   {item.label}
                 </SelectItem>
@@ -429,12 +433,15 @@ function ActivityMembersPage() {
             </SelectGroup>
           </SelectContent>
         </Select>
-        <Input
-          className="w-48"
-          placeholder="搜索分组"
-          value={groupInput}
-          onChange={(event) => setGroupInput(event.target.value)}
-        />
+        {organizationOptionsQuery.isError && (
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => organizationOptionsQuery.refetch()}
+          >
+            团体选项加载失败，重试
+          </Button>
+        )}
         <Input
           className="w-44"
           placeholder="搜索负责人"
@@ -444,20 +451,20 @@ function ActivityMembersPage() {
         <FilterActions
           onReset={() => {
             setNameInput("");
-            setSourceInput(null);
-            setGroupInput("");
             setOwnerInput("");
+            setOrganizationInput(null);
             navigate({ search: { page: 1, pageSize: search.pageSize } });
           }}
         />
       </FilterBar>
 
       <div className="overflow-x-auto rounded-lg border bg-card shadow-sm">
-        <Table className="min-w-[1000px]">
+        <Table className="min-w-[1140px]">
           <TableHeader className="bg-muted/60">
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-16 text-center">序号</TableHead>
               <TableHead className="min-w-44">人员</TableHead>
+              <TableHead className="min-w-36">所属团体</TableHead>
               <TableHead className="min-w-24">负责人</TableHead>
               <TableHead className="min-w-28">录入渠道</TableHead>
               <TableHead className="min-w-52">参与环节</TableHead>
@@ -470,7 +477,7 @@ function ActivityMembersPage() {
               Array.from({ length: 5 }, (_, index) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
                 <TableRow key={index}>
-                  {Array.from({ length: 7 }, (_, cell) => (
+                  {Array.from({ length: 8 }, (_, cell) => (
                     // biome-ignore lint/suspicious/noArrayIndexKey: 骨架屏没有身份
                     <TableCell key={cell}>
                       <Skeleton className="h-5 w-full" />
@@ -480,7 +487,7 @@ function ActivityMembersPage() {
               ))
             ) : list.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7}>
+                <TableCell colSpan={8}>
                   <Empty className="border-0">
                     <EmptyHeader>
                       <EmptyMedia variant="icon">
@@ -508,6 +515,7 @@ function ActivityMembersPage() {
                         .join(" · ") || "-"}
                     </div>
                   </TableCell>
+                  <TableCell>{row.organizationName || "未加入团体"}</TableCell>
                   <TableCell>{row.ownerName || "-"}</TableCell>
                   <TableCell>
                     <Badge variant="secondary" className="font-normal">
@@ -670,7 +678,7 @@ function ActivityMembersPage() {
       />
 
       {/* 选完人再填关系字段：原型 activity-members.html 就是一组表单配一次
-          多选，来源/分组/负责人整批套用，个别不同的进列表再单独改。 */}
+          多选，负责人/备注整批套用；来源、分组暂时隐藏，已有值仍由接口保留。 */}
       <Dialog
         open={pendingIds.length > 0}
         onOpenChange={(open) => {
