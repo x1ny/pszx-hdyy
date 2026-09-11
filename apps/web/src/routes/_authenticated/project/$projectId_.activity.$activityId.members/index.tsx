@@ -9,9 +9,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   AlertCircleIcon,
-  ArrowDownIcon,
-  ArrowUpIcon,
-  GripVerticalIcon,
+  InfoIcon,
   PlusIcon,
   SearchIcon,
   UsersRoundIcon,
@@ -107,6 +105,11 @@ import {
   TableRow,
 } from "#/shared/components/ui/table.tsx";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "#/shared/components/ui/tooltip.tsx";
+import {
   type ActivityMemberEditIssue,
   ActivityMemberEditIssueAlert,
   ActivityMemberParticipationFields,
@@ -116,8 +119,8 @@ import {
 } from "./-components/activity-member-edit";
 import {
   type ActivityMemberMoveIntent,
+  ActivityMemberOrderCell,
   ActivityMemberSortableRow,
-  createActivityMemberAdjacentMoveIntent,
   createActivityMemberMoveIntent,
   createActivityMemberMoveIntentFromSequences,
   createActivityMemberMoveIntentFromSortableIndex,
@@ -769,18 +772,23 @@ function ActivityMembersPage() {
     }
   };
 
-  const saveOrder = (row: ActivityMember) => {
-    const value = parseActivityMemberSortOrder(
-      orderDrafts[row.id] ?? formatActivityMemberSortOrder(row.sortOrder),
-    );
+  /**
+   * 行内编辑按表格惯例在失焦时提交，所以第一件事是确认真的有草稿：没有草稿的
+   * 失焦只是光标移开，既不该发请求，也不该弹一句「排序未变化」。
+   */
+  const commitOrder = (row: ActivityMember) => {
+    const draft = orderDrafts[row.id];
+    if (draft === undefined) return;
+
+    const value = parseActivityMemberSortOrder(draft);
     if (value === undefined) {
+      // 草稿故意留着：值非法时清掉输入等于把用户刚敲的东西吞了。
       toast.error("排序必须是非负整数，留空表示未设置");
       return;
     }
 
     if (value === row.sortOrder) {
       cancelOrder(row.id);
-      toast.success("排序未变化");
       return;
     }
 
@@ -902,10 +910,10 @@ function ActivityMembersPage() {
           <Alert>
             <AlertDescription>
               {hasUnsavedOrderEdits
-                ? "存在未保存的排序编辑，请先保存或取消后再移动人员。"
+                ? "排序值还没提交：按回车或移开光标即保存，Esc 撤销。提交前暂不支持拖动人员。"
                 : hasAppliedFilter
-                  ? "已应用筛选，暂不支持上移、下移或拖拽；仍可编辑排序数字。清除筛选后可移动。"
-                  : "正在读取当前页，完成后恢复移动操作。"}
+                  ? "已应用筛选，暂不支持拖动；仍可直接填写排序值。清除筛选后可拖动。"
+                  : "正在读取当前页，完成后恢复拖动。"}
             </AlertDescription>
           </Alert>
         )}
@@ -918,18 +926,39 @@ function ActivityMembersPage() {
           onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
         >
-          <Table className="min-w-[1340px]">
+          <Table className="min-w-[1240px]">
             <TableHeader className="bg-muted/60">
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-16 text-center">序号</TableHead>
-                <TableHead className="w-40 text-center">排序</TableHead>
+                <TableHead className="w-28">
+                  <span className="inline-flex items-center gap-1">
+                    排序
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <button
+                            type="button"
+                            aria-label="排序列说明"
+                            className="cursor-help text-muted-foreground/70 transition-colors hover:text-foreground"
+                          >
+                            <InfoIcon className="size-3.5" />
+                          </button>
+                        }
+                      />
+                      <TooltipContent side="top" className="max-w-64">
+                        拖动手柄调整顺序；也可直接填写排序值，回车或移开光标即保存，Esc
+                        撤销，留空表示未设置。
+                      </TooltipContent>
+                    </Tooltip>
+                  </span>
+                </TableHead>
                 <TableHead className="min-w-44">人员</TableHead>
                 <TableHead className="min-w-36">所属团体</TableHead>
                 <TableHead className="min-w-24">负责人</TableHead>
                 <TableHead className="min-w-28">录入渠道</TableHead>
                 <TableHead className="min-w-52">参与环节</TableHead>
                 <TableHead className="min-w-32">备注</TableHead>
-                <TableHead className="min-w-80 text-center">操作</TableHead>
+                <TableHead className="min-w-48 text-center">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -983,7 +1012,6 @@ function ActivityMembersPage() {
               ) : (
                 list.map((row, index) => {
                   const orderDraft = orderDrafts[row.id];
-                  const hasOrderDraft = orderDraft !== undefined;
 
                   return (
                     <ActivityMemberSortableRow
@@ -997,62 +1025,27 @@ function ActivityMembersPage() {
                           <TableCell className="text-center text-muted-foreground">
                             {(search.page - 1) * search.pageSize + index + 1}
                           </TableCell>
-                          <TableCell>
-                            <div className="flex items-center justify-center gap-1.5">
-                              <Input
-                                aria-label={`排序 ${row.name}`}
-                                className="h-8 w-20 text-center tabular-nums"
-                                inputMode="numeric"
-                                placeholder="-"
-                                value={
-                                  orderDraft ??
-                                  formatActivityMemberSortOrder(row.sortOrder)
-                                }
-                                disabled={setOrderMutation.isPending}
-                                onChange={(event) =>
-                                  setOrderDrafts((current) =>
-                                    event.target.value ===
-                                    formatActivityMemberSortOrder(row.sortOrder)
-                                      ? withoutOrderDraft(current, row.id)
-                                      : {
-                                          ...current,
-                                          [row.id]: event.target.value,
-                                        },
-                                  )
-                                }
-                                onKeyDown={(event) => {
-                                  if (event.key === "Enter") {
-                                    event.preventDefault();
-                                    saveOrder(row);
-                                  }
-                                  if (event.key === "Escape") {
-                                    event.preventDefault();
-                                    cancelOrder(row.id);
-                                  }
-                                }}
-                              />
-                              {hasOrderDraft && (
-                                <div className="flex items-center gap-0.5">
-                                  <Button
-                                    variant="ghost"
-                                    size="xs"
-                                    disabled={setOrderMutation.isPending}
-                                    onClick={() => saveOrder(row)}
-                                  >
-                                    保存
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="xs"
-                                    disabled={setOrderMutation.isPending}
-                                    onClick={() => cancelOrder(row.id)}
-                                  >
-                                    取消
-                                  </Button>
-                                </div>
-                              )}
-                            </div>
-                          </TableCell>
+                          <ActivityMemberOrderCell
+                            name={row.name}
+                            sortOrder={row.sortOrder}
+                            draft={orderDraft}
+                            handleRef={handleRef}
+                            moveDisabled={movementDisabled}
+                            savePending={
+                              setOrderMutation.isPending &&
+                              setOrderMutation.variables.id === row.id
+                            }
+                            onDraftChange={(value) =>
+                              setOrderDrafts((current) =>
+                                value ===
+                                formatActivityMemberSortOrder(row.sortOrder)
+                                  ? withoutOrderDraft(current, row.id)
+                                  : { ...current, [row.id]: value },
+                              )
+                            }
+                            onCommit={() => commitOrder(row)}
+                            onCancel={() => cancelOrder(row.id)}
+                          />
                           <TableCell>
                             <div className="font-medium">{row.name}</div>
                             <div className="text-muted-foreground text-xs">
@@ -1094,57 +1087,6 @@ function ActivityMembersPage() {
                           </TableCell>
                           <TableCell className="whitespace-nowrap text-center">
                             <div className="inline-flex items-center gap-1">
-                              <Button
-                                ref={handleRef}
-                                variant="ghost"
-                                size="icon-xs"
-                                type="button"
-                                disabled={movementDisabled}
-                                aria-label={`拖动 ${row.name}`}
-                                title={`拖动 ${row.name}`}
-                              >
-                                <GripVerticalIcon />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon-xs"
-                                type="button"
-                                disabled={movementDisabled || index === 0}
-                                aria-label={`上移 ${row.name}`}
-                                title="上移"
-                                onClick={() => {
-                                  const intent =
-                                    createActivityMemberAdjacentMoveIntent(
-                                      visibleIds,
-                                      row.id,
-                                      "up",
-                                    );
-                                  if (intent) moveMutation.mutate(intent);
-                                }}
-                              >
-                                <ArrowUpIcon />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon-xs"
-                                type="button"
-                                disabled={
-                                  movementDisabled || index === list.length - 1
-                                }
-                                aria-label={`下移 ${row.name}`}
-                                title="下移"
-                                onClick={() => {
-                                  const intent =
-                                    createActivityMemberAdjacentMoveIntent(
-                                      visibleIds,
-                                      row.id,
-                                      "down",
-                                    );
-                                  if (intent) moveMutation.mutate(intent);
-                                }}
-                              >
-                                <ArrowDownIcon />
-                              </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"

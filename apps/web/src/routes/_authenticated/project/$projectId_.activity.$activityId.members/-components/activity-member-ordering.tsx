@@ -1,6 +1,9 @@
 import { useSortable } from "@dnd-kit/react/sortable";
+import { GripVerticalIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { TableRow } from "#/shared/components/ui/table.tsx";
+import { Button } from "#/shared/components/ui/button.tsx";
+import { Input } from "#/shared/components/ui/input.tsx";
+import { TableCell, TableRow } from "#/shared/components/ui/table.tsx";
 import { cn } from "#/shared/lib/utils.ts";
 
 export type ActivityMemberMovePlacement = "before" | "after";
@@ -110,6 +113,10 @@ export function createActivityMemberMoveIntentFromSortableIndex(
   );
 }
 
+/**
+ * 上移/下移按钮已从界面撤下，暂时只有测试在调用它。保留是因为撤下的是入口不是
+ * 能力：键盘拖拽和将来可能回归的按钮都需要这套"相邻一位"的锚点计算。
+ */
 export function createActivityMemberAdjacentMoveIntent(
   ids: readonly number[],
   sourceId: number,
@@ -204,12 +211,96 @@ export function ActivityMemberSortableRow({
       data-dragging={isDragging ? "true" : undefined}
       data-drop-target={isDropTarget ? "true" : undefined}
       className={cn(
-        "transition-[transform,background-color,opacity]",
+        "group/member-row transition-[transform,background-color,opacity]",
         isDragging && "opacity-50",
         isDropTarget && "bg-primary/5",
       )}
     >
       {children({ handleRef, isDragging, isDropTarget })}
     </TableRow>
+  );
+}
+
+type ActivityMemberOrderCellProps = {
+  name: string;
+  sortOrder: number | null;
+  draft: string | undefined;
+  handleRef: (element: Element | null) => void;
+  moveDisabled: boolean;
+  savePending: boolean;
+  onDraftChange: (value: string) => void;
+  onCommit: () => void;
+  onCancel: () => void;
+};
+
+/**
+ * 排序单元格。拖动手柄和手填排序值是同一件事的两条路径，所以收在同一列里紧挨着
+ * 序号，而不是把手柄留在最右侧操作列：这张表宽到要横向滚动，用户看着"排序"列
+ * 却找不到任何可操作的东西。
+ *
+ * 手柄常驻但压低对比度，静止时是"这行可拖"的暗示，不是一列扎眼的图标；悬停整行
+ * 时提亮。键盘用户 Tab 到手柄后可以用方向键移动，不依赖鼠标。
+ *
+ * 数值输入按表格行内编辑的通行契约：静止时看着就是一格文本，回车或移开光标提交，
+ * Esc 撤销。原来那对「保存/取消」文字按钮是随草稿出现的，一敲键盘整列就变宽。
+ */
+export function ActivityMemberOrderCell({
+  name,
+  sortOrder,
+  draft,
+  handleRef,
+  moveDisabled,
+  savePending,
+  onDraftChange,
+  onCommit,
+  onCancel,
+}: ActivityMemberOrderCellProps) {
+  const isDirty = draft !== undefined;
+
+  return (
+    <TableCell className="py-2">
+      <div className="flex items-center gap-1">
+        <Button
+          ref={handleRef}
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          disabled={moveDisabled}
+          aria-label={`拖动 ${name}`}
+          title="按住拖动调整顺序"
+          className="cursor-grab touch-none text-muted-foreground/40 transition-colors hover:text-foreground active:cursor-grabbing group-hover/member-row:text-muted-foreground"
+        >
+          <GripVerticalIcon />
+        </Button>
+        <Input
+          aria-label={`排序 ${name}`}
+          title="排序值：回车或移开光标保存，Esc 取消，留空表示未设置"
+          className={cn(
+            "h-7 w-13 border-transparent bg-transparent px-1 text-center text-sm tabular-nums shadow-none",
+            "hover:border-input hover:bg-background",
+            "focus:bg-background",
+            isDirty && "border-primary bg-primary/5",
+          )}
+          inputMode="numeric"
+          placeholder="-"
+          value={draft ?? formatActivityMemberSortOrder(sortOrder)}
+          disabled={savePending}
+          onChange={(event) => onDraftChange(event.target.value)}
+          onBlur={onCommit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              // 提交只挂在 blur 上：Enter 也走 blur 才不会和随后的失焦各提交一次。
+              event.preventDefault();
+              event.currentTarget.blur();
+            }
+            if (event.key === "Escape") {
+              // 只丢草稿、不失焦——失焦会带着尚未清空的草稿触发一次提交。
+              event.preventDefault();
+              onCancel();
+            }
+          }}
+        />
+      </div>
+    </TableCell>
   );
 }
