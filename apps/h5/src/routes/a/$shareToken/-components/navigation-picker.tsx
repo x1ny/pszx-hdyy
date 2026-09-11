@@ -62,7 +62,7 @@ export function NavigationPicker({
           <Drawer.Backdrop className="fixed inset-x-0 top-0 -bottom-[33vh] z-50 bg-[rgb(16_20_30)] opacity-[calc(0.5*(1-var(--drawer-swipe-progress)))] transition-opacity duration-[450ms] ease-[cubic-bezier(0.32,0.72,0,1)] data-ending-style:opacity-0 data-starting-style:opacity-0 data-swiping:duration-0" />
           <Drawer.Viewport className="fixed inset-0 z-50 flex touch-none items-end justify-center">
             <Drawer.Popup className="relative flex w-full max-w-[480px] touch-none flex-col overflow-visible rounded-t-2xl bg-surface text-ink-1 shadow-card outline-none [transform:translateY(var(--drawer-swipe-movement-y))] transition-transform duration-[450ms] ease-[cubic-bezier(0.32,0.72,0,1)] after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-[33vh] after:bg-[inherit] after:content-[''] data-ending-style:[transform:translateY(calc(100%+2px))] data-ending-style:duration-[calc(var(--drawer-swipe-strength)*400ms)] data-starting-style:[transform:translateY(calc(100%+2px))] data-swiping:select-none">
-              <div className="shrink-0 touch-none select-none border-line border-b px-4 pt-2 pb-1">
+              <div className="shrink-0 touch-none select-none px-4 pt-2 pb-1">
                 <div className="mx-auto mb-1.5 h-1 w-9 rounded-full bg-ink-4/40" />
                 <div className="flex h-11 items-center justify-between">
                   <Drawer.Title className="text-title">选择地图</Drawer.Title>
