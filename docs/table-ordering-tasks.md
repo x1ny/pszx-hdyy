@@ -171,7 +171,7 @@ bun run --filter '@repo/web' test 'src/routes/_authenticated/project/$projectId_
 2. 围绕现有 Table 接入 Provider、行 Hook、手柄和反馈；先验证长名称、输入控件、Dialog 内滚动及列宽，再决定细节样式。
 3. 对业务层只输出稳定 ID 和前／后锚点。库里的渲染 index 不写回 sortIndex；取消、落点无效、最终序列未变时不调用保存。是否变化对比拖动开始时的序列，不对比已重排的临时数组。
 4. 拖拽与按钮共用 T04 的 onMove、pending、草稿限制和刷新机制，不能再创建第二条写入逻辑。
-5. 保持合法表格 DOM、可读手柄名称和焦点；上移／下移入口保留。
+5. 保持合法表格 DOM、可读手柄名称和焦点；上移／下移入口保留。**2026-09-11 作废后半句**：活动人员名单已撤下这两个按钮，键盘可达性改由手柄上的 KeyboardSensor 承担，见[实施记录](activity-member-ordering-execution.md#排序列交互重做2026-09-11)。
 6. 记录实际安装版本、import 路径、通过验证的行组件与 Hook 路径，作为后续接入的来源。
 
 检查命令与 T04 相同，另运行 `bun run build` 并检查改动源码。UI 自动测试可检查适配事件和禁用条件，但 U01、U05、U06 必须通过真实浏览器验证。
