@@ -3,7 +3,6 @@ import { useLayoutEffect, useRef, useState } from "react";
 import type { AgendaItem, SeatMap } from "../-queries";
 import { seatMapQueryOptions } from "../-queries";
 import { OverlaySheet } from "./overlay-sheet";
-import { PillTag } from "./pill-tag";
 import { type SeatMapLayout, seatMapLayout } from "./seat-map-layout";
 
 /**
@@ -47,23 +46,34 @@ export function SeatMapSheet({
       onOpenChange={(next) => {
         if (!next) onClose();
       }}
-      title="座位图"
+      title="我的座位"
     >
       <div className="px-4 pt-3 pb-8">
-        {/* 一位嘉宾一天可能有四五场都带座位图。不复述是哪一场的话，两张图长得
-            差不多时很容易看串。 */}
-        <h2 className="text-title leading-snug">{shown?.name}</h2>
-        {shown?.locationText && (
-          <div className="mt-0.5 text-caption text-ink-3">
-            {shown.locationText}
+        {/* 座位号来自行程主接口（`shown.seat`/`shown.zone`），不用等座位图那次
+            单独请求——嘉宾最先要确认的是"我坐哪"，这行不该跟着画布一起转圈。
+            一位嘉宾一天可能有四五场都带座位图，场馆/厅和议程名都得露出来，
+            不然两张图长得差不多时很容易看串。 */}
+        {shown && (
+          <div className="flex items-center gap-3 rounded-2xl bg-page p-3">
+            <div className="flex h-14 min-w-14 shrink-0 items-center justify-center rounded-xl bg-brand-soft px-2 text-time text-brand tabular-nums">
+              {shown.seat}
+            </div>
+            <div className="min-w-0">
+              {shown.locationText && (
+                <div className="truncate text-title text-ink-1">
+                  {shown.locationText}
+                </div>
+              )}
+              <div className="mt-0.5 truncate text-caption text-ink-3">
+                议程：{shown.name}
+              </div>
+            </div>
           </div>
         )}
 
         <div className="mt-3">
           {query.isPending && <SeatMapPlaceholder />}
-          {query.isError && (
-            <SeatMapFallback zone={shown?.zone} seat={shown?.seat} />
-          )}
+          {query.isError && <SeatMapFallback />}
           {query.data && <SeatMapBody data={query.data} />}
         </div>
       </div>
@@ -72,43 +82,20 @@ export function SeatMapSheet({
 }
 
 function SeatMapBody({ data }: { data: SeatMap }) {
-  // 图画不出来时**只留降级那一行**：那句话里已经把区域和编号说全了，
-  // 底下再挂一遍就是同一句话说两次。
+  // 场馆、议程、座位号已经在上面那张卡片里说完了，图画不出来时不需要
+  // 第二种响应形状，直接复用同一句降级文案。
   if (!data.map) {
-    return <SeatMapFallback zone={data.zoneName} seat={data.seatLabel} />;
+    return <SeatMapFallback />;
   }
 
-  return (
-    <>
-      <SeatMapCanvas map={data.map} />
-
-      {/* 图上没有任何文字（座位不带编号），所以"我是谁"由图下面这一行承担。 */}
-      <div className="mt-3 flex items-center justify-center gap-2">
-        <span className="text-body text-ink-3">{data.zoneName}</span>
-        <PillTag variant="solid" className="tabular-nums">
-          {data.seatLabel}
-        </PillTag>
-      </div>
-    </>
-  );
+  return <SeatMapCanvas map={data.map} />;
 }
 
-/** 图画不出来时的样子。**不是空面板**：座位号才是嘉宾真正照着坐的东西。 */
-function SeatMapFallback({
-  zone,
-  seat,
-}: {
-  zone?: string | null;
-  seat?: string | null;
-}) {
+/** 图画不出来时的样子。座位号已经在上面的卡片里，这里不用再说一遍。 */
+function SeatMapFallback() {
   return (
     <div className="rounded-xl bg-page px-4 py-6 text-center">
       <p className="text-body text-ink-2">座位图暂不可用</p>
-      {zone && seat && (
-        <p className="mt-1 text-caption text-ink-3">
-          您的座位是 {zone} {seat}
-        </p>
-      )}
     </div>
   );
 }
