@@ -8,6 +8,8 @@ import { activitySegment } from "../agenda/schema";
 import { type AuthedVariables, requireUser } from "../auth";
 import { organization } from "../organization/schema";
 import { activity, project } from "../project/schema";
+import { activityMemberOrderBy } from "./activity-member-order-by";
+import { duplicateMobileMessage, findDuplicateMobile } from "./duplicates";
 import {
   activityMember,
   type MemberIdType,
@@ -15,10 +17,6 @@ import {
   projectMember,
   segmentMember,
 } from "./schema";
-import {
-  duplicateMobileMessage,
-  findDuplicateMobile,
-} from "./duplicates";
 import {
   CreateMemberInput,
   ListMemberCandidatesInput,
@@ -308,7 +306,10 @@ export const memberRoutes = new Hono<{ Variables: AuthedVariables }>()
             .from(activityMember)
             .innerJoin(member, eq(member.id, activityMember.memberId))
             .where(where)
-            .orderBy(desc(member.id))
+            // 这个分支的标签就叫"本活动人员 / 活动人员库"，那它就得是运营
+            // 排好的那份名单。另外两个分支照旧 `desc(member.id)`：它们的数据
+            // 源是人员主档和项目人员，不是这场活动的名单。
+            .orderBy(...activityMemberOrderBy)
             .limit(limit)
             .offset(offset),
           db

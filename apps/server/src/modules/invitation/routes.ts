@@ -19,6 +19,7 @@ import { jsonBody } from "../../shared/validate";
 import { type AuthedVariables, requireUser } from "../auth";
 import { user } from "../auth/schema";
 import { fileAsset } from "../file/schema";
+import { activityMemberOrderBy } from "../member/activity-member-order-by";
 import { activityMember, member } from "../member/schema";
 import { organization } from "../organization/schema";
 import { activity } from "../project/schema";
@@ -180,7 +181,10 @@ async function loadBatchDetail(id: number) {
               eq(member.status, "enabled"),
             ),
           )
-          .orderBy(asc(activityMember.id));
+          // 顺序在这里有业务语义，不只是展示：下面取"第一个填了负责人的人"
+          // 当团体联系人。按活动名单排，运营把谁排在前面谁就是联系人；按 id
+          // 排则是"谁先被加进活动"，那不是运营能控制的东西。
+          .orderBy(...activityMemberOrderBy);
 
   const organizationSummary = new Map<
     number,

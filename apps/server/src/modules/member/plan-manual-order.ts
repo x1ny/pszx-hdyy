@@ -44,7 +44,14 @@ const compareOrders = (left: number | null, right: number | null) => {
   return compareNumbers(left, right);
 };
 
-const byManualOrder = (left: ManualOrderRow, right: ManualOrderRow) =>
+/**
+ * 人工排序的规范先后：可见值 → 隐藏位置 → id，未设置（null）排在最后。
+ *
+ * 导出是因为模块内还有第二个消费方（`activity-member-ordering.ts` 给新增行
+ * 分配位置时要先把现有行排好）；它以前自己抄了一份，两份实现同一条规则。
+ * 读取侧的 SQL 版本在 `activity-member-order-by.ts`，改一处要同步另一处。
+ */
+export const byManualOrder = (left: ManualOrderRow, right: ManualOrderRow) =>
   compareOrders(left.order, right.order) ||
   compareNumbers(left.sortIndex, right.sortIndex) ||
   compareNumbers(left.id, right.id);

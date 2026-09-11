@@ -7,6 +7,7 @@ import { err, ok } from "../../shared/result";
 import { jsonBody } from "../../shared/validate";
 import { activitySegment } from "../agenda/schema";
 import { type AuthedVariables, requireUser } from "../auth";
+import { activityMemberOrderBy } from "../member/activity-member-order-by";
 import { ensureSegmentMemberFromActivityWithOutcome } from "../member/ladder";
 import { activityMember, member, segmentMember } from "../member/schema";
 import { organization } from "../organization/schema";
@@ -153,9 +154,11 @@ export const tripBatchMembersQuery = (
       .from(activityMember)
       .innerJoin(member, eq(member.id, activityMember.memberId))
       .where(eq(activityMember.activityId, activityId))
-      .orderBy(asc(member.name), asc(member.id), asc(activityMember.id));
+      .orderBy(...activityMemberOrderBy);
   }
 
+  // 多 join 一次 activityMember 只为排序：环节人员也按活动名单的顺序出现，
+  // 两个分支切换时选择器里的人不会重新洗牌。activityMemberId 非空，不丢行。
   return db
     .select({
       activityMemberId: segmentMember.activityMemberId,
@@ -166,13 +169,17 @@ export const tripBatchMembersQuery = (
     })
     .from(segmentMember)
     .innerJoin(member, eq(member.id, segmentMember.memberId))
+    .innerJoin(
+      activityMember,
+      eq(activityMember.id, segmentMember.activityMemberId),
+    )
     .where(
       and(
         eq(segmentMember.activityId, activityId),
         eq(segmentMember.segmentId, segmentId),
       ),
     )
-    .orderBy(asc(member.name), asc(member.id), asc(segmentMember.id));
+    .orderBy(...activityMemberOrderBy, asc(segmentMember.id));
 };
 
 export type BatchTripScopeRow = {
@@ -452,7 +459,7 @@ export const tripRoutes = new Hono<{ Variables: AuthedVariables }>()
         .from(activityMember)
         .innerJoin(member, eq(member.id, activityMember.memberId))
         .where(eq(activityMember.activityId, activityId))
-        .orderBy(asc(member.name), asc(member.id)),
+        .orderBy(...activityMemberOrderBy),
       tripOptionsSegmentsQuery(activityId),
     ]);
 

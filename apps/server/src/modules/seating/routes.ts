@@ -6,6 +6,7 @@ import { err, ok } from "../../shared/result";
 import { jsonBody } from "../../shared/validate";
 import { activitySegment } from "../agenda/schema";
 import { type AuthedVariables, requireUser } from "../auth";
+import { activityMemberOrderBy } from "../member/activity-member-order-by";
 import { ensureSegmentMemberFromActivity } from "../member/ladder";
 import { activityMember, member, segmentMember } from "../member/schema";
 import { organization } from "../organization/schema";
@@ -139,7 +140,10 @@ export const listCandidatesQuery = (
           : undefined,
       ),
     )
-    .orderBy(asc(member.name))
+    // 按活动名单的顺序，不按姓名：姓名序在 Postgres 的默认排序规则下对中文
+    // 就是码点序，对用户等于随机，而且原来没有 tiebreaker——同名时下面这条
+    // LIMIT 截在谁身上都不确定。活动层三列全序，截断点因此也稳定了。
+    .orderBy(...activityMemberOrderBy)
     .limit(200);
 
 /** 当前方案环节范围内可作团体占位的团体，不统计人数也不做批量排座。 */

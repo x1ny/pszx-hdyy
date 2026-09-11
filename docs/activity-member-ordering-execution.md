@@ -44,3 +44,50 @@
 根据产品反馈，活动人员的排序值改为可空：未设置时输入框为空并以 `-` 作为占位显示，数据库保存 `NULL`，列表按 `sortOrder ASC NULLS LAST, sortIndex ASC, id ASC` 读取。新加入活动的关系默认进入未设置组末尾；输入 0 可将该行置于未设置人员之前；清空已填写数字可恢复为未设置。迁移 `0008_lame_maelstrom.sql` 将首版默认生成的旧 0 按“未设置”转换为 NULL。
 
 临时数据库实测：活动 1 第 6 页首行关系 id=51 设为 0 后，第 1 页首行变为 id=51；再清空为 NULL 后接口返回 `sortOrder: null`，证明最后一页记录可以通过可见排序值进入首位。
+
+## 读取出口统一（2026-09-11）
+
+首版只有活动人员页自己按新顺序读，其余引用这批人的列表各排各的。临时库实测
+（活动 1，把陈静设为 1、赵磊设为 2）：名单是"陈静、赵磊、王芳…"，行程下拉是
+"何伟、傅杰、冯凯…"（`member.name` 在 Postgres 默认排序规则下对中文就是码点序，
+对用户等于随机），选人弹窗的"本活动人员"标签页是"贺敏、陆瑶、曾诚…"（加入
+时间倒序）。同一批人三种顺序，运营排的那一次只在一个页面成立。
+
+**规则：一个列表的元素是活动人员，它就按活动人员名单的顺序读。** 判据是列表里
+装的是什么，不是这条查询写在哪个模块。SQL 那一份实现在
+`apps/server/src/modules/member/activity-member-order-by.ts`，用法
+`.orderBy(...activityMemberOrderBy)`；环节层等"活动顺序之内再排"的在后面追加
+自己的兜底列。查询没 join `activityMember` 的，为排序 join 进来即可——
+`segmentMember.activityMemberId` 和 `resourceMemberBinding.activityMemberId`
+都非空，inner join 不丢行。
+
+数据源是人员主档或项目人员的列表**不适用**（`member/candidates` 的 `all` /
+`project` 分支、`/api/member/list`），那些不是这场活动的名单。
+
+本次接线的出口：
+
+| 出口 | 原顺序 |
+| --- | --- |
+| `member/candidates` scope=`activity`（选人弹窗"本活动人员 / 活动人员库"标签页） | `desc(member.id)` |
+| `trip/options`（行程表单人员下拉） | `asc(member.name)` |
+| `tripBatchMembersQuery` 两个分支（行程批量选择器） | `asc(member.name)` |
+| `listCandidatesQuery`（排位候选人） | `asc(member.name)`，且无 tiebreaker——LIMIT 200 的截断点原先不稳定 |
+| `segmentMember/list`（环节人员名单） | `asc(segmentMember.id)` |
+| `agenda/getSegmentConfig` 的 members（环节配置单页人员区，同时是资源绑人下拉的候选） | `asc(segmentMember.id)` |
+| `listSegmentConfigResourceBindingsQuery`、`resource/get` 的 members（已绑人员） | `asc(resourceMemberBinding.id)` |
+| invitation 团体摘要 | `asc(activityMember.id)`；**顺序有业务语义**——团体联系人取名单里第一个填了负责人的人 |
+
+`activityMember/list` 原本就对，改成引用同一个常量，规则从此只有一份。纯 TS 那份
+（`plan-manual-order.ts` 的 `byManualOrder`）以前被 `activity-member-ordering.ts`
+抄了第二遍，现在导出复用。
+
+护栏是 `activity-member-order-by.test.ts`：钉住 SQL 渲染文本、断言纯函数和 SQL
+是同一条规则、检查已接线的三个导出查询构造器、扫描源码不许有人再拼一遍
+`asc(activityMember.sortOrder)`。已反向验证不是空防（改坏任一处会红）。**它挡不住
+"新写一条返回活动人员的查询、压根没排序"**——没有运行时注册表能枚举"哪些查询
+返回的是人员名单"，权限闸门能有 `permission-map` 那种遍历 `app.routes` 的断言，
+是因为路由本身就是一张表。这个缺口只能靠本节和那个文件的注释兜，别为了补上它
+去造一层排序注册中心。
+
+检查：`bun test apps/server/src` 519 pass / 3 fail（invitation 真实模板，master
+上同样红，见根 `AGENTS.md`）；`bun run typecheck` 三个包全过。

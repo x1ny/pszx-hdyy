@@ -4,6 +4,7 @@ import { db } from "../../infra/db";
 import { err, ok } from "../../shared/result";
 import { jsonBody } from "../../shared/validate";
 import { type AuthedVariables, requireUser } from "../auth";
+import { activityMemberOrderBy } from "../member/activity-member-order-by";
 import { activityMember, member, segmentMember } from "../member/schema";
 import { demandFields, resourceFields } from "../resource/demands";
 import {
@@ -117,8 +118,14 @@ export const listSegmentConfigResourceBindingsQuery = (demandIds: number[]) =>
       eq(resourceMemberBinding.resourceId, activityResource.id),
     )
     .innerJoin(member, eq(member.id, resourceMemberBinding.memberId))
+    // 只为排序而 join：已绑人员的 chip 顺序也跟活动名单走，和上面的人员区
+    // 对得上。`activityMemberId` 非空，inner join 不丢行。
+    .innerJoin(
+      activityMember,
+      eq(activityMember.id, resourceMemberBinding.activityMemberId),
+    )
     .where(inArray(resourceDemandLink.demandId, demandIds))
-    .orderBy(asc(resourceMemberBinding.id));
+    .orderBy(...activityMemberOrderBy, asc(resourceMemberBinding.id));
 
 export const agendaRoutes = new Hono<{ Variables: AuthedVariables }>()
   .use(requireUser)
@@ -475,7 +482,10 @@ export const agendaRoutes = new Hono<{ Variables: AuthedVariables }>()
           eq(activityMember.id, segmentMember.activityMemberId),
         )
         .where(eq(segmentMember.segmentId, segmentId))
-        .orderBy(asc(segmentMember.id)),
+        // 同 segmentMember/list：环节名单跟着活动名单的顺序。这批数据同时是
+        // 资源"绑人下拉"的候选（前端 selectBindCandidates 直接过滤这个数组），
+        // 所以改这一行，下拉里的顺序也跟着对了。
+        .orderBy(...activityMemberOrderBy, asc(segmentMember.id)),
 
       db
         .select(demandFields)

@@ -42,6 +42,7 @@ import {
 } from "../seating/schema";
 import { memberTrip } from "../trip/schema";
 import { activityVenue, activityVenueZone } from "../venue/schema";
+import { activityMemberOrderBy } from "./activity-member-order-by";
 import {
   ActivityMemberOrderingError,
   applyActivityMemberOrder,
@@ -516,11 +517,7 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
           eq(organization.id, activityMember.organizationId),
         )
         .where(where)
-        .orderBy(
-          asc(activityMember.sortOrder),
-          asc(activityMember.sortIndex),
-          asc(activityMember.id),
-        )
+        .orderBy(...activityMemberOrderBy)
         .limit(limit)
         .offset(offset),
       db
@@ -1066,7 +1063,10 @@ export const segmentMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
           eq(activityMember.id, segmentMember.activityMemberId),
         )
         .where(where)
-        .orderBy(asc(segmentMember.id))
+        // 环节名单沿用活动名单的顺序：运营在活动人员页排过一次，环节里再看到
+        // 另一个顺序等于那次排序只在一个页面成立。`segmentMember.id` 退成同
+        // 位置时的兜底（活动层三列已经全序，实际到不了这一列）。
+        .orderBy(...activityMemberOrderBy, asc(segmentMember.id))
         .limit(limit)
         .offset(offset),
       db

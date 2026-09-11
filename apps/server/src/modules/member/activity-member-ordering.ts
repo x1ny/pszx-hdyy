@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { Tx } from "./ladder";
 import {
+  byManualOrder,
   type ManualOrderOperation,
   type ManualOrderRow,
   planManualOrder,
@@ -27,18 +28,6 @@ export class ActivityMemberOrderingError extends Error {}
 
 const fail = (message: string): never => {
   throw new ActivityMemberOrderingError(message);
-};
-
-const compareOrderRows = (
-  left: Pick<ManualOrderRow, "id" | "order" | "sortIndex">,
-  right: Pick<ManualOrderRow, "id" | "order" | "sortIndex">,
-) => {
-  if (left.order !== right.order) {
-    if (left.order === null) return 1;
-    if (right.order === null) return -1;
-    return left.order - right.order;
-  }
-  return left.sortIndex - right.sortIndex || left.id - right.id;
 };
 
 const loadOrderRows = async (tx: Tx, activityId: number) => {
@@ -102,7 +91,7 @@ export async function allocateActivityMemberPositions(
 
   const rows = await loadOrderRows(tx, activityId);
   const orderedRows = [...rows].sort((left, right) =>
-    compareOrderRows(
+    byManualOrder(
       { id: left.id, order: left.sortOrder, sortIndex: left.sortIndex },
       { id: right.id, order: right.sortOrder, sortIndex: right.sortIndex },
     ),

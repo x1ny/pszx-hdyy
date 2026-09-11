@@ -17,6 +17,7 @@ import { err, ok } from "../../shared/result";
 import { jsonBody } from "../../shared/validate";
 import { activitySegment } from "../agenda/schema";
 import { type AuthedVariables, requireUser } from "../auth";
+import { activityMemberOrderBy } from "../member/activity-member-order-by";
 import { activityMember, member } from "../member/schema";
 import {
   checkDemandsLinkable,
@@ -290,7 +291,8 @@ export const activityResourceRoutes = new Hono<{
           eq(activityMember.id, resourceMemberBinding.activityMemberId),
         )
         .where(eq(resourceMemberBinding.resourceId, id))
-        .orderBy(asc(resourceMemberBinding.id)),
+        // 台账里的已绑人员也按活动名单排，和议程页那份 chip 顺序一致。
+        .orderBy(...activityMemberOrderBy, asc(resourceMemberBinding.id)),
     ]);
 
     return c.json(ok({ ...row, demands, members }));

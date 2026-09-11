@@ -29,6 +29,8 @@ description: 在本仓库实现、接入或修复可填写 order 与拖拽人工
 
 一个使用方时按页面／模块本地存放；第二个真实使用方接入时按实施方案第 3 节抽取纯算法和稳定交互。业务事务、权限、API、缓存与业务列保持各自归属。不要从其他路由的 `-` 目录引用，也不要复制第二份正式算法。
 
+**"第二个使用方"指第二张有人工排序的表，不是第二处读取。** 2026-09-11 把 agenda／trip／seating／resource／invitation 的活动人员读取出口统一到 `modules/member/activity-member-order-by.ts`，那只是复用同一张表的顺序，没有产生第二张排序表——`plan-manual-order.ts` 仍留在 member 本地，别据此搬进 `shared/`。读取侧的规则、已接线出口和护栏范围见[执行记录](../../../docs/activity-member-ordering-execution.md#读取出口统一2026-09-11)。
+
 后续接入沿用活动人员样例已验证的 `@dnd-kit/react@0.5.0` 和 API。只有计划升级依赖时才按 T05 重新验证，不混用不同代包名与事件。共用 UI 只认 props 和 DOM，不 import 服务端业务类型或调用业务 API。
 
 ## 验证与交接
