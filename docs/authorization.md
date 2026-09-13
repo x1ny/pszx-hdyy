@@ -1,3 +1,11 @@
+---
+status: current
+summary: 管理端权限点、角色数据、接口映射和授权覆盖
+read_when:
+  - 修改角色、菜单、权限或服务端授权
+  - 新增 API 前缀或管理端模块
+---
+
 # 权限方案（Authorization）
 
 > **状态：已实施。** 认证（Authentication，"你是谁"）见

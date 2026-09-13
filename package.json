@@ -20,6 +20,8 @@
     "typecheck": "bun run --filter '@repo/*' typecheck && bunx tsc -p scripts/tsconfig.json --noEmit",
     "test": "bun test scripts && bun run --filter \"@repo/*\" test",
     "docs:api": "bun scripts/gen-api-docs.ts",
+    "docs:list": "bun scripts/docs-list.ts",
+    "docs:check": "bun scripts/docs-list.ts --check",
     "db:generate": "bun run --filter '@repo/server' db:generate",
     "db:migrate": "bun run --filter '@repo/server' db:migrate",
     "db:baseline": "bun run --filter '@repo/server' db:baseline",

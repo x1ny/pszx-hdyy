@@ -1,3 +1,10 @@
+---
+status: current
+summary: Windows 深路径 worktree 下的 Bun 安装排障
+read_when:
+  - Windows 安装出现 copyfile ENOENT 或 Invalid hook call
+---
+
 # Windows + git worktree 下的 bun install 坑
 
 这份文档记录一个具体环境问题的症状、根因和修法，不是设计决策——遇到同样报错时直接跳到"修法"。

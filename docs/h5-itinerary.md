@@ -1,18 +1,26 @@
-# h5 `/itinerary`：嘉宾专属行程
+---
+status: current
+summary: H5 分享访问、行程页面、错误展示和移动端视觉规范
+read_when:
+  - 修改 H5 页面、手机号入口、分享链接或访问校验
+  - 修改 H5 样式、弹层、字体适配、测试或错误展示
+---
 
-> 从 AGENTS.md 搬出来的细则（那份文档有 32 KiB 硬预算）。`apps/h5` 做第二个页面
-> 之前先读这份——它是 h5 端目前唯一的视觉与结构范式。
+# H5 嘉宾行程：当前实现与开发范式
 
-## 现状
+当前页面位于 `routes/a/$shareToken/`，由分享标识进入，数据通过服务端 H5 接口读取。`/itinerary` 静态原型是早期实现，已不作为当前运行入口。
 
-`/itinerary`（2026-09-02）是**静态页**，数据是 `routes/itinerary/-data.ts` 里的常量。
-需求来源是 `docs/新版H5_Demo/`（原型的 React 源码 + 截图）。
+## 当前访问方式
 
-接后端时把那个常量换成请求即可，**它的类型就是接口约定的草稿**。
+管理端与 H5 身份独立。H5 的公开入口 `/api/h5Access/submitPhone` 校验分享标识和活动中的手机号关系，并写入 `h5_guest` HttpOnly cookie；`/api/h5` 整个前缀由 `requireH5Member` 解析分享活动与人员。实现见 [auth.ts](../apps/server/src/modules/h5/auth.ts) 和 [入口路由](../apps/server/src/modules/h5/routes.access.ts)。
+
+这是以手机号本身为凭证的简化访问方案，尚无短信验证码、微信授权或独立签发的身份 token；知道号码的人仍可能访问对应行程。记录已有能力不代表提高了身份验证强度。历史重号按当前活动关系的固定顺序取第一条，变更识别规则需单独明确产品口径。
+
+新增 H5 受保护接口沿用该前缀守卫，不使用管理端 `requireUser`，不把两个视角混进一个 handler。cookie 名与 Better Auth 分开（cookie 不按端口隔离）。
 
 ## 视觉与结构范式
 
-`apps/h5` 不用 shadcn（理由见 AGENTS.md「仓库结构」）。这个页面确立的写法：
+`apps/h5` 不用 shadcn，与管理端不共享主题和组件。Base UI 提供交互原语，H5 自己维护外观；不加载 Web 字体，使用系统字体栈。表面组件较薄，使用 cn() 和样式常量，不引入管理端的 variants 体系。这个页面确立的写法：
 
 - **弹层交互直接用 `@base-ui/react` 原语自己套样式**（Drawer / Collapsible / Toast）。
   值钱的是焦点管理、滚动锁定和 `aria-*`，不是别人的皮。
@@ -70,7 +78,7 @@ fixed 元素不参与视口的可滚动溢出，多铺出去的部分在正常�
 
 ## 开发环境怎么进这一页
 
-**`http://localhost:3101/a/demo-itinerary`，手机号 `13810000000`（王芳）。**
+运行 `bun run dev`，使用启动输出的实际 H5 origin，访问 `/a/demo-itinerary`；种子手机号 `13810000000`（王芳）。不要写死 3101 或猜管理端端口。
 
 `activity.itinerary_share_token` 平时是 null——运营在管理端点过「分享行程链接」
 才生成（`project/routes.ts` 的 `getOrCreateItineraryShareToken`）。种子给演示活动
@@ -88,10 +96,12 @@ null**，那条"查不到就 404"的分支才有得调。
 [h5-seat-map.md](h5-seat-map.md)。**改那张图之前先读它**，尤其是"图上所有座位
 长得一模一样"这条：一条 path 装下全部座位的前提就是它。
 
-## 那道手机号校验不是安全边界
+## 运行、测试与错误展示
 
-进页面前的 `key-gate.tsx`：判断在前端比一个常量，devtools 一开就绕过去了。
+H5 是浏览器 SPA；路由 loader、beforeLoad 与组件都在浏览器运行，详见 [代码结构](code-structure.md#运行与渲染模型)。默认 404 和错误展示已由 `app/router.tsx` 的 PageMessage 配置；不再沿用原型常量 key-gate 的访问判断。
 
-接后端前**不要把它当成"已经有权限控制了"**。h5 的真实身份体系（手机号验证码 /
-微信授权，身份是 `member`）还没定案，`/api/h5` 的守卫也还没有，涉及登录态的页面
-现在做不了。见该文件顶部注释和 AGENTS.md「认证」一节末尾。
+已有 `bun test` 脚本，例如座位布局逻辑测试；这不等于具有管理端同款的完整组件测试装置。行为改动仍需按范围做浏览器验证。
+
+## 主题与等比缩放
+
+H5 保持亮色，不添加主题切换或系统深色规则；暗色变体绑定到不启用的 .dark。两端 token 分开维护。根字号 clamp 驱动 rem 等比缩放，新字阶与随布局缩放的尺寸写 rem；描边、安全区等物理量可保留 px。算法与取舍见 [ADR](architecture-decisions.md#appsh5-的移动端适配根字号等比缩放)。

@@ -1,3 +1,11 @@
+---
+status: current
+summary: 迁移生成、临时库差异补齐、持久库上线与漂移验证
+read_when:
+  - 修改 schema、迁移或种子
+  - 连接持久库、生成迁移、处理迁移冲突或部署数据库
+---
+
 # 数据库迁移方案
 
 > **状态：已实施并验证完毕。** 代码、迁移文件、本地持久库和**测试库**的基线、
@@ -8,10 +16,10 @@
 ## 0. 一句话
 
 生产和测试用**版本化 SQL 迁移文件**——进 git、随镜像发布、容器启动前自动执行；
-本地开发保留 `push` 的即时性，靠一个**不连数据库的漂移检查**保证两条路不分叉；
+本地临时库启动先重放迁移，再按 schema 快照补齐未生成的差异；通过**不连数据库的漂移检查**保证收尾不遗漏迁移。这里没有 `db:push` 命令；
 测试环境**不删数据**，用 baseline 平滑接进来。
 
-## 1. 现状与问题
+## 1. 迁移改造前的状态与问题
 
 - 全仓**没有一个迁移文件**，`apps/server/drizzle/` 不存在。schema 的唯一事实是 `modules/*/schema.ts`。
 - 开发环境靠 `dev-seed/bootstrap.ts` 的 `pushSchema()` 建表，只对空库负责。
@@ -73,7 +81,7 @@
 `AGENTS.md` 和 `docker/README.md`。
 
 > **为什么 `schema-registry.ts` 放在 `src/` 根而不是 `infra/`**：它要 import 所有
-> `modules/*/schema.ts`，放进 `infra/` 就把依赖方向倒过来了（见 AGENTS.md「代码结构」）。
+> `modules/*/schema.ts`，放进 `infra/` 就把依赖方向倒过来了（见 [代码结构](code-structure.md)）。
 > `src/` 根是组合根，`index.ts` 和 `client-type.ts` 本来就认识 modules。
 
 ## 5. 生产环境
@@ -450,7 +458,7 @@ DATABASE_URL="$TEST_DATABASE_URL" bun run db:migrate
 ### 7.2 `bun run dev:persist`（持久库）：只跑迁移
 
 **这是一处行为变化**：`dev:persist` 现在会自动执行迁移（不 push、不灌种子）。
-AGENTS.md 里「不建表也不灌种子，schema 同步靠你手动 db:push」那句要跟着改。
+旧的“不建表、手动 db:push”约定已废弃；当前操作入口见 [开发工作流](development-workflow.md)。
 
 理由是它和生产形态最接近：持久库有累积的真实数据，正好用来预演生产的迁移路径。
 第一次跑会因为没有记账表而失败，提示你先 `bun run db:baseline`——这正是 6.2 说的演练。
@@ -458,7 +466,7 @@ AGENTS.md 里「不建表也不灌种子，schema 同步靠你手动 db:push」�
 ### 7.3 改 schema 的日常动作
 
 1. 改 `modules/<模块>/schema.ts`；
-2. `bun run dev` 照常调试（push 自动补齐 + 一条警告）；
+2. `bun run dev` 照常调试（快照差异自动补齐 + 一条警告）；
 3. 改完了、准备提交前：`bun run db:generate`；
 4. **打开生成的 SQL 看一眼**——这是整套机制里唯一真正需要动脑的一步。
    有没有 `DROP`？有没有 `NOT NULL` 加在一张已有数据的表上（会失败）？

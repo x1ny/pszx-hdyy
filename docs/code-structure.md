@@ -1,8 +1,24 @@
+---
+status: current
+summary: 运行与渲染模型、目录归属、依赖方向和路径约定
+read_when:
+  - 新建模块或页面，提取共享代码
+  - 修改框架、路由、SSR 假设、运行边界或导入方式
+---
+
 # 代码结构：前端与后端的目录分层
 
-> 这份文档是从 `AGENTS.md` 拆出来的。根文件里留的是**结论和硬线**，这里是**完整的判据、范式和理由**。
->
-> 什么时候该读它：新建模块、新建页面、拿不准某段代码该放哪、或者想动目录结构的时候。日常改一个已有页面不需要读。
+> 当前目录、依赖方向与运行模型归本文维护。新建模块、页面，调整路由、共享代码或运行边界时阅读；局部业务改动按需读取对应章节。
+
+## 运行与渲染模型
+
+`apps/web` 和 `apps/h5` 都是**纯客户端 SPA**，没有 SSR，也没有 server function 这种东西。各自的 `index.html` 是唯一的 HTML 壳，`src/main.tsx` 挂载 `RouterProvider`，`QueryClientProvider` 也在那里。路由的 `beforeLoad`、`loader`、组件全部只在浏览器执行。
+
+安全含义：前端的路由守卫、菜单过滤、按钮显隐**都不是安全边界**，用户绕过界面直接打 `/api/*` 即可。每个受保护的接口必须在 Hono handler 内部独立校验。
+
+当前应用是 `apps/web`、`apps/h5`、`apps/server` 三个 Bun workspace。根包只放工具与跨包编排，不加业务依赖。DB 客户端和 schema 留在 server：当前没有第二个运行时消费者，单独拆包没有收益且会增加开发监听边界。出现独立 worker、CLI 或第二个服务时重新评估。
+
+两个前端的身份、视觉和主题独立维护；公共 UI 不因形似就跨端共享。H5 实现范式见 [H5 指南](h5-itinerary.md)。运行时、端口与服务入口见 [开发工作流](development-workflow.md)，镜像和静态挂载见 [Docker 流程](../docker/README.md)。
 
 ## 后端目录结构：基础设施 / 业务模块 / 共享逻辑
 
@@ -49,13 +65,13 @@ apps/server/
 
 **新增一个业务功能时，在 `modules/` 下新建一个同名目录**（如 `modules/project/{schema,validation,routes}.ts`），在 `index.ts` 里 `.route("/api/<模块名>", projectRoutes)` 接上链条即可——`routes.ts` 里的路径写成相对该前缀的 `/list`、`/create` 这种，不要再带 `/api/xxx` 全路径。表定义放在该模块目录下的 `schema.ts`，会被 `drizzle.config.ts` 的 glob 自动捡到。不要把新路由塞进 `modules/example`——那个目录只是范式演示，真实业务上线后可以整个删掉。
 
-`shared/` 只放真正跨模块、且不碰外部资源的东西（目前只有 `result.ts`）。如果某个类型/工具只有一个模块在用，就放回那个模块目录里；如果它连接外部资源，归 `infra/`，不归 `shared/`。
+`shared/` 只放真正跨模块、且不碰外部资源的逻辑和类型，当前内容以代码为准。如果某个类型/工具只有一个模块在用，就放回那个模块目录里；如果它连接外部资源，归 `infra/`，不归 `shared/`。
 
 ## 前端目录结构：页面本地优先
 
-**这一整节对 `apps/web` 和 `apps/h5` 同等适用**，两边各自一套四个桶。下面的目录树以 `apps/web` 为例（它是目前唯一填满的那个）；`apps/h5` 结构相同，只是还只有骨架。
+**这一整节对 `apps/web` 和 `apps/h5` 同等适用**，两边各自一套四个桶。下面的目录树以 `apps/web` 为例；H5 沿用相同归属判据，但只有一个消费方的页面代码继续留在路由本地，不为了对称预建 features。
 
-**两个前端之间不共享代码，也不互相 import。** 真出现两边都要的东西，先问它是不是属于 `@repo/server` 的 `exports`（类型、字典这类已经是了）；确实是纯前端的共享物再来讨论要不要开 `packages/`——现在不开，理由和「没有独立的 `packages/db`」那条一样。
+**两个前端之间不共享代码，也不互相 import。** 真出现两边都要的东西，先问它是不是属于 `@repo/server` 的 `exports`（具体可用入口见 [API 契约](api-contract.md#客户端导入清单)）；确实是纯前端的共享物再来讨论要不要开 `packages/`——现在不开，理由和「没有独立的 `packages/db`」那条一样。
 
 四个桶，跟后端同一个思路——**靠依赖方向裁决归属，不靠感觉**：
 
@@ -216,3 +232,11 @@ apps/web/src/
 - ❌ 现阶段的 barrel `index.ts`（理由见 `features/` 那节）
 - ❌ 在 `features/*/queries.ts` 之外再叠一层 `services/`
 - ❌ 为了对称给每个 feature 预建空的 `components/hooks/utils/types` 四件套——**用到再建**
+
+## 路径别名与路由生成
+
+`apps/web` 和 `apps/h5` 里都用 `#/*` 指向各自的 `src/*`（`package.json` 的 `imports` + `tsconfig.json` 的 `paths` 两处都要有）。两个包各自解析各自的 `#/`，互不可见。
+
+**`apps/server` 里只用相对路径导入。** `tsconfig` 的 `paths` 是整个 program 级别的，前端通过 `import type` 把服务端源码拉进自己的 program 后，会拿那个前端的 `#/*` 去解析服务端文件里的 `#/`，直接解析错。相对路径没这个问题。现在有两个前端各带一份 `#/*`，这条规则只会更重要。
+
+`routeTree.gen.ts` 是生成物，不手改；Vite 中 `tanstackRouter()` 先于 `viteReact()`。大画布编辑路由使用父动态参数尾 `_` 脱离详情布局，URL 不变；改动后执行对应包的 `generate-routes`。

@@ -1,3 +1,11 @@
+---
+status: current
+summary: 管理端用户、登录、停用、session 缓存和账号引导
+read_when:
+  - 修改管理端认证、中间件顺序、用户管理或登录缓存
+  - 修改账号停用、重置密码或内置用户引导
+---
+
 # 用户管理设计
 
 > 本文档记录**管理端用户管理**（`/system/user`）的设计与取舍。需求来源是旧系统
@@ -5,9 +13,18 @@
 > `fashion_actions_management` 的 `SysUserController.java`），但**不照抄**——下面每
 > 一条"不做"都带着理由。
 >
-> 角色管理是**下一步**的事，本文档只负责把它需要的表和关联一次性定死，避免二次迁移。
+> 用户管理、角色管理与权限闸门均已实施。本文保留设计演进；当前认证见下方速查，授权以 [authorization.md](authorization.md) 为准。
 > 界面形态（弹窗、状态芯片、操作列对齐、筛选栏）全部沿用
 > [crud-page-guide.md](crud-page-guide.md)，本文档不重复。
+
+## 当前认证入口
+
+本节只讲管理端。Better Auth 的账号和邮箱登录并存；H5 的独立访问方式见 [H5 指南](h5-itinerary.md)。
+
+- **`index.ts` 里 `authHandler` 的 `.route()` 必须注册在 session 中间件之前。** 这不是官方要求的顺序，是我们自己的选择：`auth.handler()` 直接处理 raw `Request`/`Response`、从不读 Hono context，顺序不影响正确性；排前面纯粹是让 Better Auth 自己的路由跳过后面注册的 session 查询。`routes.ts` 里那行 `app.on(["GET","POST"], "/api/auth/*", …)` 照抄官方文档，**不要改动它的结构**。
+- session 中间件把 `user`/`session` 放进 Hono context，受保护接口从 `c.get("user")` 取，为空时返回 `err({ code: "UNAUTHORIZED" })`——**不是 401**，见「前后端边界」。
+- 前端守卫是 `routes/_authenticated.tsx`（pathless layout），未登录跳 `/login?redirect=...`；session 缓存在 `features/auth/queries.ts`，走的是 Better Auth 自己的客户端，跟业务接口是两条独立的路，不要混着改。
+- **登录/登出后必须 `queryClient.removeQueries({ queryKey: sessionQueryKey })`。** 守卫用 `ensureQueryData`，它**即使数据已过期也会先返回缓存**，所以 `invalidateQueries` 不够——登录成功后守卫会读到旧的 `null` 把用户弹回登录页。必须删掉缓存条目，逼守卫重新请求。当前用户的权限点**共用这一个 key**（在同一个 `queryFn` 里多 fetch 一次），就是为了不让这个坑翻倍。
 
 ## 1. 决策速查
 
@@ -69,7 +86,7 @@ RuoYi 把菜单存进 `sys_menu`（目录/菜单/按钮三种类型同表），�
 
 - **角色**：它的 `user.role` 是逗号分隔的 text，服务的是它自己**代码里定义**的 access
   control。我们的角色是库里的行、要外键。装了会有两套"角色"概念并存。
-- **信封**：它的路由在 `/api/auth/admin/*`，业务失败返回**真 HTTP 4xx**。AGENTS.md 规定业务
+- **信封**：它的路由在 `/api/auth/admin/*`，业务失败返回**真 HTTP 4xx**。[API 契约](api-contract.md)规定业务
   接口一律 `ApiResult` + HTTP 200，前端只看 `result.code`。
 - **分页**：`list-users` 的形状不是 `PageInput` → `{list,total}`。
 - **停启用**：它给 `banned` boolean，而全站（supplier / member）用的是
@@ -144,7 +161,7 @@ Q1 定了"邮箱选填"，但 Better Auth 的 `email` 是 `notNull + unique`，�
 
 ### 5.4 `role` / `user_role`
 
-角色管理是下一步，但表结构现在就定死，避免二次迁移。
+以下是初版为角色管理预留的表结构；角色管理与权限闸门现已实施，见 §10。
 
 ```
 role       id(bigint identity), name(唯一), remark,
@@ -213,7 +230,7 @@ agenda 5、invitation 4、supplier 3、organization 2、trip 2、file 1），**�
 是要重设密码；而这 8 个里 `15860030301` / `15860030303` 是 RuoYi 自带的"若依"测试账号，
 `cyq` / `cjm` 是开发账号，真正要留的只有两三个。
 
-**`role` 表本次只预置一条"超级管理员"**，其余等角色管理落地后由客户自己建。旧库那三个
+**初版只预置一条“超级管理员”；当前已同步两个内置角色，见 §10。** 其他角色由客户维护。旧库那三个
 （`普通角色` / `流程执行角色` / `开发人员`）是 RuoYi 模板自带的名字，照搬等于替产品编角色名。
 
 ## 8. 认证链路的改动
@@ -300,15 +317,14 @@ Better Auth 这边不需要额外工作：`/sign-in/username`（插件提供）�
 
 ## 9. 前端
 
-- `routes/_authenticated/system/user.tsx`：当前是 `PagePlaceholder`，替换成完整 CRUD 页。
+- `routes/_authenticated/system/user/index.tsx`：当前用户管理页，初版从占位页替换而来。
   菜单入口 `nav.ts` 已存在，不用加。
 - **列**：账号(`displayUsername`)、姓名、手机号、角色、状态、创建时间、操作（修改 / 重置密码 / 删除）
-- **筛选**：账号、姓名、手机号、状态。**不放"角色"**——本次只预置一条角色，下拉里只有一个
-  选项，做出来是摆设；等角色管理落地再加，那时是一行的事。
+- **筛选**：当前为账号、姓名、手机号、状态，尚无角色筛选。早期“只有一条角色”的原因已不再适用；是否补充筛选单独按需求决定，不在文档迁移时顺带实现。
 - `login.tsx`：邮箱输入框改成账号，删掉注册分支。
 - `nav-user.tsx`：头像菜单里加"修改密码"。
 
-**中间态说明**：角色管理和权限闸门是下一个 PR，所以本次角色字段**能选、能存、能显示，但不拦
+**历史中间态（已结束）**：初版提交时角色管理和权限闸门尚未落地，角色字段**能选、能存、能显示，但不拦
 任何操作**。这是有意的中间态，界面上不加"暂未生效"提示——那个提示要写要删，而中间态只存在
 一个迭代。（**该中间态已于角色管理那一轮结束**，见 §10。）
 

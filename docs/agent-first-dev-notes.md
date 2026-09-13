@@ -1,4 +1,13 @@
+---
+status: historical
+summary: 2026-08 开发工作流改造的历史经验与实验
+read_when:
+  - 研究早期开发环境取舍及其当时适用条件
+---
+
 # agent-first 开发框架：本次踩出来的经验
+
+> 历史经验记录：其中宿主能力、权限限制与工具行为描述针对当时环境，不是现在所有 Agent 的通用规则。当前开发入口见 [开发工作流](development-workflow.md)，知识归属见 [知识维护](knowledge-maintenance.md)。
 
 > 这份文档不是某次改动的说明（那份在 [dev-workflow-refactor-review.md](./dev-workflow-refactor-review.md)），
 > 而是把 2026-08-24 那次开发工作流改造里**可以迁移到下一套模板**的部分抽出来。

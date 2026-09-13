@@ -1,3 +1,11 @@
+---
+status: current
+summary: 管理端 CRUD、TanStack Form、筛选查询和视觉范式
+read_when:
+  - 新建管理端 CRUD 模块
+  - 修改管理端表格筛选、表单、按钮、错误展示或页面视觉
+---
+
 # CRUD 页面实现参考
 
 这份文档是"怎么做"，不是"为什么"——原理和取舍见 [architecture-decisions.md](architecture-decisions.md)，仓库级别的硬规则见 [AGENTS.md](../AGENTS.md)。这里只做一件事：把 supplier 模块（供应商管理）踩过的坑和定下的模式抽出来，让下一个 CRUD 模块能直接照抄，不用重新踩一遍。
@@ -245,7 +253,7 @@ const form = useForm({
 - **必填星号用 `<RequiredMark />` 单独上色**（`text-destructive`），不要把 `*` 直接拼进标签字符串——纯文本里的 `*` 会跟着标签一起变成普通黑字。
 - 多选用 Base UI 的 `<Select multiple items={LABELS} value={...} onValueChange={...}>` 原生支持，不用另外拼 Popover+Command 组合件——选项数量不多、不需要搜索框的场景，多一层组合件只是多一处要维护的键盘交互。**但 `Select` 关闭时不会触发原生 `blur` 事件**，`onValueChange` 里要顺手调一次 `field.handleBlur()`，否则选完选项之后错误提示要等用户点别处才会消失（`isTouched` 一直是 `false`，反而会导致选完了必填项、`FieldError` 却还压着上一次判空的错误没消失——这个不是"多显示"的问题，是"该消失时不消失"）。
 
-**表单校验 schema 是服务端那份的镜像，故意手抄一份，不是 bug。** `apps/web` 对 `@repo/server` 只能 `import type`，从根 import 会把服务端依赖（`pg` 等）拽进浏览器包。现在只有一个模块，两份对照着看得过来；等第三个模块也在抄同一批规则时，才值得开 `packages/contracts`（纯 zod + 类型，零运行时依赖）——现在开就是在只有一个消费方时建包，本仓库明确否掉的模式。服务端**始终**是权威校验方，前端这份只是让用户在点提交前就看到错误。
+**当前表单校验仍在前端维护服务端规则的镜像。** 服务端根入口仅作类型导入，运行时子路径按 [API 契约](api-contract.md#客户端导入清单) 处理。早期“只有一个模块，第三个再重审共享契约”的前提已经变化；共享校验应单独设计与验证，本次知识整理不提前创建 contracts 包。服务端始终是权威校验方，前端镜像用于提交前反馈；修改字段时同步核对两端规则。
 
 **`key={record?.id ?? "new"}` 让表单整体重新挂载**，而不是在 `useEffect` 里手动 `reset`。切换编辑对象时不会出现"上一条的校验错误残留在这一条"。
 
@@ -321,12 +329,21 @@ Tailwind v4 的 preflight 去掉了 `button { cursor: pointer }`（改成对齐�
 1. 后端：`schema.ts`（主键/时间戳/审计列按上面的规矩，先别加索引和软删）
 2. 后端：`validation.ts`（`PageInput.extend`、筛选字段走 `filter` helper、枚举带中文 `error`）
 3. 后端：`routes.ts`（`requireUser` 挂链头、显式字段投影、`updateFoo` 用 `RETURNING`、按 `id DESC` 排序、单独一个不带筛选的 `getXxxStats`）—— **`ok()`/`err()` 千万别加类型标注**
-4. `index.ts` 里 `.route("/", fooRoutes)`
-5. `bun run db:push`
+4. `index.ts` 里 `.route("/api/<模块>", fooRoutes)`；在权限集中映射登记归属，见 [API 契约](api-contract.md) 和 [授权](authorization.md#10-加一个新模块时要做什么)
+5. 修改 schema 后执行 `bun run db:generate` 并审阅迁移；新增 `apps/server/src/dev-seed/` 数字前缀 typed seed，临时库启动与迁移检查见 [数据库迁移](database-migrations.md)
 6. 前端：`-queries.ts`（类型全部 `InferResponseType`/`InferRequestType` 反推，不手抄）
 7. 前端：`-utils.ts`（中文标签、`CATEGORY_BADGE_CLASS` 这类配色 Record 都要 `satisfies`）
 8. 前端：`index.tsx`（URL 驱动筛选、`.catch()` 兜底、`loaderDeps`+`ensureQueryData` 预取、操作列居中）
 9. 前端：`-components/xxx-form-dialog.tsx`（TanStack Form + 手抄镜像 schema + `key` 强制重挂载）
 10. 前端：`-components/xxx-detail-sheet.tsx`
-11. `app/nav.ts` 加菜单项 + `bun run --filter '@repo/web' generate-routes`
+11. `app/nav.ts` 加菜单项；新权限按授权指南同步权限点、前端路由表和后端映射；执行 `bun run --filter '@repo/web' generate-routes`
 12. `bun run typecheck`，然后开浏览器实测一遍：**新增弹窗打第一个字，确认只有那一个字段有反应，不是满屏飘红**、多选、翻页、状态切换后行不跳动、删除确认、URL 乱传参数不崩
+
+
+## 管理端样式与错误展示
+
+管理端保持现有亮色 token，不添加深色 token、主题切换或系统色彩媒体查询；这种产品方向变化需先讨论。`styles.css` 的 `.dark` 变体刻意不会启用，阻止 vendored shadcn 的深色类跟随系统；不要与 H5 合并主题。
+
+路由默认 404 与错误组件由 `app/router.tsx` 统一配置，错误展示使用业务中文 message。无权限由认证布局展示 forbidden，不重定向伪装成导航问题；具体角色逻辑见 [授权](authorization.md)。
+
+新增 CRUD 从 supplier 复制当前接线，表单使用 TanStack Form；H5 页面不适用本篇管理端组件和配色规则。收尾命令与已知失败见 [开发工作流](development-workflow.md)。

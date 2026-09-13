@@ -40,6 +40,7 @@ import type { SaveSegmentConfigInput } from "./validation";
 
 /**
  * 环节配置页（单页四块、整页原子保存）的写入编排。
+ * 当前保存契约与新旧入口约束见 docs/segment-config.md；修改此路径前先读。
  *
  * 这是仓库里最长的一条写路径——一次提交要按顺序碰 8 张表。之所以敢这么写，
  * 是因为**没有一条业务规则在这个文件里重新实现**：人员三层补齐走

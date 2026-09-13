@@ -1,3 +1,11 @@
+---
+status: current
+summary: 镜像发布、部署端口、静态资源和环境变量
+read_when:
+  - 构建镜像、发版或部署
+  - 修改端口、静态中间件、上传卷或部署环境
+---
+
 # pszx-hdyy Docker 流程
 
 ## 镜像里装了什么
