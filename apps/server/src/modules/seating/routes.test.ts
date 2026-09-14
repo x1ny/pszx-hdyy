@@ -7,6 +7,7 @@ import {
   listOrganizationCandidatesQuery,
   listOrganizationSeatingStatsQuery,
   organizationInSegmentScopeQuery,
+  seatingPlanPersonCountFields,
 } from "./routes";
 import { segmentSeatingPlan } from "./schema";
 import { currentPlanJoin, inSeatingScope } from "./stats";
@@ -119,5 +120,22 @@ describe("排位范围的两个片段", () => {
     expect(where).toContain('"seating_enabled"');
     expect(where).toContain("is not null");
     expect(where).toContain(" or ");
+  });
+});
+
+describe("排位总览人员统计", () => {
+  const rendered = db
+    .select(seatingPlanPersonCountFields)
+    .from(activitySegment)
+    .leftJoin(segmentSeatingPlan, currentPlanJoin)
+    .toSQL().sql;
+
+  test("总人数来自当前环节人员，已排人数按有效个人分配去重", () => {
+    expect(rendered).toContain('count(*)::int from "segment_member"');
+    expect(rendered).toContain(
+      'count(distinct "seat_assignment"."segment_member_id")::int',
+    );
+    expect(rendered).toContain('"seat_assignment"."occupant_type" = $');
+    expect(rendered).toContain('"seat_assignment"."revoked_at" is null');
   });
 });

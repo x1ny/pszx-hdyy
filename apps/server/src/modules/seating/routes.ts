@@ -91,6 +91,21 @@ const liveAssignment = isNull(seatAssignment.revokedAt);
 /** 未软删的位置。 */
 const liveSeat = isNull(segmentSeat.removedAt);
 
+/** 排位总览显示的人员统计：个人分配按环节人员去重，团体占位不算具体人员。 */
+export const seatingPlanPersonCountFields = {
+  totalMemberCount: sql<number>`(
+    select count(*)::int from ${segmentMember}
+    where ${eq(segmentMember.segmentId, activitySegment.id)}
+  )`.as("total_member_count"),
+  assignedPersonCount: sql<number>`(
+    select count(distinct ${seatAssignment.segmentMemberId})::int
+    from ${seatAssignment}
+    where ${eq(seatAssignment.planId, segmentSeatingPlan.id)}
+      and ${eq(seatAssignment.occupantType, "person")}
+      and ${seatAssignment.revokedAt} is null
+  )`.as("assigned_person_count"),
+};
+
 /**
  * 当前环节的排位候选人查询。
  *
@@ -472,6 +487,7 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
           where ${eq(seatAssignment.planId, segmentSeatingPlan.id)}
             and ${seatAssignment.revokedAt} is null
         )`.as("assigned_count"),
+        ...seatingPlanPersonCountFields,
       })
       .from(activitySegment)
       // 左连接：没有方案的环节也要出现，那正是"未配置"。连接条件（含"作废

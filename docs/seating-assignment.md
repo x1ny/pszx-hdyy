@@ -20,6 +20,7 @@ read_when:
 
 ## 数量与展示
 
+- 排位总览的“排座情况”显示 `assignedPersonCount / totalMemberCount`：前者只统计当前方案中仍有效的个人分配，并按环节人员去重；后者统计该环节的全部 `segmentMember`。团体占位没有具体人员，不计入已排座人数。
 - 团体统计 `assignedPersonCount` 按 `segmentMemberId` 去重；一个人占多座仍只算一个已排人员。`remainingMemberCount = max(0, totalMembers - assignedPersonCount - organizationSeatCount)`。
 - 方案 `assignedCount` 与 `assignments.length` 是占用位置数，页面使用“已占位置”，不能标成“人数”。
 - 候选人的 `takenSeatLabel`、活动人员详情的 `seatLabel` 保持可空字符串契约，以 `、` 连接全部有效座位，按 `ordinal`、座位 ID 排序。没有座位返回 null；每名候选人、每个参与环节只返回一行。

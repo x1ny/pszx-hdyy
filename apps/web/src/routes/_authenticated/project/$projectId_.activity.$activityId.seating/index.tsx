@@ -338,7 +338,7 @@ function SeatingPage() {
               <TableRow>
                 <TableHead>环节</TableHead>
                 <TableHead>引用区域</TableHead>
-                <TableHead className="text-right">位置 / 已占</TableHead>
+                <TableHead className="text-right">排座情况</TableHead>
                 <TableHead>状态</TableHead>
                 <TableHead>最近保存</TableHead>
                 <TableHead className="text-right">操作</TableHead>
@@ -388,7 +388,9 @@ function SeatingPage() {
                     )}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {row.plan ? `${row.seatCount} / ${row.assignedCount}` : "-"}
+                    {row.plan
+                      ? `${row.assignedPersonCount} / ${row.totalMemberCount}`
+                      : "-"}
                   </TableCell>
                   <TableCell>
                     {row.plan ? (
