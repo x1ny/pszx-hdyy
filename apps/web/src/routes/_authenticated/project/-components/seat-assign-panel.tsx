@@ -13,6 +13,10 @@ import { organizationSeatColor } from "#/features/venue-editor/canvas/seat-occup
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import { Input } from "#/shared/components/ui/input.tsx";
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from "#/shared/components/ui/toggle-group.tsx";
 import { cn } from "#/shared/lib/utils.ts";
 import {
   type PlanAssignmentRow,
@@ -22,6 +26,8 @@ import {
 import type { OrganizationSeatInfo } from "../-venue-utils";
 
 const CANDIDATE_PAGE_SIZE = 8;
+const CANDIDATE_FILTERS = ["unassigned", "all"] as const;
+type CandidateFilter = (typeof CANDIDATE_FILTERS)[number];
 
 /**
  * 排位画布右侧的人员面板。
@@ -54,68 +60,77 @@ export function SeatAssignPanel({
 }) {
   const [keyword, setKeyword] = useState("");
   const [page, setPage] = useState(1);
+  const [candidateFilter, setCandidateFilter] =
+    useState<CandidateFilter>("unassigned");
 
   const candidatesQuery = useQuery({
     ...seatingCandidatesQueryOptions(planId, keyword || undefined),
-    enabled: seat !== null && !readOnly,
+    enabled: !readOnly,
   });
   const isOrganizationAssignment = assignment?.occupantType === "organization";
   const candidates = candidatesQuery.data?.list ?? [];
+  const filteredCandidates =
+    candidateFilter === "unassigned"
+      ? candidates.filter((person) => !person.takenSeatLabel)
+      : candidates;
   const totalPages = Math.max(
     1,
-    Math.ceil(candidates.length / CANDIDATE_PAGE_SIZE),
+    Math.ceil(filteredCandidates.length / CANDIDATE_PAGE_SIZE),
   );
   const currentPage = Math.min(page, totalPages);
   const pageStart = (currentPage - 1) * CANDIDATE_PAGE_SIZE;
-  const visibleCandidates = candidates.slice(
+  const visibleCandidates = filteredCandidates.slice(
     pageStart,
     pageStart + CANDIDATE_PAGE_SIZE,
   );
-  const rangeStart = candidates.length === 0 ? 0 : pageStart + 1;
-  const rangeEnd = Math.min(pageStart + CANDIDATE_PAGE_SIZE, candidates.length);
-
-  if (!seat) {
-    return (
-      <Shell>
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
-          <UsersIcon className="size-8 opacity-40" />
-          <p className="text-sm">选中一个位置</p>
-          <p className="text-xs">点画布上的座位，这里就能给它排人。</p>
-        </div>
-      </Shell>
-    );
-  }
+  const rangeStart = filteredCandidates.length === 0 ? 0 : pageStart + 1;
+  const rangeEnd = Math.min(
+    pageStart + CANDIDATE_PAGE_SIZE,
+    filteredCandidates.length,
+  );
 
   return (
     <Shell>
-      <div>
-        <div className="flex items-center gap-2">
-          <h3 className="font-medium text-sm">位置 {seat.label}</h3>
-          {!seat.enabled && (
-            <Badge
-              variant="outline"
-              className="border-border bg-muted text-muted-foreground"
-            >
-              本环节停用
-            </Badge>
-          )}
-          {seat.rank === "vip" && (
-            <Badge
-              variant="outline"
-              className="border-warning/30 bg-warning/10 text-warning-foreground"
-            >
-              重要
-            </Badge>
-          )}
+      {seat ? (
+        <div>
+          <div className="flex items-center gap-2">
+            <h3 className="font-medium text-sm">位置 {seat.label}</h3>
+            {!seat.enabled && (
+              <Badge
+                variant="outline"
+                className="border-border bg-muted text-muted-foreground"
+              >
+                本环节停用
+              </Badge>
+            )}
+            {seat.rank === "vip" && (
+              <Badge
+                variant="outline"
+                className="border-warning/30 bg-warning/10 text-warning-foreground"
+              >
+                重要
+              </Badge>
+            )}
+          </div>
+          <p className="text-muted-foreground text-xs">
+            {assignment
+              ? isOrganizationAssignment
+                ? "团体占位，可解除"
+                : "已占用，可换人或解除"
+              : "还没有占用对象"}
+          </p>
         </div>
-        <p className="text-muted-foreground text-xs">
-          {assignment
-            ? isOrganizationAssignment
-              ? "团体占位，可解除"
-              : "已占用，可换人或解除"
-            : "还没有占用对象"}
-        </p>
-      </div>
+      ) : (
+        <div className="rounded-lg border border-dashed bg-muted/20 px-3 py-2">
+          <div className="flex items-center gap-2 font-medium text-sm">
+            <UsersIcon className="size-4 text-muted-foreground" />
+            当前未选中座位
+          </div>
+          <p className="mt-1 text-muted-foreground text-xs">
+            请先选择座位，再点击人员进行排座。
+          </p>
+        </div>
+      )}
 
       {assignment && (
         <div className="flex items-center justify-between gap-2 rounded-lg border bg-muted/40 p-3">
@@ -150,11 +165,11 @@ export function SeatAssignPanel({
         <p className="text-muted-foreground text-xs">
           方案已作废，不能再改排位。
         </p>
-      ) : !seat.enabled ? (
+      ) : seat && !seat.enabled ? (
         <p className="text-muted-foreground text-xs">
           这个位置本环节停用了，要排人先用下方的「本环节启用此位置」把它打开。
         </p>
-      ) : isOrganizationAssignment ? (
+      ) : seat && isOrganizationAssignment ? (
         <p className="text-muted-foreground text-xs">
           这个位置由团体占用。解除该位置的团体占位后，才能安排具体个人。
         </p>
@@ -172,6 +187,33 @@ export function SeatAssignPanel({
               className="pl-9"
             />
           </div>
+          <ToggleGroup
+            value={[candidateFilter]}
+            onValueChange={(values) => {
+              const nextFilter = values[0] as CandidateFilter | undefined;
+              if (!nextFilter || !CANDIDATE_FILTERS.includes(nextFilter)) {
+                return;
+              }
+              setCandidateFilter(nextFilter);
+              setPage(1);
+            }}
+            variant="outline"
+            size="sm"
+            spacing={0}
+            aria-label="人员列表范围"
+            className="w-full"
+          >
+            <ToggleGroupItem
+              type="button"
+              value="unassigned"
+              className="flex-1"
+            >
+              未排座人员
+            </ToggleGroupItem>
+            <ToggleGroupItem type="button" value="all" className="flex-1">
+              全部人员
+            </ToggleGroupItem>
+          </ToggleGroup>
           <p className="text-muted-foreground text-xs">
             同一人可占多个座位，点击后保留其已有座位。解除只影响当前座位。
           </p>
@@ -180,7 +222,7 @@ export function SeatAssignPanel({
             <div className="flex justify-center py-6 text-muted-foreground">
               <Loader2Icon className="size-4 animate-spin" />
             </div>
-          ) : candidates.length ? (
+          ) : filteredCandidates.length ? (
             <div className="flex min-h-0 flex-1 flex-col gap-2">
               <div className="min-h-0 flex-1 overflow-y-auto">
                 <div className="flex flex-col gap-1">
@@ -204,13 +246,15 @@ export function SeatAssignPanel({
                       <button
                         key={person.activityMemberId}
                         type="button"
-                        disabled={pending || isHere}
+                        disabled={pending || isHere || !seat}
                         onClick={() => onAssign(person.segmentMemberId)}
                         className={cn(
                           "flex items-center justify-between gap-3 rounded-md px-2 py-2 text-left text-sm transition-colors",
                           isHere
                             ? "cursor-default bg-primary/10 text-primary"
-                            : "cursor-pointer hover:bg-muted",
+                            : !seat
+                              ? "cursor-not-allowed text-muted-foreground"
+                              : "cursor-pointer hover:bg-muted",
                           pending && "opacity-60",
                         )}
                       >
@@ -263,7 +307,8 @@ export function SeatAssignPanel({
 
               <div className="flex shrink-0 items-center justify-between gap-2">
                 <span className="text-muted-foreground text-xs tabular-nums">
-                  第 {rangeStart}-{rangeEnd} 条 / 共 {candidates.length} 条
+                  第 {rangeStart}-{rangeEnd} 条 / 共 {filteredCandidates.length}{" "}
+                  条
                 </span>
                 <div className="flex items-center gap-1">
                   <Button
@@ -293,7 +338,9 @@ export function SeatAssignPanel({
             </div>
           ) : (
             <p className="py-6 text-center text-muted-foreground text-xs">
-              没有匹配的当前环节人员。请先到「环节人员」里添加。
+              {candidateFilter === "unassigned"
+                ? "当前没有未排座人员。切换到「全部人员」查看完整名单。"
+                : "没有匹配的当前环节人员。请先到「环节人员」里添加。"}
             </p>
           )}
         </>
