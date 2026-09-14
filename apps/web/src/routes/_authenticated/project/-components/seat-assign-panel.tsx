@@ -112,8 +112,8 @@ export function SeatAssignPanel({
           {assignment
             ? isOrganizationAssignment
               ? "团体占位，可解除"
-              : "已排人，可换人或解除"
-            : "还没有人"}
+              : "已占用，可换人或解除"
+            : "还没有占用对象"}
         </p>
       </div>
 
@@ -172,6 +172,9 @@ export function SeatAssignPanel({
               className="pl-9"
             />
           </div>
+          <p className="text-muted-foreground text-xs">
+            同一人可占多个座位，点击后保留其已有座位。解除只影响当前座位。
+          </p>
 
           {candidatesQuery.isLoading ? (
             <div className="flex justify-center py-6 text-muted-foreground">
@@ -230,8 +233,7 @@ export function SeatAssignPanel({
                             {person.companyPosition || person.mobile || "—"}
                           </p>
                         </div>
-                        {/* 已占座的人不藏起来：让人看见"他已经在 A3"比让他凭空
-                            消失有用，点一下就是换座。 */}
+                        {/* 已排人员仍可选择，继续占位时保留其其他座位。 */}
                         {isHere ? (
                           <span className="shrink-0 text-xs">当前</span>
                         ) : seatStatus ? (

@@ -338,7 +338,7 @@ function SeatingPage() {
               <TableRow>
                 <TableHead>环节</TableHead>
                 <TableHead>引用区域</TableHead>
-                <TableHead className="text-right">位置 / 已排</TableHead>
+                <TableHead className="text-right">位置 / 已占</TableHead>
                 <TableHead>状态</TableHead>
                 <TableHead>最近保存</TableHead>
                 <TableHead className="text-right">操作</TableHead>
@@ -509,12 +509,13 @@ function SeatingPage() {
           <div className="px-6 text-sm">
             <div className="rounded-lg border bg-muted/40 p-3">
               将发布 <strong>{confirmFor?.seatCount ?? 0}</strong> 个启用位置，
-              其中 <strong>{confirmFor?.assignedCount ?? 0}</strong> 个已排人。
+              其中 <strong>{confirmFor?.assignedCount ?? 0}</strong>{" "}
+              个位置已占用。
               {confirmFor?.assignedCount === 0 && (
                 // 不硬拦——可能真有"自由入座、方案只用来固化座位表"的场景，
                 // 但这事必须让人看见再决定（评审 §3.10）。
                 <p className="mt-1 text-warning-foreground">
-                  目前还没有任何人被排位，确认后发出的座位通知里不会有人。
+                  目前还没有任何座位分配，确认后不会生成个人座位通知。
                 </p>
               )}
             </div>

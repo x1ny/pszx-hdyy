@@ -7,7 +7,6 @@ import {
   ilike,
   inArray,
   isNotNull,
-  isNull,
   ne,
   notExists,
   or,
@@ -35,11 +34,8 @@ import {
   releaseSeatsByActivityMember,
   releaseSeatsBySegmentMembers,
 } from "../seating/cascade";
-import {
-  seatAssignment,
-  segmentSeat,
-  segmentSeatingPlan,
-} from "../seating/schema";
+import { personSeatLabels } from "../seating/read-model";
+import { segmentSeatingPlan } from "../seating/schema";
 import { memberTrip } from "../trip/schema";
 import { activityVenue, activityVenueZone } from "../venue/schema";
 import { activityMemberOrderBy } from "./activity-member-order-by";
@@ -624,7 +620,9 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
         seatingStatus: segmentSeatingPlan.status,
         venueName: activityVenue.name,
         zoneName: activityVenueZone.name,
-        seatLabel: segmentSeat.label,
+        seatLabel: personSeatLabels(segmentMember.id, segmentSeatingPlan.id).as(
+          "seat_label",
+        ),
       })
       .from(segmentMember)
       .innerJoin(
@@ -635,8 +633,7 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
         activitySegment,
         eq(activitySegment.id, segmentMember.segmentId),
       )
-      // 作废方案不是当前排位。partial unique index 保证一个环节至多命中一条
-      // 非作废方案，因此后面的座位关联不会把同一条环节人员展开成多行。
+      // 每个环节至多一个当前方案；座位通过子查询聚合，人员多座也只返回一条环节。
       .leftJoin(
         segmentSeatingPlan,
         and(
@@ -652,16 +649,6 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
         activityVenue,
         eq(activityVenue.id, activityVenueZone.activityVenueId),
       )
-      .leftJoin(
-        seatAssignment,
-        and(
-          eq(seatAssignment.planId, segmentSeatingPlan.id),
-          eq(seatAssignment.segmentMemberId, segmentMember.id),
-          eq(seatAssignment.occupantType, "person"),
-          isNull(seatAssignment.revokedAt),
-        ),
-      )
-      .leftJoin(segmentSeat, eq(segmentSeat.id, seatAssignment.segmentSeatId))
       // 编辑关系必须看见作废/关闭人员管理的历史关系，才能按只读口径保留；
       // 分页列表仍只展示正常环节，不改变列表的“当前参与”口径。
       .where(eq(segmentMember.activityMemberId, id))

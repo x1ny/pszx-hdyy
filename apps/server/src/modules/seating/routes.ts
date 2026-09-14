@@ -24,6 +24,7 @@ import {
   planSeatMerge,
   swapAssignmentSeats,
 } from "./plan";
+import { personSeatLabels } from "./read-model";
 import {
   seatAssignment,
   segmentSeat,
@@ -110,15 +111,9 @@ export const listCandidatesQuery = (
       mobile: member.mobile,
       segmentMemberId: segmentMember.id,
       organizationId: segmentMember.organizationId,
-      takenSeatLabel: sql<string | null>`(
-        select ${segmentSeat.label} from ${seatAssignment}
-        join ${segmentSeat} on ${eq(segmentSeat.id, seatAssignment.segmentSeatId)}
-        where ${eq(seatAssignment.segmentMemberId, segmentMember.id)}
-          and ${eq(seatAssignment.planId, planId)}
-          and ${seatAssignment.occupantType} = 'person'
-          and ${seatAssignment.revokedAt} is null
-        limit 1
-      )`.as("taken_seat_label"),
+      takenSeatLabel: personSeatLabels(segmentMember.id, planId).as(
+        "taken_seat_label",
+      ),
     })
     .from(activityMember)
     .innerJoin(member, eq(member.id, activityMember.memberId))
@@ -188,9 +183,10 @@ export const listOrganizationSeatingStatsQuery = (
       totalMembers: sql<number>`count(distinct ${segmentMember.id})::int`.as(
         "total_members",
       ),
-      assignedPersonCount: sql<number>`count(${seatAssignment.id})::int`.as(
-        "assigned_person_count",
-      ),
+      assignedPersonCount:
+        sql<number>`count(distinct ${seatAssignment.segmentMemberId})::int`.as(
+          "assigned_person_count",
+        ),
       organizationSeatCount: sql<number>`(
         select count(*)::int
         from ${seatAssignment} as "organization_assignment"
@@ -921,7 +917,7 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
     );
   })
 
-  /** 排一个环节人员到某个座位。 */
+  /** 将环节人员分配到指定座位，保留其其他座位；契约见 docs/seating-assignment.md。 */
   .post("/assign", jsonBody(AssignInput), async (c) => {
     const input = c.req.valid("json");
     const userId = c.get("authedUser").id;
@@ -943,7 +939,7 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
    * 将当前方案环节范围内的一个团体占到某个位置。
    *
    * 团体是位置的占用对象，不会补建或伪造任何 segment_member；同一团体可占多
-   * 个位置，只有个人路径受“同方案一人一座”限制。
+   * 个位置，个人也可以在保留原座位的基础上继续占位。
    */
   .post("/assignOrganization", jsonBody(AssignOrganizationInput), async (c) => {
     const input = c.req.valid("json");
@@ -1386,10 +1382,8 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
   /**
    * 两个座位上的人对调。
    *
-   * 不是"解绑两次再分配两次"：那样中间会短暂出现一个人没座位的状态，而且
-   * 一人一座的唯一索引会在中间步骤上炸。这里先把两条都撤销，再插两条新的，
-   * 全在一个事务里。MVP 对个人/团体一视同仁：任何有效占用对象均随位置交换；
-   * 团体不会被展开成成员，个人的一人一座约束仍由 partial unique 保证。
+   * 在一个事务里先撤销两个位置的分配，再插入交换结果，保持每座唯一占用。
+   * 只移动这两个位置上的占用对象，个人和团体的其他座位都保留。
    */
   .post("/swap", jsonBody(SwapInput), async (c) => {
     const input = c.req.valid("json");
@@ -1442,13 +1436,7 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
           seatId: seatAssignment.segmentSeatId,
           occupantType: seatAssignment.occupantType,
           segmentMemberId: seatAssignment.segmentMemberId,
-          // 确认日志必须保留既有个人座位的团体快照，不能因新增团体占位而丢失。
-          organizationId: sql<number | null>`coalesce(
-            ${seatAssignment.organizationId},
-            ${segmentMember.organizationId}
-          )`
-            .mapWith(segmentMember.organizationId)
-            .as("organization_id"),
+          organizationId: seatAssignment.organizationId,
         })
         .from(seatAssignment)
         .where(
@@ -1737,9 +1725,7 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
       }
 
       /**
-       * 作废时把生效分配一起撤掉。不撤的话，那些行会一直满足"一人一座"的
-       * 唯一索引，导致这个人在新方案里排不进任何位置——而作废的语义就是
-       * "这份排位不再作数"。
+       * 作废时撤销方案内全部生效分配，保留历史记录；这份排位不再作数。
        */
       await tx
         .update(seatAssignment)
@@ -1809,9 +1795,8 @@ type SeatOccupantInput =
     };
 
 /**
- * 两种占用对象共用的落库路径。团体没有“一团一座”限制；个人则在撤旧后由
- * partial unique 兜底“一方案一人一座”。范围校验放在插入前，避免把数据库
- * 外键异常暴露成 500。
+ * 两种占用对象共用的落库路径，均允许多座，只替换目标位置上的旧占用。
+ * 范围校验放在插入前，避免把数据库外键异常暴露成 500。
  */
 async function assignOccupant(
   tx: Tx,
@@ -1878,20 +1863,14 @@ async function assignOccupant(
     }
   }
 
-  // 先撤掉这个位置上的旧占用对象；个人还要撤自己的旧位置，才能在事务中保持
-  // 一方案一人一座。团体可占多个位置，绝不能在这里把同团体其他占位误解除。
+  // 只撤掉目标位置的旧占用，保留同一占用对象在其他位置上的分配。
   await tx
     .update(seatAssignment)
     .set({ revokedBy: input.userId, revokedAt: new Date() })
     .where(
       and(
         eq(seatAssignment.planId, input.planId),
-        or(
-          eq(seatAssignment.segmentSeatId, input.segmentSeatId),
-          input.occupantType === "person"
-            ? eq(seatAssignment.segmentMemberId, input.segmentMemberId)
-            : undefined,
-        ),
+        eq(seatAssignment.segmentSeatId, input.segmentSeatId),
         liveAssignment,
       ),
     );

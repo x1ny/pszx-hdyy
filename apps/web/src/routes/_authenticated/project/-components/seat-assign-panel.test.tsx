@@ -42,6 +42,7 @@ const DEFAULT_CANDIDATES: SeatingCandidate[] = [
 ];
 
 function renderPanel(candidates = DEFAULT_CANDIDATES) {
+  const onAssign = vi.fn();
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false, staleTime: Number.POSITIVE_INFINITY },
@@ -71,14 +72,24 @@ function renderPanel(candidates = DEFAULT_CANDIDATES) {
         organizationSeatInfoById={
           new Map([[7, { name: "外语志愿者团", seatLabels: ["D2", "D4"] }]])
         }
-        onAssign={vi.fn()}
+        onAssign={onAssign}
         onUnassign={vi.fn()}
       />
     </QueryClientProvider>,
   );
+  return { onAssign };
 }
 
 describe("SeatAssignPanel", () => {
+  it("已占多座的人员仍可安排到新座位，并显示全部已有座位", () => {
+    const { onAssign } = renderPanel([
+      { ...DEFAULT_CANDIDATES[0], takenSeatLabel: "D1、D3、E2" },
+    ]);
+    expect(screen.getByText("在 D1、D3、E2")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /已个人排座/ }));
+    expect(onAssign).toHaveBeenCalledWith(21);
+    expect(screen.getByText(/点击后保留其已有座位/)).toBeInTheDocument();
+  });
   it("显示候选人的团体名称，并区分个人已排座和团体占位座位", async () => {
     renderPanel();
 

@@ -38,6 +38,14 @@ describe("listCandidatesQuery", () => {
       '"seat_assignment"."occupant_type" = \'person\'',
     );
   });
+
+  test("候选人的座位聚合后按位置顺序展示，排多座不会增加候选人数", () => {
+    expect(rendered).toContain('string_agg("segment_seat"."label"');
+    expect(rendered).toContain(
+      'order by "segment_seat"."ordinal", "segment_seat"."id"',
+    );
+    expect(rendered).not.toContain('left join "seat_assignment"');
+  });
 });
 
 describe("团体占位范围查询", () => {
@@ -80,7 +88,9 @@ describe("团体占位范围查询", () => {
   test("批量预览只把传入位置当作候选，真正空闲条件仍检查方案、启用和有效占用", () => {
     // 路由中的 availability helper 是事务内查询；这里钉住统计查询没有把团体
     // 位置偷算进个人数，剩余人数才不会被团体占位错误削减。
-    expect(statsSql).toContain('count("seat_assignment"."id")::int');
+    expect(statsSql).toContain(
+      'count(distinct "seat_assignment"."segment_member_id")::int',
+    );
     expect(statsSql).not.toContain('count(distinct "organization_assignment"');
   });
 });

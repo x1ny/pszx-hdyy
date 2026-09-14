@@ -55,7 +55,7 @@ export function SeatMapSheet({
             不然两张图长得差不多时很容易看串。 */}
         {shown && (
           <div className="flex items-center gap-3 rounded-2xl bg-page p-3">
-            <div className="flex h-14 min-w-14 shrink-0 items-center justify-center rounded-xl bg-brand-soft px-2 text-time text-brand tabular-nums">
+            <div className="flex min-h-14 min-w-14 max-w-1/2 shrink-0 items-center justify-center break-words rounded-xl bg-brand-soft px-2 py-2 text-title text-brand tabular-nums">
               {shown.seat}
             </div>
             <div className="min-w-0">
@@ -82,13 +82,41 @@ export function SeatMapSheet({
 }
 
 function SeatMapBody({ data }: { data: SeatMap }) {
+  const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
   // 场馆、议程、座位号已经在上面那张卡片里说完了，图画不出来时不需要
   // 第二种响应形状，直接复用同一句降级文案。
   if (!data.map) {
     return <SeatMapFallback />;
   }
 
-  return <SeatMapCanvas map={data.map} />;
+  const mine =
+    data.map.mine.find((seat) => seat.label === selectedLabel) ??
+    data.map.mine[0];
+  if (!mine) return <SeatMapFallback />;
+
+  return (
+    <>
+      {data.map.mine.length > 1 && (
+        <div className="mb-3">
+          <p className="mb-2 text-caption text-ink-3">选择座位查看位置</p>
+          <div className="flex flex-wrap gap-2">
+            {data.map.mine.map((seat) => (
+              <button
+                key={seat.label}
+                type="button"
+                aria-pressed={seat.label === mine.label}
+                onClick={() => setSelectedLabel(seat.label)}
+                className={`rounded-lg px-3 py-2 text-body ${seat.label === mine.label ? "bg-brand-soft text-brand" : "bg-page text-ink-2"}`}
+              >
+                {seat.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <SeatMapCanvas map={data.map} mine={mine} />
+    </>
+  );
 }
 
 /** 图画不出来时的样子。座位号已经在上面的卡片里，这里不用再说一遍。 */
@@ -107,7 +135,13 @@ function SeatMapPlaceholder() {
 /**
  * 图本体。宽度要等 DOM 量出来才知道，所以布局是一次 layout effect 之后的事。
  */
-function SeatMapCanvas({ map }: { map: NonNullable<SeatMap["map"]> }) {
+function SeatMapCanvas({
+  map,
+  mine,
+}: {
+  map: NonNullable<SeatMap["map"]>;
+  mine: NonNullable<SeatMap["map"]>["mine"][number];
+}) {
   const boxRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState<SeatMapLayout | null>(null);
 
@@ -126,7 +160,7 @@ function SeatMapCanvas({ map }: { map: NonNullable<SeatMap["map"]> }) {
       setLayout(
         seatMapLayout({
           seats: map.seats,
-          mine: map.mine,
+          mine,
           pitch: map.pitch,
           viewWidth: box.clientWidth,
           // 下界：再扁的区也得有地方站定位钉。上界：面板本身最高
@@ -141,7 +175,7 @@ function SeatMapCanvas({ map }: { map: NonNullable<SeatMap["map"]> }) {
     const observer = new ResizeObserver(measure);
     observer.observe(box);
     return () => observer.disconnect();
-  }, [map]);
+  }, [map, mine]);
 
   return (
     <div
@@ -156,7 +190,7 @@ function SeatMapCanvas({ map }: { map: NonNullable<SeatMap["map"]> }) {
             height="100%"
             viewBox={layout.viewBox}
             role="img"
-            aria-label="所在区域的座位分布示意图"
+            aria-label={`座位 ${mine.label} 在所在区域的位置示意图`}
           >
             {/*
               一条 path 装下全部座位。`M x y h0` 是零长度子路径，靠

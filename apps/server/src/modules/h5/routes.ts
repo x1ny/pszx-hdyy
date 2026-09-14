@@ -88,7 +88,9 @@ export const itinerarySeatsQuery = (activityId: number, memberId: number) =>
   db
     .select({
       segmentId: segmentMember.segmentId,
-      seat: segmentSeat.label,
+      seat: sql<string>`string_agg(${segmentSeat.label}, '、' order by ${segmentSeat.ordinal}, ${segmentSeat.id})`.as(
+        "seat",
+      ),
       zone: activityVenueZone.name,
       /**
        * 座位图入口的显隐判据。**只取 `renderer_kind`，绝不取 `data`**——行程页
@@ -128,7 +130,13 @@ export const itinerarySeatsQuery = (activityId: number, memberId: number) =>
       and(
         eq(segmentMember.activityId, activityId),
         eq(segmentMember.memberId, memberId),
+        isNull(segmentSeat.removedAt),
       ),
+    )
+    .groupBy(
+      segmentMember.segmentId,
+      activityVenueZone.name,
+      segmentSeatingLayout.rendererKind,
     );
 
 /**
@@ -152,8 +160,10 @@ export const seatMapQuery = (
     .select({
       planId: segmentSeatingPlan.id,
       zoneName: activityVenueZone.name,
-      mySeatLabel: segmentSeat.label,
-      myExternalId: segmentSeat.externalId,
+      mySeats: sql<{ label: string; externalId: string }[]>`json_agg(
+        json_build_object('label', ${segmentSeat.label}, 'externalId', ${segmentSeat.externalId})
+        order by ${segmentSeat.ordinal}, ${segmentSeat.id}
+      )`.as("my_seats"),
       rendererKind: segmentSeatingLayout.rendererKind,
       data: segmentSeatingLayout.data,
     })
@@ -186,7 +196,13 @@ export const seatMapQuery = (
         eq(segmentMember.activityId, activityId),
         eq(segmentMember.memberId, memberId),
         eq(segmentMember.segmentId, segmentId),
+        isNull(segmentSeat.removedAt),
       ),
+    )
+    .groupBy(
+      segmentSeatingPlan.id,
+      activityVenueZone.id,
+      segmentSeatingLayout.planId,
     )
     .limit(1);
 
@@ -421,8 +437,13 @@ export const h5Routes = new Hono<{ Variables: H5Variables }>()
     return c.json(
       ok({
         zoneName: row.zoneName,
-        seatLabel: row.mySeatLabel,
-        map: await buildSeatMap(row),
+        seatLabel: row.mySeats.map((seat) => seat.label).join("、"),
+        map: buildSeatMap(
+          row,
+          (await planLiveSeatIdsQuery(row.planId)).map(
+            (seat) => seat.externalId,
+          ),
+        ),
       }),
     );
   });
@@ -434,23 +455,28 @@ export const h5Routes = new Hono<{ Variables: H5Variables }>()
  * 没有坐标**。最后一道最容易被忽略却最要紧——一张画出了整片区、偏偏没有"你在
  * 这里"的图，比不给图更糟：它看起来是正常的，嘉宾会对着它找一个不存在的红点。
  */
-async function buildSeatMap(row: {
-  planId: number;
-  myExternalId: string;
-  rendererKind: string;
-  data: unknown;
-}) {
+export function buildSeatMap(
+  row: {
+    mySeats: { externalId: string; label: string }[];
+    rendererKind: string;
+    data: unknown;
+  },
+  liveExternalIds: readonly string[],
+) {
   if (row.rendererKind !== SEAT_CANVAS_RENDERER_KIND) return null;
 
   const points = parseSeatPoints(row.data);
   if (!points) return null;
 
-  const mine = points.find((point) => point.externalId === row.myExternalId);
-  if (!mine) return null;
-
-  const live = new Set(
-    (await planLiveSeatIdsQuery(row.planId)).map((seat) => seat.externalId),
-  );
+  const live = new Set(liveExternalIds);
+  const pointById = new Map(points.map((point) => [point.externalId, point]));
+  const mine: { x: number; y: number; label: string }[] = [];
+  for (const seat of row.mySeats) {
+    const point = pointById.get(seat.externalId);
+    if (!point || !live.has(seat.externalId)) return null;
+    mine.push({ x: point.x, y: point.y, label: seat.label });
+  }
+  if (!mine.length) return null;
 
   // 我自己那颗也留在这个列表里：定位钉画在最上层盖住它，点数因此等于现场
   // 真实的位置数——少一个的话"数一数第几个"就对不上了。
@@ -460,7 +486,7 @@ async function buildSeatMap(row: {
 
   return {
     seats,
-    mine: { x: mine.x, y: mine.y },
+    mine,
     /**
      * 典型座距，前端据此决定圆点画多大、放大到什么程度就该停。**在这里算而不是
      * 让 h5 重算**：算法要和管理端画布严格一致（同一片座位在两端必须得出同一个

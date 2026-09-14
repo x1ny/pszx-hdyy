@@ -122,7 +122,7 @@ export const seed: SeedFn = async (db, { userId }) => {
     })),
   );
 
-  // 预留八个空位供真实操作；两条初始占用分别覆盖个人和团体两种展示/解绑路径。
+  // 同一人预占两座，另有团体占位，覆盖多座展示、统计、解绑和 H5 定位。
   await db.insert(seatAssignment).values([
     {
       id: 1,
@@ -140,6 +140,15 @@ export const seed: SeedFn = async (db, { userId }) => {
       segmentSeatId: seats[1]?.id ?? 2,
       occupantType: "organization",
       organizationId: DEMO.organizationIds.textileChamber,
+      assignedBy: userId,
+    },
+    {
+      id: 3,
+      planId: DEMO.seatingPlanId,
+      segmentId: DEMO.segmentIds.forum,
+      segmentSeatId: seats[2]?.id ?? 3,
+      occupantType: "person",
+      segmentMemberId: assignedMember.id,
       assignedBy: userId,
     },
   ]);

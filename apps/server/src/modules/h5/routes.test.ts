@@ -5,6 +5,7 @@ import {
   resolveH5ActivityQuery,
 } from "./auth";
 import {
+  buildSeatMap,
   itineraryCarsQuery,
   itineraryContactQuery,
   itineraryHeroQuery,
@@ -96,6 +97,14 @@ describe("itinerarySegmentsQuery —— 议程按 member_enabled 分流", () => 
 describe("itinerarySeatsQuery —— 座位只认已确认方案", () => {
   const rendered = itinerarySeatsQuery(7, 42).toSQL();
 
+  test("一个环节的多个座位聚合到一条行程，且顺序稳定", () => {
+    expect(rendered.sql).toContain('string_agg("segment_seat"."label"');
+    expect(rendered.sql).toContain(
+      'order by "segment_seat"."ordinal", "segment_seat"."id"',
+    );
+    expect(rendered.sql).toContain('group by "segment_member"."segment_id"');
+  });
+
   test("pending / rejected 的方案不会给出座位号", () => {
     // 未确认的方案运营还在拖座位，给出去的号随时会变；嘉宾拿到座位号就是照着
     // 坐，给一个还会变的比不给更糟。
@@ -142,6 +151,14 @@ describe("itinerarySeatsQuery —— 座位只认已确认方案", () => {
 describe("seatMapQuery —— 越权挡在查询形状上", () => {
   const rendered = seatMapQuery(7, 42, 99).toSQL();
 
+  test("全部本人座位聚合返回，画布每方案只读取一份", () => {
+    expect(rendered.sql).toContain("json_agg(");
+    expect(rendered.sql).toContain(
+      'order by "segment_seat"."ordinal", "segment_seat"."id"',
+    );
+    expect(rendered.sql).toContain('group by "segment_seating_plan"."id"');
+  });
+
   test("入口是 segment_member 且锚死 member_id，改 segmentId 探不到别人", () => {
     // `segmentId` 是不可信输入。这条查询从"这个人的环节人员关系"出发，所以传
     // 任何 segmentId 都只可能查出他自己有座位的那个环节 —— 越权不靠 handler 里
@@ -174,6 +191,56 @@ describe("seatMapQuery —— 越权挡在查询形状上", () => {
     expect(rendered.sql).not.toContain('"member"."name"');
     expect(rendered.sql).not.toContain("mobile");
     expect(rendered.sql).not.toContain("organization");
+  });
+});
+
+describe("多座定位图", () => {
+  const row = {
+    rendererKind: "svg-canvas-v1",
+    mySeats: [
+      { externalId: "a", label: "A1" },
+      { externalId: "c", label: "A3" },
+    ],
+    data: {
+      schemaVersion: 1,
+      seats: [
+        { externalId: "a", x: 0, y: 0 },
+        {
+          externalId: "b",
+          x: 40,
+          y: 0,
+          label: "别人的座位",
+          memberName: "不得泄露",
+        },
+        { externalId: "c", x: 80, y: 0 },
+        { externalId: "removed", x: 120, y: 0 },
+      ],
+    },
+  };
+
+  test("保留本人所有座位的定位和标签，其他人只给坐标", () => {
+    const map = buildSeatMap(row, ["a", "b", "c"]);
+    expect(map?.mine).toEqual([
+      { x: 0, y: 0, label: "A1" },
+      { x: 80, y: 0, label: "A3" },
+    ]);
+    expect(map?.seats).toEqual([
+      { x: 0, y: 0 },
+      { x: 40, y: 0 },
+      { x: 80, y: 0 },
+    ]);
+    expect(JSON.stringify(map)).not.toContain("不得泄露");
+  });
+
+  test("任一本人位置缺失或已移除时降级，避免给出不完整定位", () => {
+    expect(buildSeatMap(row, ["a", "b"])).toBeNull();
+    expect(
+      buildSeatMap(
+        { ...row, mySeats: [{ externalId: "missing", label: "A4" }] },
+        ["missing"],
+      ),
+    ).toBeNull();
+    expect(buildSeatMap({ ...row, mySeats: [] }, ["a"])).toBeNull();
   });
 });
 

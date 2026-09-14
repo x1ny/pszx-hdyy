@@ -287,17 +287,13 @@ export const seatAssignment = pgTable(
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
   },
   (table) => [
-    /** 一座一人。 */
+    /** 每个座位最多一个有效占用对象，个人与团体都可占多个座位。 */
     uniqueIndex("uk_seat_assignment_seat")
       .on(table.segmentSeatId)
       .where(sql`${table.revokedAt} is null`),
 
-    /**
-     * 一人一座（同一方案内）。组织行的 segment_member_id 为 NULL；虽然
-     * PostgreSQL 的 UNIQUE 本来也允许多个 NULL，仍把条件写出来，明确约束的
-     * 是个人而不是团体。
-     */
-    uniqueIndex("uk_seat_assignment_member")
+    /** 保留按方案、人员查座的索引，允许同一个人有多条有效分配。 */
+    index("idx_seat_assignment_member")
       .on(table.planId, table.segmentMemberId)
       .where(
         sql`${table.revokedAt} is null and ${table.segmentMemberId} is not null`,

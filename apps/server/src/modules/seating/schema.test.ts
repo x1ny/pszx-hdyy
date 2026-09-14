@@ -70,12 +70,12 @@ describe("seat assignment occupant schema", () => {
     expect(personFk?.onDelete).toBe("no action");
   });
 
-  test("有效状态仍是一座唯一，且仅个人受同方案一人一座约束", () => {
+  test("每座仍唯一占用，个人查询索引允许同方案多座", () => {
     const seatIndex = config.indexes.find(
       (item) => item.config.name === "uk_seat_assignment_seat",
     );
     const personIndex = config.indexes.find(
-      (item) => item.config.name === "uk_seat_assignment_member",
+      (item) => item.config.name === "idx_seat_assignment_member",
     );
     const seatWhere = seatIndex?.config.where
       ? dialect.sqlToQuery(seatIndex.config.where, "indexes").sql
@@ -91,6 +91,13 @@ describe("seat assignment occupant schema", () => {
 
     expect(columns(seatIndex)).toEqual(["segment_seat_id"]);
     expect(columns(personIndex)).toEqual(["plan_id", "segment_member_id"]);
+    expect(seatIndex?.config.unique).toBe(true);
+    expect(personIndex?.config.unique).toBe(false);
+    expect(
+      config.indexes.some(
+        (item) => item.config.name === "uk_seat_assignment_member",
+      ),
+    ).toBe(false);
     expect(seatWhere).toContain('"revoked_at" is null');
     expect(personWhere).toContain('"revoked_at" is null');
     expect(personWhere).toContain('"segment_member_id" is not null');

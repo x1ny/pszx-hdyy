@@ -622,7 +622,8 @@ function SeatingCanvasPage() {
           </div>
           <p className="text-muted-foreground text-sm">
             {bundle.plan.venueName} / {bundle.plan.zoneName} ·{" "}
-            {bundle.seats.length} 个位置 · 已排 {bundle.assignments.length} 人
+            {bundle.seats.length} 个位置 · 已占 {bundle.assignments.length}{" "}
+            个位置
           </p>
         </div>
       </div>

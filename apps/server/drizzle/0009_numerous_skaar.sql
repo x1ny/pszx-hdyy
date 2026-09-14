@@ -1,0 +1,2 @@
+DROP INDEX "uk_seat_assignment_member";--> statement-breakpoint
+CREATE INDEX "idx_seat_assignment_member" ON "seat_assignment" USING btree ("plan_id","segment_member_id") WHERE "seat_assignment"."revoked_at" is null and "seat_assignment"."segment_member_id" is not null;

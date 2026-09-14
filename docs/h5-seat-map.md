@@ -52,11 +52,16 @@ label/kind/rank/enabled/removedAt 但没有 x/y；反过来 `enabled` 和 `remov
 `getSeatMap`（按需，点开才请求）出参：
 
 ```
-{ zoneName, seatLabel, map: { seats: [{x,y}], mine: {x,y}, pitch } | null }
+{ zoneName, seatLabel, map: { seats: [{x,y}], mine: [{x,y,label}], pitch } | null }
 ```
 
 - `zoneName` / `seatLabel` **恒定有值**，`map` 才可能为 null——降级不需要第二种
   响应形状，图画不出来时前端照样有话说。
+- 一人可占多座，`seatLabel` 按位置顺序连接全部座位号。`mine` 包含本人全部座位
+  的坐标和标签；前端提供座位按钮逐个定位，避免相邻定位钉挤在一起。任何本人位置
+  缺坐标或已软删时整张图降级，全部座位号仍保留。其他位置继续只给坐标。
+- 行程查询将同环节座位聚合成一行，座位图查询聚合本人座位后只读取一份方案画布。
+  多座分配及统计规则见 [座位分配](seating-assignment.md)。
 - **载荷里没有一个字段属于别人**：只有坐标，没有编号、没有种类等级、没有人名。
   这个页面的凭证只是一个手机号，隐私靠"根本不发"，不靠前端拿到了不渲染。
 - **越权挡在查询形状上**：`seatMapQuery` 从 `segment_member` 出发并锚死
