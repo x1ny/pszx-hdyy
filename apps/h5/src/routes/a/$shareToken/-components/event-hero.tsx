@@ -30,10 +30,7 @@ export function EventHero({
   const heroSrc = activity.heroFileId
     ? `/api/file/${activity.heroFileId}`
     : "/hero-quanzhou.jpg";
-  const { dateText, timeRange } = formatActivityDate(
-    activity.startTime,
-    activity.endTime,
-  );
+  const { dateText } = formatActivityDate(activity.startTime, activity.endTime);
 
   return (
     <section className="relative">
@@ -121,7 +118,6 @@ export function EventHero({
         onOpenChange={setDetailOpen}
         activity={activity}
         dateText={dateText}
-        timeRange={timeRange}
       />
     </section>
   );

@@ -261,25 +261,25 @@ export function dayLabelOf(day: string, agendaDays: string[]): string {
 export const currentDayOf = () => todayKey();
 
 /**
- * 头图那两行：`2025年6月18日–20日 · 共3天` + `09:00–17:30`。
+ * 头图活动日期：`2025年6月18日–2025年6月20日 · 共3天`。
  *
- * 跨天的活动只写一次年月，同月的省掉第二个月份 —— 头图标题下面这行宽度很紧，
- * 「2025年6月18日–2025年6月20日」会挤到换行。
+ * 起止日期始终完整展示年月日，避免跨年时把结束日期误读成开始年份；活动时间段
+ * 不再放在活动概况中展示。
  */
 export function formatActivityDate(startTime: string, endTime: string) {
   const start = zonedParts(startTime);
   const end = zonedParts(endTime);
-  if (!start) return { dateText: "", timeRange: "" };
+  if (!start) return { dateText: "" };
 
-  const timeRange = end ? `${start.time}–${end.time}` : start.time;
-  const head = `${start.dayKey.slice(0, 4)}年${start.month}月${start.day}日`;
+  const formatDate = (value: ZonedParts) =>
+    `${value.dayKey.slice(0, 4)}年${value.month}月${value.day}日`;
+  const head = formatDate(start);
 
   if (!end || start.dayKey === end.dayKey) {
-    return { dateText: `${head} ${start.weekday}`, timeRange };
+    return { dateText: `${head} ${start.weekday}` };
   }
 
-  const tail =
-    start.month === end.month ? `${end.day}日` : `${end.month}月${end.day}日`;
+  const tail = formatDate(end);
   // 含首尾两天，所以 +1。用 UTC 零点相减避开时区偏移带来的半天误差。
   const days =
     Math.round(
@@ -288,7 +288,7 @@ export function formatActivityDate(startTime: string, endTime: string) {
         86400000,
     ) + 1;
 
-  return { dateText: `${head}–${tail} · 共${days}天`, timeRange };
+  return { dateText: `${head}–${tail} · 共${days}天` };
 }
 
 /* ------------------------------------------------------------------ */
