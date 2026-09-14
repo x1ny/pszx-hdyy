@@ -81,7 +81,7 @@ read_when:
 `AGENTS.md` 和 `docker/README.md`。
 
 > **为什么 `schema-registry.ts` 放在 `src/` 根而不是 `infra/`**：它要 import 所有
-> `modules/*/schema.ts`，放进 `infra/` 就把依赖方向倒过来了（见 [代码结构](code-structure.md)）。
+> `modules/*/schema.ts`，放进 `infra/` 就把依赖方向倒过来了（见 [后端结构](backend-structure.md)）。
 > `src/` 根是组合根，`index.ts` 和 `client-type.ts` 本来就认识 modules。
 
 ## 5. 生产环境

@@ -342,7 +342,7 @@ Tailwind v4 的 preflight 去掉了 `button { cursor: pointer }`（改成对齐�
 
 ## 管理端样式与错误展示
 
-管理端保持现有亮色 token，不添加深色 token、主题切换或系统色彩媒体查询；这种产品方向变化需先讨论。`styles.css` 的 `.dark` 变体刻意不会启用，阻止 vendored shadcn 的深色类跟随系统；不要与 H5 合并主题。
+组件选型、归属、亮色主题及上游更新适配统一见 [管理端 UI](web-ui.md)。`styles.css` 的 `.dark` 变体刻意不会启用，阻止 vendored shadcn 的深色类跟随系统。
 
 路由默认 404 与错误组件由 `app/router.tsx` 统一配置，错误展示使用业务中文 message。无权限由认证布局展示 forbidden，不重定向伪装成导航问题；具体角色逻辑见 [授权](authorization.md)。
 

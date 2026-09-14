@@ -37,8 +37,8 @@ read_when:
 
 所有业务访问校验在服务端执行。管理端登录、停用及 session 缓存见 [用户与认证](user-management-design.md)；角色、权限映射、新接口登记和覆盖检查见 [授权](authorization.md)。H5 使用独立访问链路，见 [H5 指南](h5-itinerary.md)，不复用管理端身份。
 
-两个前端的渲染位置、路由 loader 和共享代码边界见 [代码结构](code-structure.md#运行与渲染模型)。端口、静态挂载与 cookie 部署行为见 [Docker 流程](../docker/README.md)。
+涉及浏览器消费时，渲染位置、路由 loader 和共享代码边界见 [前端结构](frontend-structure.md#运行与渲染模型)。端口、静态挂载与 cookie 部署行为见 [Docker 流程](../docker/README.md)。
 
 ## 修改业务写入之前
 
-先用 `bun run docs:list --query <领域或行为>` 查相关契约，再读目标模块附近的注释与测试。通用 API 范式不能替代模块的事务、增量意图或并发约束。新模块以 supplier 为实现参考，并按 [CRUD 清单](crud-page-guide.md#新建一个-crud-模块的检查清单) 更新权限、迁移与种子。
+先用 `bun run docs:list --query <领域或行为>` 查相关契约，再读目标模块附近的注释与测试。通用 API 范式不能替代模块的事务、增量意图或并发约束。新服务端模块按 [后端结构](backend-structure.md) 更新权限、迁移与种子；同时建设管理页面时再组合 [CRUD 清单](crud-page-guide.md#新建一个-crud-模块的检查清单)。

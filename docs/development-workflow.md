@@ -36,6 +36,7 @@ read_when:
 | 全部测试（包括知识入口检查） | `bun run test` |
 | 本次 TS/TSX 文件格式与 lint | `bunx biome check <文件...>`，不加 `--write` |
 | 当前资料发现 / 校验 | `bun run docs:list` / `bun run docs:check` |
+| 项目 skill 入口同步 / 校验 | `bun run skills:sync` / `bun run skills:check`，见 [Skill 工作流](skill-workflow.md) |
 | 生产构建 | `bun run build` |
 | 路由树生成 | `bun run --filter '@repo/web' generate-routes`；h5 换为 `@repo/h5` |
 | 垃圾容器、卷与分支回收 | `bun run prune` 只列；`--yes` 才执行 |

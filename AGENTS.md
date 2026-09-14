@@ -46,7 +46,8 @@ Before editing files for a substantial task:
 
 | 通用任务 | 当前入口 |
 | --- | --- |
-| 新建模块/页面、提取共享代码、改变路由或运行边界 | [代码结构](docs/code-structure.md) |
+| 前端页面、组件归属、共享代码、路由或渲染边界 | [前端结构](docs/frontend-structure.md) |
+| 后端模块、基础设施、共享逻辑或服务端导入 | [后端结构](docs/backend-structure.md) |
 | 新增接口、改输入输出、客户端类型或共享导出 | [API 契约](docs/api-contract.md) |
 | 管理端 CRUD、表单、筛选或视觉接线 | [CRUD 指南](docs/crud-page-guide.md) |
 | schema、种子、迁移或数据库操作 | [数据库迁移](docs/database-migrations.md) |

@@ -8,7 +8,9 @@
     "./deploy-test.config.ts",
     "./gen-api-docs.ts",
     "./docs-list.ts",
-    "./docs-list.test.ts"
+    "./docs-list.test.ts",
+    "./skills.ts",
+    "./skills.test.ts"
   ],
   "compilerOptions": {
     "types": ["bun", "node"]

@@ -98,7 +98,7 @@ null**，那条"查不到就 404"的分支才有得调。
 
 ## 运行、测试与错误展示
 
-H5 是浏览器 SPA；路由 loader、beforeLoad 与组件都在浏览器运行，详见 [代码结构](code-structure.md#运行与渲染模型)。默认 404 和错误展示已由 `app/router.tsx` 的 PageMessage 配置；不再沿用原型常量 key-gate 的访问判断。
+H5 是浏览器 SPA；路由 loader、beforeLoad 与组件都在浏览器运行，详见 [前端结构](frontend-structure.md#运行与渲染模型)。默认 404 和错误展示已由 `app/router.tsx` 的 PageMessage 配置；不再沿用原型常量 key-gate 的访问判断。
 
 已有 `bun test` 脚本，例如座位布局逻辑测试；这不等于具有管理端同款的完整组件测试装置。行为改动仍需按范围做浏览器验证。
 
