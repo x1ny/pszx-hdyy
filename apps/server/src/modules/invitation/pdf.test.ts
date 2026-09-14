@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { strToU8, zipSync } from "fflate";
-import { prepareInvitationDownload } from "./download";
+import { strToU8, unzipSync, zipSync } from "fflate";
+import {
+  addInvitationDownloadEntry,
+  prepareInvitationDownload,
+} from "./download";
 import { convertInvitationPdfs, INVITATION_DOWNLOAD_MAX_BYTES } from "./pdf";
 
 let server: ReturnType<typeof Bun.serve> | undefined;
@@ -14,6 +17,21 @@ const serve = (handler: (request: Request) => Response | Promise<Response>) => {
 };
 const doc = strToU8("test docx payload");
 const pdf = strToU8("%PDF-1.7\ntest payload");
+
+test("同名收件人不会覆盖 ZIP 中的其他邀请函", async () => {
+  const entries: Record<string, Uint8Array> = {};
+  addInvitationDownloadEntry(entries, "模板——张三.docx", doc);
+  addInvitationDownloadEntry(entries, "模板——张三.docx", pdf);
+  addInvitationDownloadEntry(entries, "模板——张三（2）.docx", doc);
+  const result = await prepareInvitationDownload(entries, "docx", "batch.zip");
+  const files = unzipSync(result.bytes);
+  expect(Object.keys(files)).toEqual([
+    "模板——张三.docx",
+    "模板——张三（2）.docx",
+    "模板——张三（2）（2）.docx",
+  ]);
+  expect(files["模板——张三（2）.docx"]).toEqual(pdf);
+});
 
 describe("邀请函 PDF 转换边界", () => {
   test("单份上传 DOCX 字节并返回 PDF，临时名称不包含收件人", async () => {
