@@ -31,8 +31,8 @@ export function NotFound() {
          * 出来的是原生 <button>（nativeButton=true），换成 <a> 会报警告。
          * 官方建议链接直接用 buttonVariants() 上色，不套 Button 语义。
          */}
-        <Link to="/dashboard" className={buttonVariants()}>
-          返回工作台
+        <Link to="/" className={buttonVariants()}>
+          返回首页
         </Link>
       </EmptyContent>
     </Empty>

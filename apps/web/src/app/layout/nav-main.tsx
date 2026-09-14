@@ -27,12 +27,10 @@ export function NavMain({ permissions }: { permissions: PermissionKey[] }) {
   // `/api/*` 即可，真正的闸门在服务端每条路由上。
   //
   // 分组过滤到子项为止：子项被过滤光的分组整个不渲染（一个点开是空的「系统管理」
-  // 比没有这个菜单更让人困惑）。没标 permission 的单项（只有「工作台」）恒显示。
+  // 比没有这个菜单更让人困惑）。
   const visible = navMain.flatMap<NavItem>((item) => {
     if (!("children" in item)) {
-      return !item.permission || permissions.includes(item.permission)
-        ? [item]
-        : [];
+      return permissions.includes(item.permission) ? [item] : [];
     }
     const children = item.children.filter((child) =>
       permissions.includes(child.permission),

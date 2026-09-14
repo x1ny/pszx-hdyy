@@ -11,7 +11,7 @@ import {
 } from "#/shared/components/ui/empty.tsx";
 
 /**
- * 没有该页面权限时渲染它，**而不是静默重定向到工作台**。
+ * 没有该页面权限时渲染它，**而不是静默重定向到首页**。
  *
  * 这个系统里页面链接是会在同事之间转发的（活动详情、排位方案都带 id）。悄悄跳走
  * 会把一次权限配置问题伪装成一次页面故障——用户看到的是"我点了没反应"，然后来问
@@ -34,8 +34,8 @@ export function Forbidden() {
       </EmptyHeader>
       <EmptyContent>
         {/* 同 not-found.tsx：链接直接用 buttonVariants()，不套 Button 语义。 */}
-        <Link to="/dashboard" className={buttonVariants()}>
-          返回工作台
+        <Link to="/" className={buttonVariants()}>
+          返回首页
         </Link>
       </EmptyContent>
     </Empty>

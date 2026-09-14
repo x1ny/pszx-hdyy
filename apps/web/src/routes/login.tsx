@@ -119,7 +119,9 @@ function Login() {
           <h1 className="font-heading text-xl font-semibold tracking-tight">
             欢迎回来
           </h1>
-          <p className="text-sm text-muted-foreground">登录以继续访问工作台</p>
+          <p className="text-sm text-muted-foreground">
+            登录以继续使用活动运营平台
+          </p>
         </div>
 
         <Card>

@@ -40,13 +40,11 @@ const sortedRouteIds = Object.keys(PERMISSION_BY_ROUTE_ID).sort(
 );
 
 /**
- * 这条路由要哪个权限点。返回 `null` = 登录即可进（工作台、404 兜底页）。
+ * 这条路由要哪个权限点。返回 `null` = 登录即可进（未登记路由的 404 兜底页）。
  *
  * 传进来的应该是**最深的那个匹配路由的 id**，见 `_authenticated.tsx`。
  */
-export const permissionForRouteId = (
-  routeId: string,
-): PermissionKey | null => {
+export const permissionForRouteId = (routeId: string): PermissionKey | null => {
   for (const prefix of sortedRouteIds) {
     if (routeId === prefix || routeId.startsWith(`${prefix}/`)) {
       return PERMISSION_BY_ROUTE_ID[prefix] ?? null;

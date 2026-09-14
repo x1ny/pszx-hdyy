@@ -37,7 +37,7 @@ export function AppSidebar({ permissions }: { permissions: PermissionKey[] }) {
               size="lg"
               tooltip="活动运营平台"
               className="h-[58px] rounded-none px-[18px] group-data-[collapsible=icon]:ml-[10px]"
-              render={<Link to="/dashboard" />}
+              render={<Link to="/" />}
             >
               <div className="flex size-[26px] shrink-0 items-center justify-center rounded-[6px] bg-sidebar-primary text-sidebar-primary-foreground">
                 <LayoutGrid className="size-3.5" />

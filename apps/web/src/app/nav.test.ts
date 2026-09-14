@@ -1,6 +1,6 @@
 import { PERMISSION_KEYS } from "@repo/server/permissions";
 import { describe, expect, it } from "vitest";
-import { navMain } from "#/app/nav.ts";
+import { firstAccessibleNavPath, navMain } from "#/app/nav.ts";
 import {
   mappedPermissions,
   permissionForRouteId,
@@ -41,14 +41,13 @@ describe("菜单与权限点一一对应", () => {
     expect(new Set(menuPermissions).size).toBe(menuPermissions.length);
   });
 
-  it("工作台不带权限点（它是登录落地页）", () => {
-    const dashboard = navMain.find((item) => item.title === "工作台");
-    expect(dashboard).toBeDefined();
-    expect(dashboard && "children" in dashboard).toBe(false);
-    // 没有任何权限点的用户也得有地方可去，否则登录后无处落脚。
-    expect(
-      dashboard && "permission" in dashboard ? dashboard.permission : undefined,
-    ).toBeUndefined();
+  it("移除工作台后，根路径按菜单顺序选择首个可访问页面", () => {
+    expect(navMain.some((item) => item.title === "工作台")).toBe(false);
+    expect(firstAccessibleNavPath(PERMISSION_KEYS)).toBe("/project/list");
+    expect(firstAccessibleNavPath(["systemRole", "activity"])).toBe(
+      "/activity",
+    );
+    expect(firstAccessibleNavPath([])).toBeNull();
   });
 
   it.each(PERMISSION_KEYS)("权限点 %s 在路由守卫表里有对应路由", (key) => {
@@ -74,8 +73,7 @@ describe("路由守卫的前缀匹配", () => {
     );
   });
 
-  it("工作台和未登记的路由都放行", () => {
-    expect(permissionForRouteId("/_authenticated/dashboard")).toBeNull();
+  it("未登记的路由都放行", () => {
     expect(permissionForRouteId("/_authenticated/$")).toBeNull();
   });
 

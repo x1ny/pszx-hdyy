@@ -14,8 +14,6 @@ import { cn } from "#/shared/lib/utils.ts";
  *
  * 附带的好处：新增一个带 `permission` 的菜单项，这里**自动**多出一个可勾选项，
  * 不会出现"页面上线了但权限点忘了配"。`nav.test.ts` 盯着覆盖面。
- *
- * 「工作台」不出现在这里——它没有 `permission`（登录落地页，谁都得能进）。
  */
 export function PermissionPicker({
   value,
@@ -58,9 +56,6 @@ export function PermissionPicker({
             </fieldset>
           );
         }
-
-        // 没有 permission 的单项只有「工作台」，它不是可配置的权限点。
-        if (!item.permission) return null;
 
         return (
           <PermissionRow

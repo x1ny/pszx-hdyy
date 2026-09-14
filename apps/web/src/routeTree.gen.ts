@@ -13,7 +13,6 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedSplatRouteImport } from './routes/_authenticated/$'
-import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedActivityIndexRouteImport } from './routes/_authenticated/activity/index'
 import { Route as AuthenticatedMemberIndexRouteImport } from './routes/_authenticated/member/index'
 import { Route as AuthenticatedProjectProjectIdRouteImport } from './routes/_authenticated/project/$projectId'
@@ -62,11 +61,6 @@ const LoginRoute = LoginRouteImport.update({
 const AuthenticatedSplatRoute = AuthenticatedSplatRouteImport.update({
   id: '/$',
   path: '/$',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
-const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedActivityIndexRoute =
@@ -278,7 +272,6 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/$': typeof AuthenticatedSplatRoute
-  '/dashboard': typeof AuthenticatedDashboardRoute
   '/project/$projectId': typeof AuthenticatedProjectProjectIdRouteWithChildren
   '/project/list': typeof AuthenticatedProjectListRoute
   '/activity/': typeof AuthenticatedActivityIndexRoute
@@ -314,7 +307,6 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/$': typeof AuthenticatedSplatRoute
-  '/dashboard': typeof AuthenticatedDashboardRoute
   '/project/list': typeof AuthenticatedProjectListRoute
   '/activity': typeof AuthenticatedActivityIndexRoute
   '/member': typeof AuthenticatedMemberIndexRoute
@@ -350,7 +342,6 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
   '/_authenticated/$': typeof AuthenticatedSplatRoute
-  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/project/$projectId': typeof AuthenticatedProjectProjectIdRouteWithChildren
   '/_authenticated/project/list': typeof AuthenticatedProjectListRoute
   '/_authenticated/activity/': typeof AuthenticatedActivityIndexRoute
@@ -388,7 +379,6 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/$'
-    | '/dashboard'
     | '/project/$projectId'
     | '/project/list'
     | '/activity/'
@@ -424,7 +414,6 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/$'
-    | '/dashboard'
     | '/project/list'
     | '/activity'
     | '/member'
@@ -459,7 +448,6 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/login'
     | '/_authenticated/$'
-    | '/_authenticated/dashboard'
     | '/_authenticated/project/$projectId'
     | '/_authenticated/project/list'
     | '/_authenticated/activity/'
@@ -526,13 +514,6 @@ declare module '@tanstack/react-router' {
       path: '/$'
       fullPath: '/$'
       preLoaderRoute: typeof AuthenticatedSplatRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    '/_authenticated/dashboard': {
-      id: '/_authenticated/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/activity/': {
@@ -819,7 +800,6 @@ const AuthenticatedProjectProjectIdActivityActivityIdRouteWithChildren =
 
 interface AuthenticatedRouteChildren {
   AuthenticatedSplatRoute: typeof AuthenticatedSplatRoute
-  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedProjectProjectIdRoute: typeof AuthenticatedProjectProjectIdRouteWithChildren
   AuthenticatedProjectListRoute: typeof AuthenticatedProjectListRoute
   AuthenticatedActivityIndexRoute: typeof AuthenticatedActivityIndexRoute
@@ -839,7 +819,6 @@ interface AuthenticatedRouteChildren {
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedSplatRoute: AuthenticatedSplatRoute,
-  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedProjectProjectIdRoute:
     AuthenticatedProjectProjectIdRouteWithChildren,
   AuthenticatedProjectListRoute: AuthenticatedProjectListRoute,

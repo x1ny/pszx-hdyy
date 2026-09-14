@@ -4,7 +4,6 @@ import {
   Building2,
   CalendarDays,
   Folder,
-  LayoutGrid,
   type LucideIcon,
   Mail,
   MapPin,
@@ -28,16 +27,13 @@ export type NavLeaf = {
 /**
  * 侧边栏一级项。给了 `children` 就渲染成可折叠分组，
  * 否则渲染成直接跳转的单项（此时 `to` 必填）。
- *
- * 单项的 `permission` 是可选的，**只为「工作台」留的口子**：它是登录后的落地页，
- * 一个权限点都没有的用户也得有地方可去。除它之外的每个单项都要填。
  */
 export type NavItem =
   | {
       title: string;
       icon: LucideIcon;
       to: NonNullable<LinkProps["to"]>;
-      permission?: PermissionKey;
+      permission: PermissionKey;
     }
   | { title: string; icon: LucideIcon; children: NavLeaf[] };
 
@@ -50,7 +46,6 @@ export type NavItem =
  * "页面上线了但权限点忘了配"。`nav.test.ts` 断言它覆盖了全部 `PermissionKey`。
  */
 export const navMain: NavItem[] = [
-  { title: "工作台", icon: LayoutGrid, to: "/dashboard" },
   {
     title: "项目管理",
     icon: Folder,
@@ -113,3 +108,28 @@ export const navMain: NavItem[] = [
     ],
   },
 ];
+
+/**
+ * 登录后根路径的落点：按侧边栏从上到下寻找当前用户能访问的第一个页面。
+ *
+ * 菜单会按权限过滤，所以不能固定跳到配置数组的第一项；否则只有活动权限的用户
+ * 登录后会先撞到项目管理的 403。没有任何可访问页面时返回 `null`，由根路由渲染
+ * 无可访问页面的提示。
+ */
+export function firstAccessibleNavPath(
+  permissions: readonly PermissionKey[],
+): NonNullable<LinkProps["to"]> | null {
+  for (const item of navMain) {
+    if ("children" in item) {
+      const firstChild = item.children.find((child) =>
+        permissions.includes(child.permission),
+      );
+      if (firstChild) return firstChild.to;
+      continue;
+    }
+
+    if (permissions.includes(item.permission)) return item.to;
+  }
+
+  return null;
+}
