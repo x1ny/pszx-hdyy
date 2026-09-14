@@ -31,20 +31,17 @@ import {
   TableHeader,
   TableRow,
 } from "#/shared/components/ui/table.tsx";
-import { ExportFormatSelect } from "./export-format-select";
+import { DownloadFormatDialog } from "./download-format-dialog";
 
 export function BatchDetailDialog({
   batchId,
-  format,
-  onFormatChange,
   onOpenChange,
 }: {
   batchId?: number;
-  format: InvitationDownloadFormat;
-  onFormatChange: (format: InvitationDownloadFormat) => void;
   onOpenChange: (open: boolean) => void;
 }) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [downloadRequest, setDownloadRequest] = useState<DownloadRequest>();
 
   const detailQuery = useQuery({
     queryKey: invitationBatchKeys.detail(batchId ?? 0),
@@ -61,18 +58,24 @@ export function BatchDetailDialog({
 
   useEffect(() => {
     setSelected(new Set());
+    setDownloadRequest(undefined);
     if (batchId === undefined) return;
   }, [batchId]);
 
   const singleMutation = useMutation({
-    mutationFn: (recordId: number) =>
-      downloadInvitationRecord(recordId, format),
+    mutationFn: ({
+      recordId,
+      format,
+    }: {
+      recordId: number;
+      format: InvitationDownloadFormat;
+    }) => downloadInvitationRecord(recordId, format),
     onSuccess: ({ blob, fileName }) => saveBlob(blob, fileName),
     onError: (error) => toast.error(error.message),
   });
 
   const zipMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (format: InvitationDownloadFormat) =>
       downloadInvitationBatch(
         batchId as number,
         selected.size > 0 ? [...selected] : undefined,
@@ -95,6 +98,20 @@ export function BatchDetailDialog({
 
   const customVariables = Object.entries(batch?.variables ?? {});
   const downloading = singleMutation.isPending || zipMutation.isPending;
+  const downloadingFormat =
+    singleMutation.variables?.format ?? zipMutation.variables;
+
+  const confirmDownload = (format: InvitationDownloadFormat) => {
+    const request = downloadRequest;
+    setDownloadRequest(undefined);
+    if (!request) return;
+
+    if (request.kind === "record") {
+      singleMutation.mutate({ recordId: request.recordId, format });
+    } else {
+      zipMutation.mutate(format);
+    }
+  };
 
   return (
     <Dialog open={batchId !== undefined} onOpenChange={onOpenChange}>
@@ -113,18 +130,12 @@ export function BatchDetailDialog({
         </DialogHeader>
 
         <DialogBody>
-          <div className="mb-3 flex flex-wrap items-center gap-3">
-            <ExportFormatSelect
-              value={format}
-              onValueChange={onFormatChange}
-              disabled={downloading}
-            />
-            {downloading ? (
-              <output className="text-muted-foreground text-sm">
-                正在准备{format === "pdf" ? " PDF" : " Word"} 下载，请稍候…
-              </output>
-            ) : null}
-          </div>
+          {downloading ? (
+            <output className="mb-3 block text-muted-foreground text-sm">
+              正在准备
+              {downloadingFormat === "pdf" ? " PDF" : " Word"} 下载，请稍候…
+            </output>
+          ) : null}
           {customVariables.length > 0 ? (
             <div className="mb-3 space-y-1 rounded-md border bg-muted/30 p-3 text-sm">
               <div className="font-medium">本批次变量取值</div>
@@ -278,7 +289,12 @@ export function BatchDetailDialog({
                             size="sm"
                             className="text-primary hover:text-primary"
                             disabled={downloading}
-                            onClick={() => singleMutation.mutate(row.id)}
+                            onClick={() =>
+                              setDownloadRequest({
+                                kind: "record",
+                                recordId: row.id,
+                              })
+                            }
                           >
                             <DownloadIcon />
                             下载
@@ -299,7 +315,7 @@ export function BatchDetailDialog({
           </Button>
           <Button
             disabled={records.length === 0 || downloading}
-            onClick={() => zipMutation.mutate()}
+            onClick={() => setDownloadRequest({ kind: "batch" })}
           >
             <DownloadIcon />
             {selected.size > 0
@@ -310,6 +326,16 @@ export function BatchDetailDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+      <DownloadFormatDialog
+        open={batchId !== undefined && downloadRequest !== undefined}
+        pending={downloading}
+        onOpenChange={(open) => {
+          if (!open) setDownloadRequest(undefined);
+        }}
+        onConfirm={confirmDownload}
+      />
     </Dialog>
   );
 }
+
+type DownloadRequest = { kind: "record"; recordId: number } | { kind: "batch" };

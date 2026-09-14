@@ -32,7 +32,7 @@ import {
   TableRow,
 } from "#/shared/components/ui/table.tsx";
 import { BatchDetailDialog } from "./-components/batch-detail-dialog";
-import { ExportFormatSelect } from "./-components/export-format-select";
+import { DownloadFormatDialog } from "./-components/download-format-dialog";
 
 export const Route = createFileRoute(
   "/_authenticated/project/$projectId_/activity/$activityId/invitations/",
@@ -56,7 +56,7 @@ function InvitationsPage() {
   const [recipientName, setRecipientName] = useState<string>();
   const [page, setPage] = useState(1);
   const [detailId, setDetailId] = useState<number>();
-  const [format, setFormat] = useState<InvitationDownloadFormat>("docx");
+  const [downloadBatch, setDownloadBatch] = useState<InvitationBatchListItem>();
 
   const listQuery = useQuery(
     invitationBatchListQueryOptions({
@@ -70,7 +70,13 @@ function InvitationsPage() {
   const total = listQuery.data?.total ?? 0;
 
   const downloadMutation = useMutation({
-    mutationFn: (batch: InvitationBatchListItem) =>
+    mutationFn: ({
+      batch,
+      format,
+    }: {
+      batch: InvitationBatchListItem;
+      format: InvitationDownloadFormat;
+    }) =>
       downloadInvitationBatch(batch.id, undefined, batch.recipientType, format),
     onSuccess: ({ blob, fileName }) => {
       saveBlob(blob, fileName);
@@ -133,22 +139,13 @@ function InvitationsPage() {
         />
       </FilterBar>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <ExportFormatSelect
-          value={format}
-          onValueChange={setFormat}
-          disabled={downloadMutation.isPending}
-        />
-        {downloadMutation.isPending ? (
-          <output className="text-muted-foreground text-sm">
-            正在准备{format === "pdf" ? " PDF" : " Word"} 下载，请稍候…
-          </output>
-        ) : format === "pdf" ? (
-          <span className="text-muted-foreground text-sm">
-            批量 PDF 转换需要一些时间。
-          </span>
-        ) : null}
-      </div>
+      {downloadMutation.isPending ? (
+        <output className="text-muted-foreground text-sm">
+          正在准备
+          {downloadMutation.variables?.format === "pdf" ? " PDF" : " Word"}{" "}
+          下载，请稍候…
+        </output>
+      ) : null}
       <div className="rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader className="bg-muted/60">
@@ -236,7 +233,7 @@ function InvitationsPage() {
                         disabled={
                           batch.recordCount === 0 || downloadMutation.isPending
                         }
-                        onClick={() => downloadMutation.mutate(batch)}
+                        onClick={() => setDownloadBatch(batch)}
                       >
                         <DownloadIcon />
                         下载全部
@@ -274,10 +271,21 @@ function InvitationsPage() {
 
       <BatchDetailDialog
         batchId={detailId}
-        format={format}
-        onFormatChange={setFormat}
         onOpenChange={(open) => {
           if (!open) setDetailId(undefined);
+        }}
+      />
+      <DownloadFormatDialog
+        open={downloadBatch !== undefined}
+        pending={downloadMutation.isPending}
+        onOpenChange={(open) => {
+          if (!open) setDownloadBatch(undefined);
+        }}
+        onConfirm={(format) => {
+          if (!downloadBatch) return;
+          const batch = downloadBatch;
+          setDownloadBatch(undefined);
+          downloadMutation.mutate({ batch, format });
         }}
       />
     </div>
