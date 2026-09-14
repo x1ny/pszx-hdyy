@@ -8,14 +8,14 @@
 	"files": {
 		"ignoreUnknown": false,
 		"includes": [
-			"**/src/**/*",
-			"**/.vscode/**/*",
+			"apps/*/src/**/*",
+			".vscode/**/*",
 			"apps/web/index.html",
 			"apps/h5/index.html",
-			"**/vite.config.ts",
-			"**/vitest.config.ts",
-			"**/vitest.setup.ts",
-			"**/drizzle.config.ts",
+			"apps/*/vite.config.ts",
+			"apps/*/vitest.config.ts",
+			"apps/*/vitest.setup.ts",
+			"apps/*/drizzle.config.ts",
 			"scripts/**/*.ts",
 			"!**/src/routeTree.gen.ts",
 			"!**/src/styles.css"
@@ -23,6 +23,7 @@
 	},
 	"formatter": {
 		"enabled": true,
+		"lineEnding": "lf",
 		"indentStyle": "tab"
 	},
 	"assist": { "actions": { "source": { "organizeImports": "on" } } },

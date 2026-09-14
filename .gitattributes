@@ -1,12 +1,20 @@
-# entrypoint 以 CRLF 提交的话，容器里 `#!/bin/sh\r` 会报
-# "no such file or directory"，且报错完全不提行尾。强制 LF。
-*.sh text eol=lf
+# 文本在索引和工作目录中都使用 LF，覆盖个人 core.autocrlf 设置。
+# text=auto 让 Git 识别二进制；下面再显式保护仓库已有的二进制资源。
+* text=auto eol=lf
 
-# git 钩子同理，而且它们没有扩展名，上面那条 *.sh 覆盖不到。
+# Windows 批处理保留 CRLF；不改变其他源码和脚本的换行约定。
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Linux 入口和无扩展名 Git hook 必须保持 LF。
+*.sh text eol=lf
 .githooks/* text eol=lf
 
-# 迁移 SQL 的 hash 是按文件字节算的（drizzle 的 readMigrationFiles 里
-# sha256(整个文件)）。CRLF/LF 不一致会让同一份迁移在 Windows 和容器里算出不同
-# hash —— 不会导致重复执行（判断看的是 created_at），但会让审计记录对不上。
-# 本仓库 core.autocrlf=true，不写这行必然发生。
+# 保留显式迁移约束：Drizzle hash 按字节计算，工作目录也必须与仓库一致。
 apps/server/drizzle/**/*.sql text eol=lf
+
+*.png binary
+*.jpg binary
+*.doc binary
+*.docx binary
+*.gz binary

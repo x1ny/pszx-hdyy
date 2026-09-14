@@ -35,15 +35,27 @@ read_when:
 | 类型检查 | `bun run typecheck` |
 | 全部测试（包括知识入口检查） | `bun run test` |
 | 本次 TS/TSX 文件格式与 lint | `bunx biome check <文件...>`，不加 `--write` |
+| 全量格式与 lint 只读检查 | `bun run check`，范围由 biome.json 决定 |
+| 显式修复 / 格式化 | `bun run fix -- <文件...>` / `bun run format -- <文件...>` |
 | 当前资料发现 / 校验 | `bun run docs:list` / `bun run docs:check` |
 | 项目 skill 入口同步 / 校验 | `bun run skills:sync` / `bun run skills:check`，见 [Skill 工作流](skill-workflow.md) |
 | 生产构建 | `bun run build` |
 | 路由树生成 | `bun run --filter '@repo/web' generate-routes`；h5 换为 `@repo/h5` |
 | 垃圾容器、卷与分支回收 | `bun run prune` 只列；`--yes` 才执行 |
 
-`bun run check` 当前是 `biome check --write`，不是只读收尾。全仓格式化仅在明确需要且工作树干净时执行，随后核对 `git diff --name-only`。Biome 决定格式：TS/TSX 两空格、双引号，JSON 等使用配置中的 tab；不要手工重复维护一套格式规则。
+`check` 只检查，`fix` 才调用 `biome check --write`，`format` 只整理格式。全仓修复仅在明确需要且工作树干净时执行，随后核对 `git diff --name-only`。Biome 决定格式：TS/TSX 两空格、双引号，JSON 等使用配置中的 tab；不要手工重复维护一套格式规则。检查范围限定为 apps 源码、对应配置和工程脚本，历史原型的同名 src/config 不进入扫描。
+
+全量 `check` 仍有历史格式和 lint 诊断，不能把它伪装成日常功能任务的绿灯，也不能用忽略规则掩盖。日常任务检查本次涉及的文件；清理全量基线时单开任务，并报告修复范围和剩余诊断。
 
 管理端有 Vitest + happy-dom + Testing Library，`vitest.config.ts` 与 Vite 配置分开。H5 已有 `bun test`（例如座位图布局纯逻辑），尚不能据此推断具有同等组件测试装置。服务端使用 Bun 测试；SQL 字符串和 Mock 检查不能替代真实数据库事务验收。
+
+## 换行与既有工作副本
+
+`.gitattributes` 规定文本的索引和工作目录都使用 LF，覆盖个人 `core.autocrlf`；Windows 批处理使用 CRLF，已声明的二进制资源不转换。Biome 显式使用 LF，`.editorconfig` 和 VS Code 工作区设置保持一致。不要修改全局 Git 配置、关闭换行告警或逐文件设置例外来消除提示。
+
+新 clone/worktree 自动检出正确换行。已有目录合入属性文件时，Git 不会重新写出所有未变文件：`bun install` 的 postinstall 会自动整理这种旧副本，也可一次性运行 `bun run fix:eol`。它只将索引已是 LF、工作目录为 CRLF/混合换行且没有已暂存或未暂存语义修改的已跟踪文件恢复为 LF；随后只刷新这些已确认干净文件的 Git 状态缓存。它保留修改中的文件、未跟踪文件、批处理及二进制，不把语义改动加入暂存区，也不重新排版。
+
+正常情况下无需在每次任务或检查前运行换行修复。`scripts/line-endings.test.ts` 在真实临时 Git worktree 中验证个人 autocrlf 设置不影响检出字节、资源不受损、修复重复执行无变化，并验证 check 的只读行为；它纳入根测试。SQL 迁移仍保持原字节，不能把归一化扩大成修改已交付迁移。
 
 ## 交付与已知失败
 

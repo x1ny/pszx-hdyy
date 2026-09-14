@@ -369,7 +369,7 @@ dnd-kit 的 `useSortable.index` 是当前渲染位置。[S2](https://dndkit.com/
 
 ### 9.3 检查命令
 
-任务卡按最小相关范围给出命令。完整功能收尾运行 `bun run typecheck`、`bun run test`、`bun run build` 以及仅针对改动源码的 `bunx biome check <文件>`。不要把 `bun run check` 当只读检查。
+任务卡按最小相关范围给出命令。完整功能收尾运行 `bun run typecheck`、`bun run test`、`bun run build` 以及仅针对改动源码的 `bunx biome check <文件>`。`bun run check` 现为只读全量检查；需要写入修复时显式使用 `fix`，见 [开发工作流](development-workflow.md)。
 
 根约定记录了 invitation 的 3 个已知失败；执行时报告实际失败文件和用例，不扩大这项豁免，也不改无关测试。新功能测试必须通过。功能分支的 rebase、提交和合并按现有仓库规则处理，任务完成不授权自动合入 master。
 

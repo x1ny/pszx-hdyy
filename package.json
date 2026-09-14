@@ -31,8 +31,10 @@
     "db:studio": "bun run --filter '@repo/server' db:studio",
     "format": "biome format --write",
     "lint": "biome lint",
-    "check": "biome check --write",
-    "postinstall": "bun scripts/setup-git.ts",
+    "check": "biome check",
+    "fix": "biome check --write",
+    "fix:eol": "bun scripts/normalize-line-endings.ts",
+    "postinstall": "bun scripts/setup-git.ts && bun scripts/normalize-line-endings.ts",
     "prune": "bun scripts/prune.ts"
   },
   "devDependencies": {

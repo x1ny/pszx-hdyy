@@ -1,4 +1,8 @@
 {
+	"files.eol": "\n",
+	"[bat]": {
+		"files.eol": "\r\n"
+	},
 	"files.watcherExclude": {
 		"**/routeTree.gen.ts": true,
 		"docs/20260811交接/**": true

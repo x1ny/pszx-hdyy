@@ -555,7 +555,7 @@ expect(statements).toEqual([]); // 非空 = 有 schema 改动没生成迁移
 
   迁移的 hash 是按文件字节算的（`sha256(整个文件)`），CRLF/LF 不一致会让同一份迁移在
   Windows 和容器里算出不同 hash。**这不会导致重复执行**（判断看的是 `created_at`），
-  但会让审计记录对不上，而且本仓库 `core.autocrlf=true`，不写这行必然发生。
+  但会让审计记录对不上。仓库文本现已默认 LF，这条显式规则仍保留，避免以后调整通用属性时影响迁移；已有迁移不能借格式整理改变字节。
 - **权限**：迁移用的账号需要 DDL 权限。哪天把应用账号收紧成只读写数据，就给迁移
   单独配一个 `MIGRATION_DATABASE_URL`，`migrate.ts` 优先读它、回落 `DATABASE_URL`。
 - **迁移不要写成需要长时间锁表的形式**：大表加索引用 `CREATE INDEX CONCURRENTLY`，

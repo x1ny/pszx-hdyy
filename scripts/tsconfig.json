@@ -10,7 +10,9 @@
     "./docs-list.ts",
     "./docs-list.test.ts",
     "./skills.ts",
-    "./skills.test.ts"
+    "./skills.test.ts",
+    "./normalize-line-endings.ts",
+    "./line-endings.test.ts"
   ],
   "compilerOptions": {
     "types": ["bun", "node"]

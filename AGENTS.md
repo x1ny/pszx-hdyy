@@ -38,7 +38,7 @@ Before editing files for a substantial task:
 | 本次文件检查 | `bunx biome check <本次修改文件...>`，不加 `--write` |
 | 资料发现 / 入口检查 | `bun run docs:list` / `bun run docs:check` |
 
-当前 `bun run check` 会写文件，不作为日常收尾检查。需要全仓修复时先确认工作树干净，再执行并核对改动范围。
+`bun run check` 为只读检查；`bun run fix -- <文件...>` / `bun run format -- <文件...>` 显式写文件。全仓修复前确认工作树干净，执行后核对改动范围。
 
 管理端可自行访问开发环境 `/api/dev/login`（可加 redirect）并走真实浏览器操作。连接当前临时库沿用脚本生成的 `apps/server/.dev-db.env`，不要猜 `localhost:5432`。凭据留在本地配置，不写入文档、日志或提交。
 
