@@ -172,7 +172,7 @@ function SegmentForm({
 
   const defaultValues: SegmentFormState = {
     name: segment?.name ?? "",
-    segmentType: segment?.segmentType ?? "other",
+    segmentType: segment?.segmentType ?? "opening_ceremony",
     lineKey: currentKey,
     newLineName: "",
     startTime: toDateTimeLocalValue(segment?.startTime),
@@ -237,7 +237,7 @@ function SegmentForm({
                 <Input
                   id={field.name}
                   name={field.name}
-                  placeholder="例如：开幕式、主题演讲"
+                  placeholder="例如：启幕仪式、时尚夜话"
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(event) => field.handleChange(event.target.value)}

@@ -17,7 +17,7 @@ const testSegment: Segment = {
   activityId: 1,
   agendaLineId: 1,
   name: "长环节",
-  segmentType: "other",
+  segmentType: "conference",
   startTime: "2026-09-10T21:00:00.000Z",
   endTime: "2026-09-11T00:00:00.000Z",
   locationText: null,

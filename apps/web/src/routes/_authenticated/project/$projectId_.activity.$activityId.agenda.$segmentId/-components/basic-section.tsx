@@ -84,7 +84,7 @@ export function BasicSection({
           </FieldLabel>
           <Input
             id="segment-name"
-            placeholder="例如：开幕式、主题演讲"
+            placeholder="例如：启幕仪式、时尚夜话"
             value={base.name}
             aria-invalid={!!errors.name}
             onChange={(event) => onChange("name", event.target.value)}

@@ -32,7 +32,7 @@ const segment = (
     activityId: 1,
     agendaLineId,
     name: `环节 ${nextId}`,
-    segmentType: "other",
+    segmentType: "conference",
     startTime: new Date(start).toISOString(),
     endTime: new Date(end).toISOString(),
     locationText: null,

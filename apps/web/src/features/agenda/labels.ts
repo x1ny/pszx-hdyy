@@ -16,11 +16,11 @@ import type {
 // ---------------------------------------------------------------------------
 
 export const SEGMENT_TYPE_LABELS = {
-  keynote: "主题演讲",
-  forum: "分论坛",
-  negotiation: "洽谈",
-  reception: "接待",
-  other: "其他",
+  opening_ceremony: "启幕仪式",
+  fashion_talk: "时尚夜话",
+  fashion_show: "大秀",
+  forum: "论坛",
+  conference: "会议",
 } as const satisfies Record<SegmentType, string>;
 
 export const SEGMENT_TYPE_VALUES = Object.keys(
@@ -33,11 +33,11 @@ export const SEGMENT_TYPE_VALUES = Object.keys(
  * 颜色就编译不过。
  */
 export const SEGMENT_TYPE_BADGE_CLASS = {
-  keynote: "border-transparent bg-chart-1/10 text-chart-1",
-  forum: "border-transparent bg-chart-2/10 text-chart-2",
-  negotiation: "border-transparent bg-chart-3/10 text-chart-3",
-  reception: "border-transparent bg-chart-4/10 text-chart-4",
-  other: "border-transparent bg-chart-5/10 text-chart-5",
+  opening_ceremony: "border-transparent bg-chart-1/10 text-chart-1",
+  fashion_talk: "border-transparent bg-chart-2/10 text-chart-2",
+  fashion_show: "border-transparent bg-chart-3/10 text-chart-3",
+  forum: "border-transparent bg-chart-4/10 text-chart-4",
+  conference: "border-transparent bg-chart-5/10 text-chart-5",
 } as const satisfies Record<SegmentType, string>;
 
 export const SEGMENT_STATUS_LABELS = {

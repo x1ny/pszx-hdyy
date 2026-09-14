@@ -213,7 +213,7 @@ export function createEmptyDraft(defaults?: Partial<BaseDraft>): ConfigDraft {
   return {
     base: {
       name: "",
-      segmentType: "other",
+      segmentType: "opening_ceremony",
       lineKey: "main",
       newLineName: "",
       startTime: "",

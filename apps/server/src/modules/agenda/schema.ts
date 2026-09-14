@@ -38,13 +38,13 @@ import { activity } from "../project/schema";
 export const AGENDA_LINE_TYPES = ["main", "parallel"] as const;
 export type AgendaLineType = (typeof AGENDA_LINE_TYPES)[number];
 
-/** 环节类型。取值照抄原型 agenda-timeline.html 的环节弹窗，没有自己发明。 */
+/** 环节类型。 */
 export const SEGMENT_TYPES = [
-  "keynote",
+  "opening_ceremony",
+  "fashion_talk",
+  "fashion_show",
   "forum",
-  "negotiation",
-  "reception",
-  "other",
+  "conference",
 ] as const;
 export type SegmentType = (typeof SEGMENT_TYPES)[number];
 

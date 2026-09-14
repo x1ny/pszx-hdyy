@@ -14,7 +14,7 @@ const baseInput = {
   activityId: 1,
   base: {
     name: "开幕式",
-    segmentType: "keynote" as const,
+    segmentType: "opening_ceremony" as const,
     agendaLineId: null,
     startTime: "2026-04-17T09:00:00.000Z",
     endTime: "2026-04-17T10:00:00.000Z",

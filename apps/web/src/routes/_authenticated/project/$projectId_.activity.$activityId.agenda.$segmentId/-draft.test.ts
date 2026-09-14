@@ -32,7 +32,7 @@ const config: SegmentConfig = {
     activityId: 1,
     agendaLineId: 5,
     name: "开幕式",
-    segmentType: "keynote",
+    segmentType: "opening_ceremony",
     startTime: "2026-04-17T01:00:00.000Z",
     endTime: "2026-04-17T02:00:00.000Z",
     locationText: "主会场",
