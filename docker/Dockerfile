@@ -47,9 +47,14 @@ USER root
 WORKDIR /app
 
 # alpine 不自带时区库。基础镜像换成非 alpine 的话，这一层要跟着改。
-RUN apk add --no-cache tzdata \
+RUN apk add --no-cache tzdata libreoffice-writer font-noto-cjk fontconfig \
     && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
     && echo "Asia/Shanghai" > /etc/timezone
+
+# Office 和字体层位于业务产物之前，日常代码更新可以复用这层缓存。
+COPY docker/fonts/ /usr/local/share/fonts/custom/
+COPY docker/invitation-fonts.conf /etc/fonts/conf.d/99-invitation.conf
+RUN fc-cache -f && soffice --headless --version
 
 # 两个 *_DIST_DIR 一设上，apps/server 就在同一个 Hono 里托管这两份静态产物，
 # 各占一个端口：80 是管理端，81 是 h5（见 apps/server/src/index.ts）。两个端口

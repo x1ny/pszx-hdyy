@@ -8,25 +8,6 @@
 name: pszx-hdyy
 
 services:
-  gotenberg:
-    image: gotenberg/gotenberg:8.34.0-libreoffice
-    profiles: [pdf]
-    restart: unless-stopped
-    command:
-      - gotenberg
-      - --api-timeout=180s
-      - --api-body-limit=510MB
-      - --libreoffice-auto-start=true
-      - --libreoffice-max-queue-size=4
-      - --libreoffice-deny-private-ips=true
-      - --libreoffice-deny-public-ips=true
-      - --api-disable-download-from=true
-    ports:
-      - "127.0.0.1:${GOTENBERG_PORT:-3030}:3000"
-    volumes:
-      - ./docker/fonts:/usr/local/share/fonts/custom:ro
-      - ./docker/invitation-fonts.conf:/etc/fonts/conf.d/99-invitation.conf:ro
-
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped

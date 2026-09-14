@@ -1,160 +1,159 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { strToU8, unzipSync, zipSync } from "fflate";
+import { afterEach, beforeEach, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { strFromU8, strToU8, unzipSync } from "fflate";
 import {
   addInvitationDownloadEntry,
   prepareInvitationDownload,
 } from "./download";
-import { convertInvitationPdfs, INVITATION_DOWNLOAD_MAX_BYTES } from "./pdf";
+import { convertInvitationPdfs } from "./pdf";
 
-let server: ReturnType<typeof Bun.serve> | undefined;
-afterEach(() => {
-  server?.stop(true);
-  server = undefined;
+let temporary: string;
+beforeEach(async () => {
+  temporary = await mkdtemp(join(tmpdir(), "office-test-"));
 });
-const serve = (handler: (request: Request) => Response | Promise<Response>) => {
-  server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: handler });
-  return server.url.toString();
-};
-const doc = strToU8("test docx payload");
-const pdf = strToU8("%PDF-1.7\ntest payload");
+afterEach(async () => {
+  await rm(temporary, { recursive: true, force: true });
+});
+const command = (mode = "success") => [
+  process.execPath,
+  join(import.meta.dir, "__fixtures__/office-process.ts"),
+  mode,
+  join(temporary, "started.json"),
+];
+const doc = strToU8("recipient-one");
+async function started() {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    try {
+      return JSON.parse(
+        await readFile(join(temporary, "started.json"), "utf8"),
+      ) as { directory: string; pid: number; args: string[] };
+    } catch {
+      await Bun.sleep(10);
+    }
+  }
+  throw new Error("conversion process did not start");
+}
+function stopped(pid: number) {
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch {
+    return true;
+  }
+}
 
 test("同名收件人不会覆盖 ZIP 中的其他邀请函", async () => {
   const entries: Record<string, Uint8Array> = {};
   addInvitationDownloadEntry(entries, "模板——张三.docx", doc);
-  addInvitationDownloadEntry(entries, "模板——张三.docx", pdf);
-  addInvitationDownloadEntry(entries, "模板——张三（2）.docx", doc);
+  addInvitationDownloadEntry(entries, "模板——张三.docx", strToU8("second"));
   const result = await prepareInvitationDownload(entries, "docx", "batch.zip");
-  const files = unzipSync(result.bytes);
-  expect(Object.keys(files)).toEqual([
+  expect(Object.keys(unzipSync(result.bytes))).toEqual([
     "模板——张三.docx",
     "模板——张三（2）.docx",
-    "模板——张三（2）（2）.docx",
   ]);
-  expect(files["模板——张三（2）.docx"]).toEqual(pdf);
 });
 
-describe("邀请函 PDF 转换边界", () => {
-  test("单份上传 DOCX 字节并返回 PDF，临时名称不包含收件人", async () => {
-    const url = serve(async (request) => {
-      expect(new URL(request.url).pathname).toBe("/forms/libreoffice/convert");
-      const form = await request.formData();
-      const file = form.get("files") as File;
-      expect(file.name).toBe("invitation-0.docx");
-      expect(new Uint8Array(await file.arrayBuffer())).toEqual(doc);
-      expect(form.get("exportNotes")).toBe("false");
-      return new Response(pdf, {
-        headers: { "Content-Type": "application/pdf" },
-      });
-    });
-    expect(await convertInvitationPdfs([doc], { url })).toEqual([pdf]);
+test("真实子进程按输入编号交付整批，使用独立 profile，成功后清理", async () => {
+  const output = await convertInvitationPdfs([doc, strToU8("recipient-two")], {
+    command: command(),
   });
+  expect(output.map((bytes) => strFromU8(bytes))).toEqual([
+    "%PDF-1.7\nrecipient-one",
+    "%PDF-1.7\nrecipient-two",
+  ]);
+  const info = await started();
+  expect(info.args).toContain("--headless");
+  expect(
+    info.args.some((arg) => arg.startsWith("-env:UserInstallation=file:")),
+  ).toBe(true);
+  expect(existsSync(info.directory)).toBe(false);
+});
 
-  test("批量按编号恢复收件人顺序，不依赖 ZIP 内部顺序", async () => {
-    const second = strToU8("%PDF-1.7\nsecond recipient");
-    const url = serve(
-      () =>
-        new Response(
-          zipSync({
-            "invitation-1.docx.pdf": second,
-            "invitation-0.docx.pdf": pdf,
-          }),
-          { headers: { "Content-Type": "application/zip" } },
-        ),
-    );
-    expect(await convertInvitationPdfs([doc, doc], { url })).toEqual([
-      pdf,
-      second,
-    ]);
+test.each([
+  "missing",
+  "invalid",
+  "failure",
+])("%s 转换不能交付部分结果且清理目录", async (mode) => {
+  await expect(
+    convertInvitationPdfs([doc, doc], { command: command(mode) }),
+  ).rejects.toThrow("PDF 转换");
+  expect(existsSync((await started()).directory)).toBe(false);
+});
+
+test("输出超过上限时在读取前拒绝，清理稀疏测试文件", async () => {
+  await expect(
+    convertInvitationPdfs([doc], { command: command("large") }),
+  ).rejects.toThrow("500 MB");
+  expect(existsSync((await started()).directory)).toBe(false);
+});
+
+test("超时终止实际子进程，释放转换名额并清理文件", async () => {
+  const conversion = convertInvitationPdfs([doc], {
+    command: command("hang"),
+    timeoutMs: 1000,
   });
+  const rejected = expect(conversion).rejects.toThrow("转换超时");
+  const info = await started();
+  await rejected;
+  expect(stopped(info.pid)).toBe(true);
+  expect(existsSync(info.directory)).toBe(false);
+  expect(
+    await convertInvitationPdfs([doc], { command: command() }),
+  ).toHaveLength(1);
+});
 
-  test.each<Record<string, Uint8Array>>([
-    { "invitation-0.docx.pdf": pdf },
-    { "invitation-0.docx.pdf": pdf, "wrong.pdf": pdf },
-    { "invitation-0.docx.pdf": pdf, "invitation-1.docx.pdf": doc },
-  ])("批量缺失、错名、伪 PDF 均拒绝交付", async (files) => {
-    const url = serve(
-      () =>
-        new Response(zipSync(files), {
-          headers: { "Content-Type": "application/zip" },
-        }),
-    );
-    await expect(convertInvitationPdfs([doc, doc], { url })).rejects.toThrow(
-      "结果不完整",
-    );
+test("繁忙时拒绝第二批，取消第一批会终止进程并清理", async () => {
+  const controller = new AbortController();
+  const conversion = convertInvitationPdfs([doc], {
+    command: command("hang"),
+    signal: controller.signal,
   });
-
-  test("错误页面不能当成 PDF", async () => {
-    const url = serve(
-      () =>
-        new Response("<html>Bad gateway</html>", {
-          headers: { "Content-Type": "text/html" },
-        }),
-    );
-    await expect(convertInvitationPdfs([doc], { url })).rejects.toThrow(
-      "结果不完整",
-    );
-  });
-
-  test("ZIP 声明的解压体积超过上限时拒绝分配", async () => {
-    const archive = zipSync({
-      "invitation-0.docx.pdf": pdf,
-      "invitation-1.docx.pdf": pdf,
-    });
-    const view = new DataView(archive.buffer);
-    for (let i = 0; i < archive.length - 28; i++) {
-      if (view.getUint32(i, true) === 0x02014b50) {
-        view.setUint32(i + 24, INVITATION_DOWNLOAD_MAX_BYTES + 1, true);
-        break;
-      }
-    }
-    const url = serve(
-      () =>
-        new Response(archive, {
-          headers: {
-            "Content-Type": "application/zip",
-          },
-        }),
-    );
-    await expect(convertInvitationPdfs([doc, doc], { url })).rejects.toThrow(
-      "500 MB",
-    );
-  });
-
-  test("服务错误不泄露上游正文", async () => {
-    const url = serve(
-      () => new Response("internal configuration secret", { status: 500 }),
-    );
-    await expect(convertInvitationPdfs([doc], { url })).rejects.toThrow(
-      "PDF 转换失败",
-    );
-  });
-
-  test("转换有界超时", async () => {
-    const url = serve(async () => {
-      await Bun.sleep(100);
-      return new Response(pdf);
-    });
+  const outcome = conversion.catch((error: unknown) => error);
+  const info = await started();
+  try {
     await expect(
-      convertInvitationPdfs([doc], { url, timeoutMs: 10 }),
-    ).rejects.toThrow("转换超时");
-  });
+      convertInvitationPdfs([doc], { command: command() }),
+    ).rejects.toThrow("其他 PDF");
+  } finally {
+    controller.abort();
+  }
+  expect(await outcome).toBeInstanceOf(Error);
+  expect(((await outcome) as Error).message).toContain("已取消");
+  expect(stopped(info.pid)).toBe(true);
+  expect(existsSync(info.directory)).toBe(false);
+});
 
-  test("取消下载停止等待", async () => {
-    const url = serve(() => new Response(pdf));
+test("已取消的请求不启动子进程", async () => {
+  await expect(
+    convertInvitationPdfs([doc], {
+      command: command(),
+      signal: AbortSignal.abort(),
+    }),
+  ).rejects.toThrow("已取消");
+  expect(existsSync(join(temporary, "started.json"))).toBe(false);
+});
+
+test("程序缺失时返回可操作错误，Word 不依赖转换器", async () => {
+  await expect(
+    convertInvitationPdfs([doc], {
+      command: [join(temporary, "missing-office")],
+    }),
+  ).rejects.toThrow("转换程序暂不可用");
+  expect(
+    (await prepareInvitationDownload({ "模板——张三.docx": doc }, "docx")).bytes,
+  ).toBe(doc);
+  expect(
+    await convertInvitationPdfs([doc], { command: command() }),
+  ).toHaveLength(1);
+});
+
+test("空批次或超过 200 份不启动转换", async () => {
+  for (const inputs of [[], Array.from({ length: 201 }, () => doc)])
     await expect(
-      convertInvitationPdfs([doc], { url, signal: AbortSignal.abort() }),
-    ).rejects.toThrow("已取消");
-  });
-
-  test("未配置 PDF 不影响 Word 原字节下载", async () => {
-    await expect(convertInvitationPdfs([doc], { url: "" })).rejects.toThrow(
-      "尚未配置",
-    );
-    const result = await prepareInvitationDownload(
-      { "活动_张三.docx": doc },
-      "docx",
-    );
-    expect(result.fileName).toBe("活动_张三.docx");
-    expect(result.bytes).toBe(doc);
-  });
+      convertInvitationPdfs(inputs, { command: command() }),
+    ).rejects.toThrow("1–200");
+  expect(existsSync(join(temporary, "started.json"))).toBe(false);
 });

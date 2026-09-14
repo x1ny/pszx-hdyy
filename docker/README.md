@@ -10,7 +10,7 @@ read_when:
 
 ## 镜像里装了什么
 
-一个容器、一个进程、**两个端口**：管理端和 h5 跑在同一个 Hono 里。
+一个容器、**两个端口**：管理端和 h5 跑在同一个 Hono 里；导出 PDF 时按需启动容器内的 LibreOffice 子进程。
 
 | 端口 | 前端 | 静态目录 | API |
 | --- | --- | --- | --- |
@@ -43,23 +43,23 @@ read_when:
 
 ## 邀请函 PDF 转换
 
-应用通过 `GOTENBERG_URL` 调用独立 Gotenberg，Word 下载不依赖该服务。仓库 Compose 的 `pdf` profile 固定使用 `gotenberg/gotenberg:8.34.0-libreoffice`，不随默认数据库启动；镜像仅包含 Office 转换所需引擎。
+应用镜像已经安装 LibreOffice Writer、中文 Noto CJK 字体和字体回退配置。后端直接启动 `soffice --headless` 转换，**只需部署应用镜像，不需要额外 PDF 服务或 `GOTENBERG_URL`**。旧的 `GOTENBERG_URL` / `GOTENBERG_PORT` 不再读取，可从部署环境删除。
 
-开发环境在仓库根执行：
+源码开发时，在运行 Bun 的本机安装 LibreOffice。默认从 PATH 查找 `soffice` / `libreoffice`；Windows 也检查标准安装路径。非标准位置可在根 `.env` 指定完整可执行路径，然后重启后端：
 
-```sh
-docker compose --profile pdf up -d gotenberg
+```dotenv
+LIBREOFFICE_PATH="C:\Program Files\LibreOffice\program\soffice.com"
 ```
 
-在根 `.env` 设置 `GOTENBERG_URL=http://127.0.0.1:3030` 后启动/重启开发服务。端口占用时同时修改 `GOTENBERG_PORT` 和 URL。应用和转换器同一 Docker 网络时 URL 使用 `http://gotenberg:3000`；Rancher 使用转换器的内部 Service 地址，不公开转换端口。
+Docker 环境默认无需设置 `LIBREOFFICE_PATH`。Office 安装层位于业务产物复制之前，日常代码构建复用缓存；首次构建或缓存失效时需要下载 Office 依赖，镜像体积和拉取时间会增加。
 
-部署转换器沿用 Compose 中的启动参数：180 秒 API 超时、510 MB 请求上限（为 multipart 开销留空间）、有界等待队列、禁用远程下载和外链访问。应用的转换等待上限为 180 秒，邀请函下载请求的 Bun 空闲超时为 210 秒。反向代理的读取/上游响应超时应至少为 210 秒（例如 Nginx `proxy_read_timeout 210s`）。不要只增加应用超时而保留网关默认超时。
+同一应用进程只运行一批转换，同时请求返回繁忙提示，不在内存中无限排队；不同应用副本各自独立。转换总时限为 180 秒，超时/取消会终止转换进程组。每批使用独立临时目录和 Office 用户配置，成功或失败后清理；容器需有可写临时目录及转换所需内存、磁盘。邀请函下载请求的 Bun 空闲超时为 210 秒，反向代理的上游读取超时应至少为 210 秒（如 Nginx `proxy_read_timeout 210s`）。
 
-将获准在服务器使用的模板完整字体放入 [fonts](fonts/README.md)，Compose 会只读挂载；更新后重启 Gotenberg 并重新验收。生产可在私有镜像中安装同一份字体，不把商业字体提交到仓库。内嵌子集字体不足以覆盖新姓名，通用中文字体回退也不保证与 Word 相同排版。
+将获准在服务器使用的模板完整字体放入 [fonts](fonts/README.md)，构建时会复制进应用镜像；更新字体后重新构建部署并验收。字体文件不提交 Git，构建机器需要持有这些文件。内嵌子集字体不足以覆盖新姓名，通用中文字体回退也不保证与 Word 相同排版。
 
-Compose 同时挂载 `invitation-fonts.conf`，为常见中文字体提供 Noto CJK 回退；生产保持同样配置。转换副本不引用模板子集字体；若从曾加载子集字体的旧转换容器升级，应重启以清掉 LibreOffice 的字体缓存。
+每批禁用宏和自动更新链接，不加载历史 Office 用户配置；这是本地子进程，不再具有独立转换容器的资源/网络边界。模板仍只由授权运营维护，生产环境应按应用整体设置资源和网络限制。
 
-启动后检查 `/health` 与真实单份/批量 PDF：中文、生僻字、长团体名称、红线、落款和分页。缺少配置或转换失败会向运营显示错误，运营仍可改选 Word；不要把服务未部署视为 PDF 已可用。批量上限为 200 份/500 MB，超过 180 秒需缩小选中范围重试，当前没有持久后台任务。
+构建时会检查 `soffice --headless --version`。部署后验收真实单份/批量 PDF：中文、生僻字、长团体名称、红线、落款和分页。程序缺失或转换失败会向运营显示错误，Word 仍可下载。批量上限为 200 份/500 MB，超过 180 秒需缩小选中范围重试，当前没有持久后台任务。
 
 ## 本地构建
 
