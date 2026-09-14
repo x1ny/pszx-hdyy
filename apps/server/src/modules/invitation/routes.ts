@@ -9,7 +9,6 @@ import {
   inArray,
   sql,
 } from "drizzle-orm";
-import { zipSync } from "fflate";
 import { Hono } from "hono";
 import { db } from "../../infra/db";
 import { contentDisposition } from "../../shared/content-disposition";
@@ -23,6 +22,12 @@ import { activityMemberOrderBy } from "../member/activity-member-order-by";
 import { activityMember, member } from "../member/schema";
 import { organization } from "../organization/schema";
 import { activity } from "../project/schema";
+import {
+  addInvitationDownloadEntry,
+  DOCX_MIME,
+  prepareInvitationDownload,
+} from "./download";
+import { INVITATION_DOWNLOAD_MAX_BYTES, InvitationPdfError } from "./pdf";
 import {
   type InvitationDownloadScope,
   type InvitationRecipientType,
@@ -59,11 +64,8 @@ import {
   UpdateInvitationTemplateInput,
 } from "./validation";
 
-const DOCX_MIME =
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-
 /** 批量下载的体积上限（BR-DEV-014D：200 个收件对象或 500 MB，以先到者为准）。 */
-const BATCH_DOWNLOAD_MAX_BYTES = 500 * 1024 * 1024;
+const BATCH_DOWNLOAD_MAX_BYTES = INVITATION_DOWNLOAD_MAX_BYTES;
 
 const templateFields = {
   id: invitationTemplate.id,
@@ -710,7 +712,7 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
     "/record/download",
     jsonBody(DownloadInvitationRecordInput),
     async (c) => {
-      const { recordId } = c.req.valid("json");
+      const { recordId, format } = c.req.valid("json");
       const userId = c.get("authedUser").id;
 
       const [row] = await db
@@ -767,23 +769,27 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
           }),
         );
 
-        await logDownload({ ...audit, result: "success" });
-
         const recipientId = row.memberId ?? row.organizationId;
         if (recipientId === null) {
           return c.json(invalid("邀请函收件对象不存在，请联系管理员"));
         }
 
-        return docxResponse(
-          bytes,
-          buildInvitationFileName({
-            templateFileName: file.originalName,
-            recipientName: row.recipientName,
-          }),
+        const name = buildInvitationFileName({
+          templateFileName: file.originalName,
+          recipientName: row.recipientName,
+        });
+        const output = await prepareInvitationDownload(
+          { [name]: bytes },
+          format,
+          undefined,
+          c.req.raw.signal,
         );
+        await logDownload({ ...audit, result: "success" });
+        return docxResponse(output.bytes, output.fileName, output.mime);
       } catch (error) {
         const message =
-          error instanceof DocxTemplateError
+          error instanceof DocxTemplateError ||
+          error instanceof InvitationPdfError
             ? error.message
             : "邀请函渲染失败，请检查模板文件";
         await logDownload({ ...audit, result: "failed", failReason: message });
@@ -795,15 +801,15 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
   /**
    * 批量下载。
    *
-   * 同步流式打包而不是建异步任务：本轮只出 Word，渲染就是 XML 字符串替换，
-   * 单份几十毫秒、200 份几秒钟就完。等以后接上 PDF（要过 LibreOffice，单份
-   * 一两秒）时再改成任务表 + 轮询，那时它才真的需要。
+   * Word 直接打包，PDF 将整批交给转换服务；全部成功后才返回 ZIP。
+   * 有界等待与重试边界见 docs/邀请函模块.md，不交付缺少收件人的部分结果。
    */
   .post(
     "/batch/download",
     jsonBody(DownloadInvitationBatchInput),
     async (c) => {
-      const { batchId, memberIds, organizationIds } = c.req.valid("json");
+      const { batchId, memberIds, organizationIds, format } =
+        c.req.valid("json");
       const userId = c.get("authedUser").id;
 
       const [batch] = await db
@@ -891,8 +897,8 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
 
           totalBytes += bytes.byteLength;
           if (totalBytes > BATCH_DOWNLOAD_MAX_BYTES) {
-            return c.json(
-              invalid("本次下载超过 500 MB，请缩小人员范围分批下载"),
+            throw new InvitationPdfError(
+              "本次下载超过 500 MB，请缩小范围分批下载",
             );
           }
 
@@ -901,28 +907,30 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
           if (recipientId === null) {
             return c.json(invalid("邀请函收件对象不存在，请联系管理员"));
           }
-          entries[
+          addInvitationDownloadEntry(
+            entries,
             buildInvitationFileName({
               templateFileName: file.originalName,
               recipientName: record.recipientName,
-            })
-          ] = bytes;
+            }),
+            bytes,
+          );
         }
 
-        // level 0（仅打包不压缩）：docx 本身就是 zip，里面的内容已经压过一遍，
-        // 再压一次几乎不减体积，白烧一遍 CPU。
-        const zip = zipSync(entries, { level: 0 });
+        const output = await prepareInvitationDownload(
+          entries,
+          format,
+          `${batch.activityName}_邀请函_批量下载_${batch.batchNo}_${format}.zip`,
+          c.req.raw.signal,
+        );
 
         await logDownload({ ...audit, result: "success" });
 
-        return docxResponse(
-          zip,
-          `${batch.activityName}_邀请函_批量下载_${batch.batchNo}.zip`,
-          "application/zip",
-        );
+        return docxResponse(output.bytes, output.fileName, output.mime);
       } catch (error) {
         const message =
-          error instanceof DocxTemplateError
+          error instanceof DocxTemplateError ||
+          error instanceof InvitationPdfError
             ? error.message
             : "邀请函渲染失败，请检查模板文件";
         await logDownload({ ...audit, result: "failed", failReason: message });

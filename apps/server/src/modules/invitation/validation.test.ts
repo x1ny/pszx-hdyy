@@ -1,11 +1,26 @@
 import { describe, expect, test } from "bun:test";
-import { CreateInvitationBatchInput } from "./validation";
+import {
+  CreateInvitationBatchInput,
+  DownloadInvitationBatchInput,
+  DownloadInvitationRecordInput,
+} from "./validation";
 
 const common = {
   activityId: 1,
   templateId: 2,
   issueDate: "2026-09-01",
 };
+
+test("单份与批量下载默认 Word、支持 PDF、拒绝未知格式", () => {
+  for (const [schema, input] of [
+    [DownloadInvitationRecordInput, { recordId: 1 }],
+    [DownloadInvitationBatchInput, { batchId: 1 }],
+  ] as const) {
+    expect(schema.parse(input).format).toBe("docx");
+    expect(schema.parse({ ...input, format: "pdf" }).format).toBe("pdf");
+    expect(schema.safeParse({ ...input, format: "html" }).success).toBe(false);
+  }
+});
 
 describe("CreateInvitationBatchInput 的收件对象模式", () => {
   test("个人模式接收人员编号并去重", () => {

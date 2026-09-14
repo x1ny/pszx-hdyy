@@ -7,6 +7,7 @@ import { formatDateTime } from "#/features/invitation/labels";
 import {
   downloadInvitationBatch,
   type InvitationBatchListItem,
+  type InvitationDownloadFormat,
   invitationBatchListQueryOptions,
   saveBlob,
 } from "#/features/invitation/queries";
@@ -31,6 +32,7 @@ import {
   TableRow,
 } from "#/shared/components/ui/table.tsx";
 import { BatchDetailDialog } from "./-components/batch-detail-dialog";
+import { ExportFormatSelect } from "./-components/export-format-select";
 
 export const Route = createFileRoute(
   "/_authenticated/project/$projectId_/activity/$activityId/invitations/",
@@ -54,6 +56,7 @@ function InvitationsPage() {
   const [recipientName, setRecipientName] = useState<string>();
   const [page, setPage] = useState(1);
   const [detailId, setDetailId] = useState<number>();
+  const [format, setFormat] = useState<InvitationDownloadFormat>("docx");
 
   const listQuery = useQuery(
     invitationBatchListQueryOptions({
@@ -68,7 +71,7 @@ function InvitationsPage() {
 
   const downloadMutation = useMutation({
     mutationFn: (batch: InvitationBatchListItem) =>
-      downloadInvitationBatch(batch.id, undefined, batch.recipientType),
+      downloadInvitationBatch(batch.id, undefined, batch.recipientType, format),
     onSuccess: ({ blob, fileName }) => {
       saveBlob(blob, fileName);
       toast.success("已开始下载");
@@ -86,8 +89,7 @@ function InvitationsPage() {
             邀请函生成记录
           </h2>
           <p className="text-muted-foreground text-sm">
-            版式来自「邀请函模板」里上传的
-            .docx，下载为敏感操作，会留下审计记录。
+            使用同一份模板导出 Word 或 PDF，下载操作会留下审计记录。
           </p>
         </div>
         <Link
@@ -131,6 +133,22 @@ function InvitationsPage() {
         />
       </FilterBar>
 
+      <div className="flex flex-wrap items-center gap-3">
+        <ExportFormatSelect
+          value={format}
+          onValueChange={setFormat}
+          disabled={downloadMutation.isPending}
+        />
+        {downloadMutation.isPending ? (
+          <output className="text-muted-foreground text-sm">
+            正在准备{format === "pdf" ? " PDF" : " Word"} 下载，请稍候…
+          </output>
+        ) : format === "pdf" ? (
+          <span className="text-muted-foreground text-sm">
+            批量 PDF 转换需要一些时间。
+          </span>
+        ) : null}
+      </div>
       <div className="rounded-lg border bg-card shadow-sm">
         <Table>
           <TableHeader className="bg-muted/60">
@@ -207,6 +225,7 @@ function InvitationsPage() {
                         size="sm"
                         className="text-primary hover:text-primary"
                         onClick={() => setDetailId(batch.id)}
+                        disabled={downloadMutation.isPending}
                       >
                         查看名单
                       </Button>
@@ -215,9 +234,7 @@ function InvitationsPage() {
                         size="sm"
                         className="text-primary hover:text-primary"
                         disabled={
-                          batch.recordCount === 0 ||
-                          (downloadMutation.isPending &&
-                            downloadMutation.variables?.id === batch.id)
+                          batch.recordCount === 0 || downloadMutation.isPending
                         }
                         onClick={() => downloadMutation.mutate(batch)}
                       >
@@ -257,6 +274,8 @@ function InvitationsPage() {
 
       <BatchDetailDialog
         batchId={detailId}
+        format={format}
+        onFormatChange={setFormat}
         onOpenChange={(open) => {
           if (!open) setDetailId(undefined);
         }}

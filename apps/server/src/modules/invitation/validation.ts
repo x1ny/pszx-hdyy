@@ -145,10 +145,18 @@ export const InvitationBatchIdInput = z.object({ id });
 // 下载
 // ---------------------------------------------------------------------------
 
-export const DownloadInvitationRecordInput = z.object({ recordId: id });
+const DownloadFormat = z
+  .enum(["docx", "pdf"], { error: "导出格式不正确" })
+  .default("docx");
+
+export const DownloadInvitationRecordInput = z.object({
+  recordId: id,
+  format: DownloadFormat,
+});
 
 export const DownloadInvitationBatchInput = z.object({
   batchId: id,
+  format: DownloadFormat,
   /** 不传表示整批。传了就是批次内的子集（列表页勾选下载）。 */
   memberIds: z
     .array(id)

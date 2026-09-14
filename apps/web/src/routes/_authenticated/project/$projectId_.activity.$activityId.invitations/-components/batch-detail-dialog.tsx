@@ -7,6 +7,7 @@ import {
   downloadInvitationBatch,
   downloadInvitationRecord,
   getInvitationBatch,
+  type InvitationDownloadFormat,
   invitationBatchKeys,
   saveBlob,
 } from "#/features/invitation/queries";
@@ -30,12 +31,17 @@ import {
   TableHeader,
   TableRow,
 } from "#/shared/components/ui/table.tsx";
+import { ExportFormatSelect } from "./export-format-select";
 
 export function BatchDetailDialog({
   batchId,
+  format,
+  onFormatChange,
   onOpenChange,
 }: {
   batchId?: number;
+  format: InvitationDownloadFormat;
+  onFormatChange: (format: InvitationDownloadFormat) => void;
   onOpenChange: (open: boolean) => void;
 }) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -59,7 +65,8 @@ export function BatchDetailDialog({
   }, [batchId]);
 
   const singleMutation = useMutation({
-    mutationFn: (recordId: number) => downloadInvitationRecord(recordId),
+    mutationFn: (recordId: number) =>
+      downloadInvitationRecord(recordId, format),
     onSuccess: ({ blob, fileName }) => saveBlob(blob, fileName),
     onError: (error) => toast.error(error.message),
   });
@@ -70,6 +77,7 @@ export function BatchDetailDialog({
         batchId as number,
         selected.size > 0 ? [...selected] : undefined,
         recipientType,
+        format,
       ),
     onSuccess: ({ blob, fileName }) => {
       saveBlob(blob, fileName);
@@ -86,6 +94,7 @@ export function BatchDetailDialog({
     });
 
   const customVariables = Object.entries(batch?.variables ?? {});
+  const downloading = singleMutation.isPending || zipMutation.isPending;
 
   return (
     <Dialog open={batchId !== undefined} onOpenChange={onOpenChange}>
@@ -97,11 +106,25 @@ export function BatchDetailDialog({
           <DialogDescription>
             {batch
               ? `${batch.batchNo} · ${batch.templateName} · ${recipientType === "organization" ? "按团体生成" : "按人员生成"} · 发函日期 ${batch.issueDate}`
-              : "加载中…"}
+              : detailQuery.isError
+                ? "名单加载失败"
+                : "加载中…"}
           </DialogDescription>
         </DialogHeader>
 
         <DialogBody>
+          <div className="mb-3 flex flex-wrap items-center gap-3">
+            <ExportFormatSelect
+              value={format}
+              onValueChange={onFormatChange}
+              disabled={downloading}
+            />
+            {downloading ? (
+              <output className="text-muted-foreground text-sm">
+                正在准备{format === "pdf" ? " PDF" : " Word"} 下载，请稍候…
+              </output>
+            ) : null}
+          </div>
           {customVariables.length > 0 ? (
             <div className="mb-3 space-y-1 rounded-md border bg-muted/30 p-3 text-sm">
               <div className="font-medium">本批次变量取值</div>
@@ -172,6 +195,25 @@ export function BatchDetailDialog({
                       ))}
                     </TableRow>
                   ))
+                ) : detailQuery.isError ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={tableColumnCount}
+                      className="py-8 text-center text-sm"
+                    >
+                      <p className="text-destructive">
+                        {detailQuery.error.message}
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2"
+                        onClick={() => detailQuery.refetch()}
+                      >
+                        重试
+                      </Button>
+                    </TableCell>
+                  </TableRow>
                 ) : records.length === 0 ? (
                   <TableRow>
                     <TableCell
@@ -235,10 +277,7 @@ export function BatchDetailDialog({
                             variant="ghost"
                             size="sm"
                             className="text-primary hover:text-primary"
-                            disabled={
-                              singleMutation.isPending &&
-                              singleMutation.variables === row.id
-                            }
+                            disabled={downloading}
                             onClick={() => singleMutation.mutate(row.id)}
                           >
                             <DownloadIcon />
@@ -259,7 +298,7 @@ export function BatchDetailDialog({
             关闭
           </Button>
           <Button
-            disabled={records.length === 0 || zipMutation.isPending}
+            disabled={records.length === 0 || downloading}
             onClick={() => zipMutation.mutate()}
           >
             <DownloadIcon />

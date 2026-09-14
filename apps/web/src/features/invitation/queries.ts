@@ -72,6 +72,18 @@ async function unwrapFile(request: Promise<Response>) {
     throw new ApiError(result.code, result.message ?? "下载失败");
   }
 
+  if (!response.ok) throw new Error("下载失败，请稍后重试");
+  const mime = response.headers.get("content-type")?.split(";")[0];
+  if (
+    !mime ||
+    ![
+      "application/pdf",
+      "application/zip",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ].includes(mime)
+  ) {
+    throw new Error("下载响应不是有效文件，请稍后重试");
+  }
   return { blob: await response.blob(), fileName: fileNameOf(response) };
 }
 
@@ -202,10 +214,19 @@ export const getLastVariableValues = (templateId: number) =>
     api.api.invitation.batch.lastVariables.$post({ json: { templateId } }),
   );
 
-export const downloadInvitationRecord = (recordId: number) =>
+export type InvitationDownloadFormat = NonNullable<
+  InferRequestType<
+    typeof api.api.invitation.record.download.$post
+  >["json"]["format"]
+>;
+
+export const downloadInvitationRecord = (
+  recordId: number,
+  format: InvitationDownloadFormat = "docx",
+) =>
   unwrapFile(
     api.api.invitation.record.download.$post({
-      json: { recordId },
+      json: { recordId, format },
     }) as unknown as Promise<Response>,
   );
 
@@ -213,12 +234,13 @@ export const downloadInvitationBatch = (
   batchId: number,
   recipientIds?: number[],
   recipientType: InvitationRecipientType = "member",
+  format: InvitationDownloadFormat = "docx",
 ) =>
   unwrapFile(
     api.api.invitation.batch.download.$post({
       json:
         recipientType === "organization"
-          ? { batchId, organizationIds: recipientIds }
-          : { batchId, memberIds: recipientIds },
+          ? { batchId, organizationIds: recipientIds, format }
+          : { batchId, memberIds: recipientIds, format },
     }) as unknown as Promise<Response>,
   );

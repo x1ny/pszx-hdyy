@@ -41,6 +41,26 @@ read_when:
 > 不同域名后面，域名会把它们隔开；但**按 `IP:端口` 直接访问测试环境时会串**。所以
 > h5 那套会话的 cookie 必须显式起一个不和 Better Auth 冲突的名字。
 
+## 邀请函 PDF 转换
+
+应用通过 `GOTENBERG_URL` 调用独立 Gotenberg，Word 下载不依赖该服务。仓库 Compose 的 `pdf` profile 固定使用 `gotenberg/gotenberg:8.34.0-libreoffice`，不随默认数据库启动；镜像仅包含 Office 转换所需引擎。
+
+开发环境在仓库根执行：
+
+```sh
+docker compose --profile pdf up -d gotenberg
+```
+
+在根 `.env` 设置 `GOTENBERG_URL=http://127.0.0.1:3030` 后启动/重启开发服务。端口占用时同时修改 `GOTENBERG_PORT` 和 URL。应用和转换器同一 Docker 网络时 URL 使用 `http://gotenberg:3000`；Rancher 使用转换器的内部 Service 地址，不公开转换端口。
+
+部署转换器沿用 Compose 中的启动参数：180 秒 API 超时、510 MB 请求上限（为 multipart 开销留空间）、有界等待队列、禁用远程下载和外链访问。应用的转换等待上限为 180 秒，邀请函下载请求的 Bun 空闲超时为 210 秒。反向代理的读取/上游响应超时应至少为 210 秒（例如 Nginx `proxy_read_timeout 210s`）。不要只增加应用超时而保留网关默认超时。
+
+将获准在服务器使用的模板完整字体放入 [fonts](fonts/README.md)，Compose 会只读挂载；更新后重启 Gotenberg 并重新验收。生产可在私有镜像中安装同一份字体，不把商业字体提交到仓库。内嵌子集字体不足以覆盖新姓名，通用中文字体回退也不保证与 Word 相同排版。
+
+Compose 同时挂载 `invitation-fonts.conf`，为常见中文字体提供 Noto CJK 回退；生产保持同样配置。转换副本不引用模板子集字体；若从曾加载子集字体的旧转换容器升级，应重启以清掉 LibreOffice 的字体缓存。
+
+启动后检查 `/health` 与真实单份/批量 PDF：中文、生僻字、长团体名称、红线、落款和分页。缺少配置或转换失败会向运营显示错误，运营仍可改选 Word；不要把服务未部署视为 PDF 已可用。批量上限为 200 份/500 MB，超过 180 秒需缩小选中范围重试，当前没有持久后台任务。
+
 ## 本地构建
 
 ```bash

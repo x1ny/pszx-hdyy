@@ -16,6 +16,7 @@ import { exampleRoutes } from "./modules/example/routes";
 import { fileRoutes } from "./modules/file/routes";
 import { h5Routes } from "./modules/h5/routes";
 import { h5AccessRoutes } from "./modules/h5/routes.access";
+import { PDF_CONVERSION_TIMEOUT_MS } from "./modules/invitation/pdf";
 import { invitationRoutes } from "./modules/invitation/routes";
 import { mapConfigRoutes } from "./modules/map-config/routes";
 import { memberRoutes } from "./modules/member/routes";
@@ -171,6 +172,18 @@ app.use("*", sessionMiddleware);
 // `permission-map.test.ts` 遍历 `routes.routes` 断言每条路径都被登记过，
 // 新模块忘了填表就是红测试。
 app.use("/api/*", permissionGate);
+
+// PDF 在生成完毕前没有响应字节；仅下载请求放宽 Bun 默认 10 秒的空闲超时。
+// 转换器仍有独立的有界超时，余下 30 秒留给模板读取、打包与错误响应。
+for (const path of [
+  "/api/invitation/record/download",
+  "/api/invitation/batch/download",
+]) {
+  app.use(path, async (c, next) => {
+    c.env?.server?.timeout(c.req.raw, PDF_CONVERSION_TIMEOUT_MS / 1000 + 30);
+    await next();
+  });
+}
 
 // Add new feature modules by chaining another .route("/api/<module>", xyzRoutes)
 // here — only what's chained onto `routes` is visible to hc<AppType> on the
