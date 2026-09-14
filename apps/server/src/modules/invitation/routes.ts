@@ -722,11 +722,9 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
           batchId: invitationBatch.id,
           batchNo: invitationBatch.batchNo,
           activityId: invitationBatch.activityId,
-          activityName: activity.name,
           templateFileId: invitationBatch.templateFileId,
           variables: invitationBatch.variables,
           issueDate: invitationBatch.issueDate,
-          idNumber: member.idNumber,
         })
         .from(invitationRecord)
         .innerJoin(
@@ -779,11 +777,8 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
         return docxResponse(
           bytes,
           buildInvitationFileName({
-            activityName: row.activityName,
+            templateFileName: file.originalName,
             recipientName: row.recipientName,
-            idNumber: row.idNumber,
-            recipientId,
-            batchNo: row.batchNo,
           }),
         );
       } catch (error) {
@@ -839,10 +834,8 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
           memberId: invitationRecord.memberId,
           organizationId: invitationRecord.organizationId,
           recipientName: invitationRecord.recipientName,
-          idNumber: member.idNumber,
         })
         .from(invitationRecord)
-        .leftJoin(member, eq(invitationRecord.memberId, member.id))
         .where(
           and(
             eq(invitationRecord.batchId, batchId),
@@ -903,19 +896,15 @@ export const invitationRoutes = new Hono<{ Variables: AuthedVariables }>()
             );
           }
 
-          // 文件名规则已经保证唯一（个人证件后四位、团体/个人缺失证件时退回
-          // 收件对象 ID），不会互相覆盖。
+          // 每份文件按“模板文件名——收件对象姓名”命名。
           const recipientId = record.memberId ?? record.organizationId;
           if (recipientId === null) {
             return c.json(invalid("邀请函收件对象不存在，请联系管理员"));
           }
           entries[
             buildInvitationFileName({
-              activityName: batch.activityName,
+              templateFileName: file.originalName,
               recipientName: record.recipientName,
-              idNumber: record.idNumber,
-              recipientId,
-              batchNo: batch.batchNo,
             })
           ] = bytes;
         }

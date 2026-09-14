@@ -81,46 +81,30 @@ export function buildRenderValues(input: {
   };
 }
 
-/**
- * Windows 和 zip 都不接受这些字符；点号结尾在 Windows 上也会被吃掉。
- * 中文和空格保留——文件名规则本来就要求用活动名称和人名。
- */
+/** Windows 和 zip 都不接受这些字符；中文和空格保留。 */
 const sanitizeSegment = (value: string) =>
-  value.replace(/[\\/:*?"<>|\r\n]/g, "_").trim() || "未命名";
+  value
+    .replace(/[\\/:*?"<>|\r\n]/g, "_")
+    .replace(/[. ]+$/g, "")
+    .trim() || "未命名";
+
+const templateFileBaseName = (fileName: string) => {
+  const name = fileName.split(/[\\/]/).at(-1)?.trim() || "模板";
+  const extensionIndex = name.lastIndexOf(".");
+  return extensionIndex > 0 ? name.slice(0, extensionIndex) : name;
+};
 
 /**
- * 单个文件命名：活动名称_收件对象名称_证件号码后四位_邀请函_批次号（对齐文档
- * §8.4.1，末段做了替换，理由见下）。
+ * 单个文件命名：模板文件名主体——收件对象姓名。
  *
- * 个人证件号码只取后四位，不暴露完整敏感信息；证件在人员主档上可空
- * （BR-DEV-028 不强制实名），缺失时退回收件对象 ID。团体没有证件号码，直接
- * 使用团体 ID 作为兜底，保证同批文件名不会互相覆盖。
- *
- * ⚠️ 末段用**批次号**而不是文档写的「生成日期」。
- *
- * 那条规则是在「一人一函」的假设下定的——一个人只有一份，日期够用。改成每批
- * 独立留档之后，同一个人同一天生成两批，文件名就完全一样了，下到本地根本分不
- * 清哪份是哪批。批次号形如 `YQH20260819000001`，前缀里已经含了生成日期，信息
- * 一点没少，还天然唯一。
+ * 模板文件名本身通常带 `.docx` 扩展名，生成文件统一补回一个 `.docx`，避免出现
+ * `模板.docx——张三.docx` 这样的重复扩展名。
  */
 export function buildInvitationFileName(input: {
-  activityName: string;
+  templateFileName: string;
   recipientName: string;
-  idNumber: string | null;
-  recipientId: number;
-  batchNo: string;
 }) {
-  const suffix = input.idNumber?.trim()
-    ? input.idNumber.trim().slice(-4)
-    : String(input.recipientId);
-
-  return `${[
-    sanitizeSegment(input.activityName),
-    sanitizeSegment(input.recipientName),
-    suffix,
-    "邀请函",
-    sanitizeSegment(input.batchNo),
-  ].join("_")}.docx`;
+  return `${sanitizeSegment(templateFileBaseName(input.templateFileName))}——${sanitizeSegment(input.recipientName)}.docx`;
 }
 
 export type TemplateFileLoad =
