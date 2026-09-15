@@ -12,7 +12,7 @@ read_when:
 
 ## 当前访问方式
 
-管理端与 H5 身份独立。H5 的公开入口 `/api/h5Access/submitPhone` 校验分享标识和活动中的手机号关系，并写入 `h5_guest` HttpOnly cookie；`/api/h5` 整个前缀由 `requireH5Member` 解析分享活动与人员。实现见 [auth.ts](../apps/server/src/modules/h5/auth.ts) 和 [入口路由](../apps/server/src/modules/h5/routes.access.ts)。
+管理端与 H5 身份独立。H5 的公开入口 `/api/h5Access/submitPhone` 校验分享标识和活动中的手机号关系，并写入 `h5_guest` HttpOnly cookie；`/api/h5Access/logout` 由服务端删除同一 cookie；`/api/h5` 整个前缀由 `requireH5Member` 解析分享活动与人员。实现见 [auth.ts](../apps/server/src/modules/h5/auth.ts) 和 [入口路由](../apps/server/src/modules/h5/routes.access.ts)。
 
 这是以手机号本身为凭证的简化访问方案，尚无短信验证码、微信授权或独立签发的身份 token；知道号码的人仍可能访问对应行程。记录已有能力不代表提高了身份验证强度。历史重号按当前活动关系的固定顺序取第一条，变更识别规则需单独明确产品口径。
 

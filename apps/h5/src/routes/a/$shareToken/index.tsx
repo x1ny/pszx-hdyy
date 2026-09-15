@@ -1,19 +1,26 @@
-import { useSuspenseQuery } from "@tanstack/react-query";
+import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import {
   createFileRoute,
   isRedirect,
   notFound,
   redirect,
+  useNavigate,
 } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageMessage } from "#/shared/components/page-message";
 import { ApiError, H5_UNAUTHORIZED } from "#/shared/lib/api";
 import { EventHero } from "./-components/event-hero";
+import { Icon } from "./-components/icon";
 import { OrganizationSeatMapSheet } from "./-components/organization-seat-map-sheet";
 import { ScheduleList } from "./-components/schedule-list";
 import { SeatMapSheet } from "./-components/seat-map-sheet";
 import { ToastLayer } from "./-components/toast-layer";
-import { type AgendaItem, itineraryQueryOptions } from "./-queries";
+import {
+  type AgendaItem,
+  itineraryKeys,
+  itineraryQueryOptions,
+  logoutH5,
+} from "./-queries";
 
 /**
  * 嘉宾的专属行程页 —— 一个活动一张合一长页：头图（活动信息）+ 议程时间轴 +
@@ -76,6 +83,8 @@ export const Route = createFileRoute("/a/$shareToken/")({
 function ItineraryPage() {
   const { shareToken } = Route.useLoaderData();
   const { data } = useSuspenseQuery(itineraryQueryOptions(shareToken));
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   /**
    * 座位图面板**整页只有一个**，由它记住当前看的是哪一场。
@@ -86,6 +95,29 @@ function ItineraryPage() {
   const [seatMapFor, setSeatMapFor] = useState<AgendaItem | null>(null);
   const [organizationSeatMapFor, setOrganizationSeatMapFor] =
     useState<AgendaItem | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutFailure, setLogoutFailure] = useState("");
+
+  const handleLogout = async () => {
+    if (loggingOut) return;
+
+    setLoggingOut(true);
+    setLogoutFailure("");
+    try {
+      await logoutH5();
+      // 行程和座位图都挂在这个 detail key 下。退出后先删缓存，防止浏览器返回
+      // 时直接复用旧数据绕过一次新的服务端校验。
+      queryClient.removeQueries({ queryKey: itineraryKeys.detail(shareToken) });
+      await navigate({
+        to: "/a/$shareToken/phone",
+        params: { shareToken },
+        replace: true,
+      });
+    } catch {
+      setLoggingOut(false);
+      setLogoutFailure("退出失败，请重试");
+    }
+  };
 
   return (
     <ToastLayer>
@@ -100,6 +132,23 @@ function ItineraryPage() {
             onOpenSeatMap={setSeatMapFor}
             onOpenOrganizationSeatMap={setOrganizationSeatMapFor}
           />
+        </div>
+
+        <div className="flex flex-col items-center pt-5 pb-2">
+          {logoutFailure && (
+            <output className="mb-1 text-caption text-brand">
+              {logoutFailure}
+            </output>
+          )}
+          <button
+            type="button"
+            onClick={() => void handleLogout()}
+            disabled={loggingOut}
+            className="flex min-h-11 items-center gap-1.5 rounded-lg px-4 py-2 text-body text-ink-4 transition-colors active:bg-page disabled:opacity-60"
+          >
+            <Icon name="log-out" size={14} />
+            {loggingOut ? "退出中…" : "退出查看"}
+          </button>
         </div>
       </div>
 

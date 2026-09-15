@@ -1,15 +1,21 @@
 import { Hono } from "hono";
+import { deleteCookie } from "hono/cookie";
 import { err, ok } from "../../shared/result";
 import { jsonBody } from "../../shared/validate";
-import { resolveActivityMember, resolveH5Activity, setH5Cookie } from "./auth";
+import {
+  H5_COOKIE_NAME,
+  resolveActivityMember,
+  resolveH5Activity,
+  setH5Cookie,
+} from "./auth";
 import { SubmitPhoneInput } from "./validation";
 
 /**
- * h5 的入口接口，**这是整个模块里唯一不要求已验证的路由**。
+ * h5 的访问入口接口：提交手机号和退出查看都不要求已验证。
  *
  * 它另占一个前缀而不是挤进 `/api/h5`，是因为那个前缀整体挂着
  * `requireH5Member`（见 auth.ts）—— 前缀即作用域，这样新增 h5 接口时默认受
- * 保护，不会因为忘了挂守卫而裸奔。代价是入口接口得单独放一个前缀，值得。
+ * 保护，不会因为忘了挂守卫而裸奔。代价是访问入口得单独放一个前缀，值得。
  */
 export const h5AccessRoutes = new Hono()
   /**
@@ -48,4 +54,15 @@ export const h5AccessRoutes = new Hono()
     setH5Cookie(c, mobile);
 
     return c.json(ok({ name: memberRow.name }));
+  })
+  /**
+   * 退出查看。cookie 是 HttpOnly，不能由浏览器脚本删除，必须由服务端下发过期
+   * 指令；不要求 shareToken，这样即使活动链接已失效也能清掉当前访问凭证。
+   */
+  .post("/logout", (c) => {
+    deleteCookie(c, H5_COOKIE_NAME, {
+      path: "/",
+      secure: c.req.url.startsWith("https://"),
+    });
+    return c.json(ok(null));
   });

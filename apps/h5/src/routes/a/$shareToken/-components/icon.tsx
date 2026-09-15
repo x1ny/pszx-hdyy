@@ -10,6 +10,7 @@ export type IconName =
   | "car-front"
   | "chevron-down"
   | "clock"
+  | "log-out"
   | "lock-keyhole"
   | "map"
   | "map-pin"
@@ -52,6 +53,13 @@ const ICON_PATHS: Record<IconName, ReactNode> = {
       <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
       <circle cx="12" cy="16" r="1" />
+    </>
+  ),
+  "log-out": (
+    <>
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
     </>
   ),
   "map-pin": (

@@ -17,6 +17,24 @@ import {
   planLiveSeatIdsQuery,
   seatMapQuery,
 } from "./routes";
+import { h5AccessRoutes } from "./routes.access";
+
+describe("H5 退出查看", () => {
+  test("无需手机号和分享标识，服务端删除 h5_guest cookie", async () => {
+    const response = await h5AccessRoutes.request("/logout", {
+      method: "POST",
+      headers: { cookie: "h5_guest=13800000000" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ code: "OK", data: null });
+
+    const setCookie = response.headers.get("set-cookie");
+    expect(setCookie).toContain("h5_guest=");
+    expect(setCookie).toContain("Max-Age=0");
+    expect(setCookie).toContain("Path=/");
+  });
+});
 
 /**
  * 这里测的四条规则有一个共同点：**页面上看起来永远是"正常"的**。

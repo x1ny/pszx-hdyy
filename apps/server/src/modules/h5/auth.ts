@@ -147,8 +147,8 @@ async function readShareToken(c: Context): Promise<string | null> {
  * 模块自己的前缀）。这样新增 h5 接口时**默认就是受保护的**，不存在"忘了挂守卫"
  * 这种静默漏洞。
  *
- * 不需要登录的那一个接口（提交手机号）另占 `/api/h5Access` 前缀，见
- * routes.access.ts。
+ * 不需要 H5 登录的入口接口（提交手机号、退出查看）另占 `/api/h5Access` 前缀，
+ * 见 routes.access.ts。
  */
 export const requireH5Member = createMiddleware<{ Variables: H5Variables }>(
   async (c, next) => {

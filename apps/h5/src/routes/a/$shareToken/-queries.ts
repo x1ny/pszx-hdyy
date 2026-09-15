@@ -99,3 +99,6 @@ export const organizationSeatMapQueryOptions = (
 /** 提交手机号。成功后服务端下发 7 天的 HttpOnly cookie，前端不碰它。 */
 export const submitPhone = (shareToken: string, mobile: string) =>
   unwrap(api.api.h5Access.submitPhone.$post({ json: { shareToken, mobile } }));
+
+/** 退出查看。服务端负责删除 HttpOnly cookie，成功后调用方再清理页面缓存。 */
+export const logoutH5 = () => unwrap(api.api.h5Access.logout.$post());
