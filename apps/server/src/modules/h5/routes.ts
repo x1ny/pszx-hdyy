@@ -20,7 +20,7 @@ import {
   segmentSeatingPlan,
 } from "../seating/schema";
 import { memberTrip } from "../trip/schema";
-import { activityVenueZone } from "../venue/schema";
+import { activityVenue, activityVenueZone } from "../venue/schema";
 import { type H5Variables, requireH5Member } from "./auth";
 import {
   GetItineraryInput,
@@ -100,6 +100,7 @@ export const itinerarySeatsQuery = (activityId: number, memberId: number) =>
         "seat",
       ),
       zone: activityVenueZone.name,
+      venueName: activityVenue.name,
       /**
        * 座位图入口的显隐判据。**只取 `renderer_kind`，绝不取 `data`**——行程页
        * 一次返回整页，一位嘉宾可能有三五个带排位的环节，为了三颗按钮把几百 KB
@@ -137,6 +138,10 @@ export const itinerarySeatsQuery = (activityId: number, memberId: number) =>
       activityVenueZone,
       eq(activityVenueZone.id, segmentSeatingPlan.activityVenueZoneId),
     )
+    .innerJoin(
+      activityVenue,
+      eq(activityVenue.id, activityVenueZone.activityVenueId),
+    )
     .leftJoin(
       segmentSeatingLayout,
       eq(segmentSeatingLayout.planId, segmentSeatingPlan.id),
@@ -151,6 +156,7 @@ export const itinerarySeatsQuery = (activityId: number, memberId: number) =>
     .groupBy(
       segmentMember.segmentId,
       activityVenueZone.name,
+      activityVenue.name,
       segmentSeatingLayout.rendererKind,
     );
 
@@ -178,6 +184,7 @@ export const itineraryOrganizationSeatsQuery = (
         order by ${segmentSeat.ordinal}, ${segmentSeat.id}
       )`.as("seats"),
       zone: activityVenueZone.name,
+      venueName: activityVenue.name,
       rendererKind: segmentSeatingLayout.rendererKind,
       data: segmentSeatingLayout.data,
     })
@@ -203,6 +210,10 @@ export const itineraryOrganizationSeatsQuery = (
       activityVenueZone,
       eq(activityVenueZone.id, segmentSeatingPlan.activityVenueZoneId),
     )
+    .innerJoin(
+      activityVenue,
+      eq(activityVenue.id, activityVenueZone.activityVenueId),
+    )
     .leftJoin(
       segmentSeatingLayout,
       eq(segmentSeatingLayout.planId, segmentSeatingPlan.id),
@@ -217,6 +228,7 @@ export const itineraryOrganizationSeatsQuery = (
     .groupBy(
       segmentMember.segmentId,
       activityVenueZone.name,
+      activityVenue.name,
       segmentSeatingLayout.rendererKind,
       segmentSeatingLayout.data,
     );
@@ -559,6 +571,7 @@ export const h5Routes = new Hono<{ Variables: H5Variables }>()
           const organizationSeat = organizationAssigned
             ? {
                 zone: organizationAssigned.zone,
+                venueName: organizationAssigned.venueName,
                 seat: formatOrganizationSeatRanges(
                   organizationAssigned.data,
                   organizationAssigned.seats,
@@ -571,6 +584,7 @@ export const h5Routes = new Hono<{ Variables: H5Variables }>()
           return {
             ...segment,
             zone: assigned?.zone ?? null,
+            venueName: assigned?.venueName ?? null,
             seat: assigned?.seat ?? null,
             /**
              * 座位图入口显不显示。这里是**便宜判定**：画布行存在、渲染器认识，

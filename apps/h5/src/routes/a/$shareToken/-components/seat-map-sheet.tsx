@@ -49,19 +49,29 @@ export function SeatMapSheet({
       title="我的座位"
     >
       <div className="px-4 pt-3 pb-8">
-        {/* 座位号来自行程主接口（`shown.seat`/`shown.zone`），不用等座位图那次
-            单独请求——嘉宾最先要确认的是"我坐哪"，这行不该跟着画布一起转圈。
-            一位嘉宾一天可能有四五场都带座位图，场馆/厅和议程名都得露出来，
-            不然两张图长得差不多时很容易看串。 */}
+        {/* 座位号、场馆和区域来自行程主接口，不用等座位图那次单独请求——嘉宾最先
+            要确认的是"我坐哪"，这行不该跟着画布一起转圈。这里用座位方案的场馆/区域，
+            不用环节的 locationText（它是环节地址，不一定能准确标识座位所在场馆）。 */}
         {shown && (
           <div className="flex items-center gap-3 rounded-2xl bg-page p-3">
             <div className="flex min-h-14 min-w-14 max-w-1/2 shrink-0 items-center justify-center break-words rounded-xl bg-brand-soft px-2 py-2 text-title text-brand tabular-nums">
               {shown.seat}
             </div>
             <div className="min-w-0">
-              {shown.locationText && (
-                <div className="truncate text-title text-ink-1">
-                  {shown.locationText}
+              {shown.venueName && (
+                <div className="break-words text-title text-ink-1">
+                  {shown.venueName}
+                </div>
+              )}
+              {shown.zone && (
+                <div
+                  className={
+                    shown.venueName
+                      ? "mt-0.5 break-words text-body text-ink-2"
+                      : "break-words text-title text-ink-1"
+                  }
+                >
+                  {shown.zone}
                 </div>
               )}
               <div className="mt-0.5 truncate text-caption text-ink-3">

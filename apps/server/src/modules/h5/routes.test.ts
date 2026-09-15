@@ -107,6 +107,14 @@ describe("itinerarySeatsQuery —— 座位只认已确认且仍开启排位的�
     expect(rendered.sql).toContain('group by "segment_member"."segment_id"');
   });
 
+  test("返回座位方案关联的场馆快照名称，并按场馆分组", () => {
+    expect(rendered.sql).toContain('inner join "activity_venue"');
+    expect(rendered.sql).toContain('"activity_venue"."name"');
+    expect(rendered.sql).toContain(
+      'group by "segment_member"."segment_id", "activity_venue_zone"."name", "activity_venue"."name"',
+    );
+  });
+
   test("pending / rejected 的方案不会给出座位号", () => {
     // 未确认的方案运营还在拖座位，给出去的号随时会变；嘉宾拿到座位号就是照着
     // 坐，给一个还会变的比不给更糟。
@@ -186,6 +194,11 @@ describe("itineraryOrganizationSeatsQuery —— 团体占位按环节快照取"
     expect(rendered.sql).toContain('"segment_seating_layout"."data"');
     expect(rendered.sql).not.toContain('"member"."name"');
     expect(rendered.sql).not.toContain("mobile");
+  });
+
+  test("返回团体座位方案关联的场馆快照名称", () => {
+    expect(rendered.sql).toContain('inner join "activity_venue"');
+    expect(rendered.sql).toContain('"activity_venue"."name"');
   });
 });
 

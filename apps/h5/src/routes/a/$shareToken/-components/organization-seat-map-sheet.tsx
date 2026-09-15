@@ -46,11 +46,19 @@ export function OrganizationSeatMapSheet({
             <div className="break-words font-extrabold text-[1.75rem] leading-9 text-brand tabular-nums">
               {shown.organizationSeat.seat}
             </div>
-            <div className="mt-3 truncate text-title text-ink-1">
-              {shown.locationText ?? shown.organizationSeat.zone}
-            </div>
-            {shown.locationText && (
-              <div className="mt-1 text-body text-ink-2">
+            {shown.organizationSeat.venueName && (
+              <div className="mt-3 break-words text-title text-ink-1">
+                {shown.organizationSeat.venueName}
+              </div>
+            )}
+            {shown.organizationSeat.zone && (
+              <div
+                className={
+                  shown.organizationSeat.venueName
+                    ? "mt-0.5 break-words text-body text-ink-2"
+                    : "mt-3 break-words text-title text-ink-1"
+                }
+              >
                 {shown.organizationSeat.zone}
               </div>
             )}
