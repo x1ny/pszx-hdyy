@@ -64,7 +64,12 @@ function PhonePage() {
       await navigate({ to: "/a/$shareToken", params: { shareToken } });
     } catch (error) {
       const message =
-        error instanceof ApiError ? error.message : "网络异常，请重试";
+        error instanceof ApiError
+          ? error.code === "H5_UNAUTHORIZED" ||
+            error.code === "VALIDATION_ERROR"
+            ? "密钥不正确，请核对后重试"
+            : error.message
+          : "网络异常，请重试";
       setFailure(message);
       setShaking(true);
     } finally {
@@ -79,10 +84,10 @@ function PhonePage() {
           <Icon name="lock-keyhole" size={24} />
         </span>
         <h1 className="mt-4 font-bold text-[1.0625rem] text-ink-1 leading-6">
-          请输入手机号码
+          请输入专属密钥
         </h1>
         <p className="mt-1.5 text-body text-ink-3">
-          输入主办方登记的手机号码
+          输入主办方发送给你的查看密钥
           <br />
           即可查看你的专属行程
         </p>
@@ -115,8 +120,8 @@ function PhonePage() {
                 setMobile(event.target.value.replace(/\D/g, ""));
                 setFailure("");
               }}
-              placeholder="请输入手机号码"
-              aria-label="手机号码"
+              placeholder="请输入专属密钥"
+              aria-label="专属密钥"
               aria-invalid={Boolean(failure)}
               autoComplete="off"
               className={cn(
