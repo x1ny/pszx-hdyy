@@ -1,6 +1,6 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { CanvasSeat, CanvasZone } from "../core/document";
+import type { CanvasDoc, CanvasSeat, CanvasZone } from "../core/document";
 import {
   buildSeatOccupantVisual,
   DEFAULT_OCCUPIED_COLOR,
@@ -8,7 +8,7 @@ import {
   type SeatOccupantVisual,
   seatRenderSpec,
 } from "../seat-occupant-visual";
-import { SeatNode, ZoneGeometry } from "./canvas-view";
+import { CanvasView, SeatNode, ZoneGeometry } from "./canvas-view";
 
 const seat: CanvasSeat = {
   externalId: "seat-1",
@@ -50,6 +50,39 @@ describe("ZoneGeometry", () => {
       "transform",
       "rotate(18 100 50)",
     );
+  });
+});
+
+describe("CanvasView zone labels", () => {
+  it("rotates the zone name and status around the zone center", () => {
+    const doc: CanvasDoc = {
+      schemaVersion: 1,
+      world: { width: 240, height: 140 },
+      zones: [rotatedZone],
+      seats: [],
+    };
+
+    const { container } = render(
+      <svg aria-label="区域画布">
+        <CanvasView
+          doc={doc}
+          viewport={{ x: 0, y: 0, scale: 1 }}
+          selection={{ zoneIds: [], seatIds: [] }}
+          dragOffset={null}
+          draftRect={null}
+          polygonDraft={null}
+          resizePreview={null}
+        />
+      </svg>,
+    );
+
+    const labels = container.querySelectorAll("text");
+    expect(labels).toHaveLength(2);
+    expect(labels[0]?.parentElement).toHaveAttribute(
+      "transform",
+      "rotate(18 100 50)",
+    );
+    expect(labels[1]?.parentElement).toBe(labels[0]?.parentElement);
   });
 });
 

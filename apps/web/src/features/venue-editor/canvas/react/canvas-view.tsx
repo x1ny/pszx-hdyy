@@ -304,6 +304,9 @@ const ZoneNode = memo(function ZoneNode({
   // 区域越大，标签也相应放大；小区域保留一个可读的最小字号。
   const nameSize = Math.max(20, Math.min(22, zone.shape.height / 5));
   const captionSize = nameSize * 0.7;
+  const rotation = zoneRotation(zone.shape);
+  const labelTransform =
+    rotation === 0 ? undefined : `rotate(${rotation} ${labelX} ${labelY})`;
 
   return (
     <g>
@@ -314,27 +317,29 @@ const ZoneNode = memo(function ZoneNode({
       >
         <ZoneGeometry zone={zone} />
       </g>
-      <text
-        x={labelX}
-        y={labelY - captionSize * 0.4}
-        textAnchor="middle"
-        fontSize={nameSize}
-        fontWeight={600}
-        fill={zone.stroke}
-        style={{ userSelect: "none", pointerEvents: "none" }}
-      >
-        {zone.name}
-      </text>
-      <text
-        x={labelX}
-        y={labelY + nameSize * 0.8}
-        textAnchor="middle"
-        fontSize={captionSize}
-        fill="var(--muted-foreground)"
-        style={{ userSelect: "none", pointerEvents: "none" }}
-      >
-        {seatCount > 0 ? `座位 ${seatCount}` : "未排位"}
-      </text>
+      <g transform={labelTransform}>
+        <text
+          x={labelX}
+          y={labelY - captionSize * 0.4}
+          textAnchor="middle"
+          fontSize={nameSize}
+          fontWeight={600}
+          fill={zone.stroke}
+          style={{ userSelect: "none", pointerEvents: "none" }}
+        >
+          {zone.name}
+        </text>
+        <text
+          x={labelX}
+          y={labelY + nameSize * 0.8}
+          textAnchor="middle"
+          fontSize={captionSize}
+          fill="var(--muted-foreground)"
+          style={{ userSelect: "none", pointerEvents: "none" }}
+        >
+          {seatCount > 0 ? `座位 ${seatCount}` : "未排位"}
+        </text>
+      </g>
     </g>
   );
 });

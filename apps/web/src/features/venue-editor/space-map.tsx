@@ -105,6 +105,9 @@ function MapZone({
   // 大场地里的字会缩成一条线。
   const nameSize = Math.max(16, Math.min(28, zone.shape.height / 6));
   const captionSize = nameSize * 0.7;
+  const rotation = zoneRotation(zone.shape);
+  const labelTransform =
+    rotation === 0 ? undefined : `rotate(${rotation} ${cx} ${cy})`;
 
   const select = onSelect ? () => onSelect(zone.externalId) : undefined;
 
@@ -148,27 +151,29 @@ function MapZone({
           strokeWidth={3}
         />
       )}
-      <text
-        x={cx}
-        y={cy - captionSize * 0.4}
-        textAnchor="middle"
-        fontSize={nameSize}
-        fontWeight={600}
-        fill={zone.stroke}
-        className="pointer-events-none select-none"
-      >
-        {meta.name}
-      </text>
-      <text
-        x={cx}
-        y={cy + nameSize * 0.8}
-        textAnchor="middle"
-        fontSize={captionSize}
-        fill="var(--muted-foreground)"
-        className="pointer-events-none select-none"
-      >
-        {meta.disabled ? "已禁用" : meta.caption}
-      </text>
+      <g transform={labelTransform}>
+        <text
+          x={cx}
+          y={cy - captionSize * 0.4}
+          textAnchor="middle"
+          fontSize={nameSize}
+          fontWeight={600}
+          fill={zone.stroke}
+          className="pointer-events-none select-none"
+        >
+          {meta.name}
+        </text>
+        <text
+          x={cx}
+          y={cy + nameSize * 0.8}
+          textAnchor="middle"
+          fontSize={captionSize}
+          fill="var(--muted-foreground)"
+          className="pointer-events-none select-none"
+        >
+          {meta.disabled ? "已禁用" : meta.caption}
+        </text>
+      </g>
     </g>
   );
 }
