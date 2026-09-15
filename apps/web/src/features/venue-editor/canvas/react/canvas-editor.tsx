@@ -100,7 +100,7 @@ export function CanvasEditor({
   selection: Selection;
   onSelectionChange: (next: Selection) => void;
   onCommand: (run: (current: EditorState) => EditorState) => void;
-  /** 双击一块区域、或属性面板里点"进入排位"，都走这个回调。 */
+  /** 双击一块座席区、或属性面板里点"进入排位"，都走这个回调。 */
   onEnterZone: (zoneId: string) => void;
   rightPanel?: React.ReactNode;
 }) {
@@ -608,7 +608,7 @@ export function CanvasEditor({
           <span className="ml-auto pr-1 text-muted-foreground text-xs">
             {tool === "polygon"
               ? "点击添加顶点 · 点回起点或按 Enter 闭合 · Esc 取消"
-              : "双击区域进入排位 · 按住空格拖动画布 · 滚轮缩放 · Ctrl+Z 撤销"}
+              : "双击座席区进入排位 · 按住空格拖动画布 · 滚轮缩放 · Ctrl+Z 撤销"}
           </span>
         </div>
 
@@ -626,7 +626,10 @@ export function CanvasEditor({
               if (!rect) return;
               const point = clientToWorld(event.clientX, event.clientY);
               const zoneId = hitZone(doc, point);
-              if (zoneId) onEnterZone(zoneId);
+              const zone = zoneId
+                ? doc.zones.find((item) => item.externalId === zoneId)
+                : undefined;
+              if (zone?.kind === "seating") onEnterZone(zone.externalId);
             }}
           >
             <defs>

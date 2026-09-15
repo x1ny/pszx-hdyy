@@ -118,6 +118,7 @@ export function ZonePropertyPanel({
   const seatCount = doc.seats.filter(
     (seat) => seat.zoneExternalId === zone.externalId,
   ).length;
+  const isSeating = zone.kind === "seating";
   const rotation = zone.shape.rotation ?? 0;
   const patchRotation = (next: number) =>
     onPatchZone(zone.externalId, {
@@ -138,8 +139,13 @@ export function ZonePropertyPanel({
       <div>
         <h3 className="font-medium text-sm">区域</h3>
         <p className="text-muted-foreground text-xs">
-          {Math.round(zone.shape.width)} × {Math.round(zone.shape.height)} ·{" "}
-          {seatCount > 0 ? `已排位 ${seatCount} 个座位` : "还没有排位"}
+          {Math.round(zone.shape.width)} × {Math.round(zone.shape.height)}
+          {isSeating && (
+            <>
+              {" · "}
+              {seatCount > 0 ? `已排位 ${seatCount} 个座位` : "还没有排位"}
+            </>
+          )}
         </p>
       </div>
 
@@ -244,14 +250,16 @@ export function ZonePropertyPanel({
 
       {extra?.(zone)}
 
-      <Button
-        type="button"
-        className="w-full"
-        onClick={() => onEnterZone(zone.externalId)}
-      >
-        <LogInIcon />
-        {enterLabel}
-      </Button>
+      {isSeating && (
+        <Button
+          type="button"
+          className="w-full"
+          onClick={() => onEnterZone(zone.externalId)}
+        >
+          <LogInIcon />
+          {enterLabel}
+        </Button>
+      )}
 
       <Button
         type="button"
@@ -316,7 +324,10 @@ function ZoneList({
         </thead>
         <tbody>
           {doc.zones.map((zone) => {
-            const count = seatCountByZone.get(zone.externalId) ?? 0;
+            const count =
+              zone.kind === "seating"
+                ? (seatCountByZone.get(zone.externalId) ?? 0)
+                : 0;
             return (
               <tr
                 key={zone.externalId}
@@ -349,16 +360,18 @@ function ZoneList({
                   </button>
                 </td>
                 <td className="p-0">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    title="进入排位"
-                    onClick={() => onEnterZone(zone.externalId)}
-                    className="size-7 text-muted-foreground opacity-0 group-hover:opacity-100"
-                  >
-                    <LogInIcon className="size-3.5" />
-                  </Button>
+                  {zone.kind === "seating" && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      title="进入排位"
+                      onClick={() => onEnterZone(zone.externalId)}
+                      className="size-7 text-muted-foreground opacity-0 group-hover:opacity-100"
+                    >
+                      <LogInIcon className="size-3.5" />
+                    </Button>
+                  )}
                 </td>
               </tr>
             );

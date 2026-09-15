@@ -92,6 +92,8 @@ export function ActivityVenueCanvasEditorView({
     setState((current) => run(current));
 
   const enterZone = (zoneId: string) => {
+    const zone = doc.zones.find((item) => item.externalId === zoneId);
+    if (zone?.kind !== "seating") return;
     setSelection(EMPTY_SELECTION);
     setActiveZoneId(zoneId);
   };

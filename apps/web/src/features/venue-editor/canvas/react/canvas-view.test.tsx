@@ -84,6 +84,37 @@ describe("CanvasView zone labels", () => {
     );
     expect(labels[1]?.parentElement).toBe(labels[0]?.parentElement);
   });
+
+  it("does not render seating status for a display-only zone", () => {
+    const displayOnlyZone: CanvasZone = {
+      ...rotatedZone,
+      name: "功能区",
+      kind: "function",
+    };
+    const doc: CanvasDoc = {
+      schemaVersion: 1,
+      world: { width: 240, height: 140 },
+      zones: [displayOnlyZone],
+      seats: [seat],
+    };
+
+    const { container } = render(
+      <svg aria-label="区域画布">
+        <CanvasView
+          doc={doc}
+          viewport={{ x: 0, y: 0, scale: 1 }}
+          selection={{ zoneIds: [], seatIds: [] }}
+          dragOffset={null}
+          draftRect={null}
+          polygonDraft={null}
+          resizePreview={null}
+        />
+      </svg>,
+    );
+
+    expect(container.querySelectorAll("text")).toHaveLength(1);
+    expect(container).not.toHaveTextContent("未排位");
+  });
 });
 
 type SeatState = {

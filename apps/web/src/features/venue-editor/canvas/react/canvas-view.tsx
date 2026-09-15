@@ -305,6 +305,7 @@ const ZoneNode = memo(function ZoneNode({
   const nameSize = Math.max(20, Math.min(22, zone.shape.height / 5));
   const captionSize = nameSize * 0.7;
   const rotation = zoneRotation(zone.shape);
+  const isSeating = zone.kind === "seating";
   const labelTransform =
     rotation === 0 ? undefined : `rotate(${rotation} ${labelX} ${labelY})`;
 
@@ -329,16 +330,18 @@ const ZoneNode = memo(function ZoneNode({
         >
           {zone.name}
         </text>
-        <text
-          x={labelX}
-          y={labelY + nameSize * 0.8}
-          textAnchor="middle"
-          fontSize={captionSize}
-          fill="var(--muted-foreground)"
-          style={{ userSelect: "none", pointerEvents: "none" }}
-        >
-          {seatCount > 0 ? `座位 ${seatCount}` : "未排位"}
-        </text>
+        {isSeating && (
+          <text
+            x={labelX}
+            y={labelY + nameSize * 0.8}
+            textAnchor="middle"
+            fontSize={captionSize}
+            fill="var(--muted-foreground)"
+            style={{ userSelect: "none", pointerEvents: "none" }}
+          >
+            {seatCount > 0 ? `座位 ${seatCount}` : "未排位"}
+          </text>
+        )}
       </g>
     </g>
   );
