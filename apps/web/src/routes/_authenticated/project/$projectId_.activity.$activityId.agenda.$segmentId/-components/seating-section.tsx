@@ -145,8 +145,7 @@ export function SeatingSection({
         <div className="flex flex-col gap-3">
           <p className="text-muted-foreground text-sm">
             引用区域：{planQuery.data?.plan.zoneName ?? "-"} ·{" "}
-            {planQuery.data?.seats.length ?? 0} 个位置 · 已排{" "}
-            {planQuery.data?.assignments.length ?? 0} 人
+            {planQuery.data?.seats.length ?? 0} 个位置
             {planQuery.data?.plan.savedAt
               ? ` · 最近保存 ${formatDateTime(planQuery.data.plan.savedAt)}`
               : null}
