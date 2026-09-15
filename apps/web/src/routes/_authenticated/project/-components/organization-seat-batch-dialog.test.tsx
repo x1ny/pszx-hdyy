@@ -91,7 +91,7 @@ describe("OrganizationSeatBatchDialog", () => {
 
     chooseOrganization();
     await waitFor(() =>
-      expect(screen.getByText("已个人排座明细（1）")).toBeInTheDocument(),
+      expect(screen.getByText("个人排座明细（1）")).toBeInTheDocument(),
     );
     expect(screen.getByText("已有团体占位 3")).toBeInTheDocument();
     expect(screen.getByText("2", { selector: "dt" })).toBeInTheDocument();

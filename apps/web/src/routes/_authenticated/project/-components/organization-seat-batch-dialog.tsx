@@ -283,7 +283,7 @@ export function OrganizationSeatBatchDialog({
                   <div className="border-t bg-muted/20 px-4 py-3">
                     <div className="flex items-center gap-2 font-medium text-sm">
                       <UsersIcon className="size-4 text-muted-foreground" />
-                      已个人排座明细（{selectedStat.assignedPersonCount}）
+                      个人排座明细（{selectedStat.assignedPersonCount}）
                     </div>
                     {candidatesQuery.isLoading ? (
                       <div className="mt-2 flex items-center gap-2 text-muted-foreground text-xs">
