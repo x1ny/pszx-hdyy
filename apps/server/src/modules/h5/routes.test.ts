@@ -94,7 +94,7 @@ describe("itinerarySegmentsQuery —— 议程按 member_enabled 分流", () => 
   });
 });
 
-describe("itinerarySeatsQuery —— 座位只认已确认方案", () => {
+describe("itinerarySeatsQuery —— 座位只认已确认且仍开启排位的方案", () => {
   const rendered = itinerarySeatsQuery(7, 42).toSQL();
 
   test("一个环节的多个座位聚合到一条行程，且顺序稳定", () => {
@@ -110,6 +110,12 @@ describe("itinerarySeatsQuery —— 座位只认已确认方案", () => {
     // 坐，给一个还会变的比不给更糟。
     expect(rendered.sql).toContain('"segment_seating_plan"."status" =');
     expect(rendered.params).toContain("confirmed");
+  });
+
+  test("排位关闭时不返回历史方案里的座位号", () => {
+    // 关闭开关后，即使数据库还保留已确认方案，行程也不应继续展示座位信息。
+    expect(rendered.sql).toContain('"activity_segment"."seating_enabled" =');
+    expect(rendered.params).toContain(true);
   });
 
   test("撤销的分配不算数", () => {
@@ -179,6 +185,12 @@ describe("seatMapQuery —— 越权挡在查询形状上", () => {
     expect(rendered.sql).toContain('"segment_seating_plan"."status" =');
     expect(rendered.params).toContain("confirmed");
     expect(rendered.sql).toContain('"seat_assignment"."revoked_at" is null');
+  });
+
+  test("和 itinerarySeatsQuery 同一条 seatingEnabled 口径", () => {
+    // 页面不展示座位后，旧的或手工构造的请求也不能继续打开座位图。
+    expect(rendered.sql).toContain('"activity_segment"."seating_enabled" =');
+    expect(rendered.params).toContain(true);
   });
 
   test("全链 inner join：缺任何一环都该查不到，而不是漏出半份数据", () => {

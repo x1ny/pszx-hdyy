@@ -47,7 +47,9 @@ label/kind/rank/enabled/removedAt 但没有 x/y；反过来 `enabled` 和 `remov
 `getItinerary` 的每条议程多一个 `hasSeatMap`：**便宜判定**——只 join
 `segment_seating_layout` 取 `renderer_kind`，**绝不取 `data` 列**。一位嘉宾可能
 有三五个带排位的环节，为了三颗按钮的显隐把几百 KB 的 jsonb 全拉出来反序列化，
-首屏就废了。那一路是 `left join`：没画过图的方案，座位号照给。
+首屏就废了。那一路是 `left join`：没画过图的方案，座位号照给。前提是环节的
+`seating_enabled` 仍为 true；开关关闭后，即使历史方案仍是 confirmed，也不返回区域、
+座位号或座位图入口。
 
 `getSeatMap`（按需，点开才请求）出参：
 
@@ -67,6 +69,8 @@ label/kind/rank/enabled/removedAt 但没有 x/y；反过来 `enabled` 和 `remov
 - **越权挡在查询形状上**：`seatMapQuery` 从 `segment_member` 出发并锚死
   `memberId`，传任何 `segmentId` 都只查得出他自己有座位的那个环节。探测别人的
   环节和环节不存在返回**同一个** NOT_FOUND，不区分是有意的。
+- `getSeatMap` 与行程查询保持同一条 `seating_enabled` 和 confirmed 口径；排位关闭
+  后从旧页面或旧链接请求也返回 NOT_FOUND，不重新暴露历史座位图。
 
 `pitch`（典型座距）在服务端算，不让 h5 重算：算法要和管理端画布严格一致，否则
 同一片座位在两端会得出两种密度判断。

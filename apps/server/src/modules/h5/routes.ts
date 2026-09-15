@@ -77,12 +77,15 @@ export const itinerarySegmentsQuery = (activityId: number, memberId: number) =>
     .orderBy(asc(activitySegment.startTime), asc(activitySegment.id));
 
 /**
- * 座位。**只认已确认的方案。**
+ * 座位。**只认已确认且仍开启排位的方案。**
  *
  * pending 的方案运营还在拖座位，给出去的号随时会变，而嘉宾拿到座位号就是照着
  * 坐 —— 给一个还会变的比不给更糟：不给他知道自己缺信息、会去问；给错了他到场
  * 坐下才被请走。代价是运营忘了点确认时这一栏空着，那属于「缺信息且本人知道
  * 缺」，可恢复。
+ *
+ * `seating_enabled = false` 时，即使库里还留着历史已确认方案，也不再把座位信息
+ * 带进行程。排位开关是运营对嘉宾是否应看到这类信息的当前决定，不能让旧方案绕过。
  */
 export const itinerarySeatsQuery = (activityId: number, memberId: number) =>
   db
@@ -103,6 +106,13 @@ export const itinerarySeatsQuery = (activityId: number, memberId: number) =>
       rendererKind: segmentSeatingLayout.rendererKind,
     })
     .from(segmentMember)
+    .innerJoin(
+      activitySegment,
+      and(
+        eq(activitySegment.id, segmentMember.segmentId),
+        eq(activitySegment.seatingEnabled, true),
+      ),
+    )
     .innerJoin(
       seatAssignment,
       and(
@@ -147,9 +157,9 @@ export const itinerarySeatsQuery = (activityId: number, memberId: number) =>
  * 「这个人自己有座位的那个环节」。探测别人的环节返回的是零行，和环节不存在
  * 完全一样——不区分这两者是有意的，区分了就等于把环节的存在性告诉了调用方。
  *
- * join 链和 `itinerarySeatsQuery` 几乎一样，**只有 confirmed 那一条必须保持同步**：
- * 那边判定按钮显不显示，这边决定点开有没有图。一边放宽另一边没跟上，表现就是
- * 按钮出现了、点开是「暂不可用」。
+ * join 链和 `itinerarySeatsQuery` 几乎一样，**confirmed 和 seatingEnabled 两条都必须
+ * 保持同步**：那边判定按钮显不显示，这边决定点开有没有图。一边放宽另一边没跟上，
+ * 表现就是按钮出现了、点开是「暂不可用」，或者排位已关闭后仍能从旧链接打开座位图。
  */
 export const seatMapQuery = (
   activityId: number,
@@ -168,6 +178,13 @@ export const seatMapQuery = (
       data: segmentSeatingLayout.data,
     })
     .from(segmentMember)
+    .innerJoin(
+      activitySegment,
+      and(
+        eq(activitySegment.id, segmentMember.segmentId),
+        eq(activitySegment.seatingEnabled, true),
+      ),
+    )
     .innerJoin(
       seatAssignment,
       and(

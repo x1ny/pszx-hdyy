@@ -174,9 +174,9 @@ export const activitySegment = pgTable(
 
     status: text("status").$type<SegmentStatus>().notNull().default("active"),
 
-    // 两个开关本期只是**声明**，没有下游功能接上（BR-DEV-031A：开启排位仅生成
-    // "排位未配置"状态和入口，不要求先完成场地/排位配置）。它们是文档 8.1
-    // 环节最小字段里列明的环节自身字段，不是对人员/排位模块的依赖。
+    // 两个开关都是环节自身字段：memberEnabled 决定人员范围，seatingEnabled 决定
+    // 是否开启排位。BR-DEV-031A：开启排位仅生成"排位未配置"状态和入口，不要求先
+    // 完成场地/排位配置；关闭排位后，H5 行程也不再展示历史已确认的座位信息。
     memberEnabled: boolean("member_enabled").notNull().default(false),
     seatingEnabled: boolean("seating_enabled").notNull().default(false),
 
@@ -214,7 +214,10 @@ export const activitySegment = pgTable(
     // segmentFlowchartBuilder 里专门写了"零时长环节的 1 分钟占位"逻辑，说明
     // 现网真的存在开始=结束的瞬时环节（签到、剪彩）。重叠判断用半开区间
     // [start, end)，零时长环节因此不会和任何环节冲突，不需要额外分支。
-    check("chk_segment_time_range", sql`${table.startTime} <= ${table.endTime}`),
+    check(
+      "chk_segment_time_range",
+      sql`${table.startTime} <= ${table.endTime}`,
+    ),
 
     // 同 uk_agenda_line_id_activity：给 modules/member 的 segment_member 复合
     // 外键当靶子，保证那张表冗余的 activity_id 恒等于本环节的 activity_id。
