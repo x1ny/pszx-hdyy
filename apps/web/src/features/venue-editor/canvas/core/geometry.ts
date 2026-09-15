@@ -12,6 +12,31 @@ export type Point = { x: number; y: number };
 export type Size = { width: number; height: number };
 export type Rect = Point & Size;
 
+/** 绕中心旋转点。SVG 的 y 轴向下，所以正角度在画布上看起来是顺时针。 */
+export function rotatePoint(
+  point: Point,
+  center: Point,
+  degrees: number,
+): Point {
+  if (!Number.isFinite(degrees) || degrees === 0) return { ...point };
+  const radians = (degrees * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const dx = point.x - center.x;
+  const dy = point.y - center.y;
+  return {
+    x: center.x + dx * cos - dy * sin,
+    y: center.y + dx * sin + dy * cos,
+  };
+}
+
+/** 旋转的逆运算，用于把指针坐标还原到区域自己的未旋转坐标系。 */
+export const unrotatePoint = (
+  point: Point,
+  center: Point,
+  degrees: number,
+): Point => rotatePoint(point, center, -degrees);
+
 export const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
 

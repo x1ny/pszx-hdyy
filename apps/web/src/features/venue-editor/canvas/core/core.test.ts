@@ -35,12 +35,14 @@ import {
   pointsToSvg,
   rectContains,
   rectsIntersect,
+  rotatePoint,
   scalePoint,
   scalePoints,
   seatFieldPitch,
   toAbsolutePoints,
   toScreen,
   toWorld,
+  unrotatePoint,
 } from "./geometry";
 import { canRedo, canUndo, execute, initialState, redo, undo } from "./history";
 import {
@@ -280,6 +282,18 @@ describe("geometry", () => {
     const round = toWorld(toScreen(world, viewport), viewport);
     expect(round.x).toBeCloseTo(world.x);
     expect(round.y).toBeCloseTo(world.y);
+  });
+
+  test("rotatePoint 和 unrotatePoint 互为逆运算", () => {
+    const center = { x: 100, y: 80 };
+    const point = { x: 180, y: 120 };
+    const rotated = rotatePoint(point, center, 90);
+
+    expect(rotated.x).toBeCloseTo(60);
+    expect(rotated.y).toBeCloseTo(160);
+    const restored = unrotatePoint(rotated, center, 90);
+    expect(restored.x).toBeCloseTo(point.x);
+    expect(restored.y).toBeCloseTo(point.y);
   });
 
   test("fitViewport 不把小场地放大到糊", () => {
@@ -579,6 +593,7 @@ describe("commands · 区域", () => {
         kind: "checkin",
         fill: "#ff0000",
         stroke: "#aa0000",
+        rotation: 28,
       }),
     );
     expect(state.doc.zones[0]).toMatchObject({
@@ -587,6 +602,7 @@ describe("commands · 区域", () => {
       fill: "#ff0000",
       stroke: "#aa0000",
     });
+    expect(state.doc.zones[0].shape.rotation).toBe(28);
   });
 
   test("删区域连带删它的座位", () => {
@@ -876,6 +892,18 @@ describe("interaction · 区域分布画布", () => {
     expect(zoneContains(ellipseZone, { x: 0, y: 0 })).toBe(false);
   });
 
+  test("zoneContains 会在区域旋转后按旋转后的形状命中", () => {
+    const source = docWithRectZone().zones[0];
+    const rotated = {
+      ...source,
+      shape: { ...source.shape, rotation: 90 },
+    };
+
+    expect(zoneContains(rotated, { x: 300, y: 250 })).toBe(true);
+    // 原包围盒左上角在旋转后的矩形外。
+    expect(zoneContains(rotated, { x: 100, y: 100 })).toBe(false);
+  });
+
   test("hitZone 命中最上层的区域", () => {
     let state = initialState(emptyCanvasDoc());
     state = execute(
@@ -1032,6 +1060,16 @@ describe("interaction · 区域分布画布", () => {
     const next = resizeRect(origin, "nw", { x: 300, y: 300 });
     expect(next.width).toBeGreaterThanOrEqual(0);
     expect(next.height).toBeGreaterThanOrEqual(0);
+  });
+
+  test("旋转区域的缩放手柄按区域坐标系解释位移", () => {
+    const next = resizeRect(
+      { x: 0, y: 0, width: 100, height: 100 },
+      "se",
+      { x: 0, y: 10 },
+      90,
+    );
+    expect(next).toEqual({ x: 0, y: 0, width: 110, height: 100 });
   });
 });
 
@@ -1271,6 +1309,21 @@ describe("投影与序列化", () => {
 
     const round = parseCanvasDoc(JSON.parse(JSON.stringify(doc)));
     expect(round).toEqual(doc);
+  });
+
+  test("序列化往返保留区域旋转角度", () => {
+    const source = docWithRectZone();
+    const rotated: CanvasDoc = {
+      ...source,
+      zones: source.zones.map((zone) => ({
+        ...zone,
+        shape: { ...zone.shape, rotation: -32 },
+      })),
+    };
+
+    expect(parseCanvasDoc(JSON.parse(JSON.stringify(rotated)))).toEqual(
+      rotated,
+    );
   });
 
   test("别的渲染器的 blob 解不出来", () => {

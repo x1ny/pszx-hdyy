@@ -1,6 +1,6 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { CanvasSeat } from "../core/document";
+import type { CanvasSeat, CanvasZone } from "../core/document";
 import {
   buildSeatOccupantVisual,
   DEFAULT_OCCUPIED_COLOR,
@@ -8,7 +8,7 @@ import {
   type SeatOccupantVisual,
   seatRenderSpec,
 } from "../seat-occupant-visual";
-import { SeatNode } from "./canvas-view";
+import { SeatNode, ZoneGeometry } from "./canvas-view";
 
 const seat: CanvasSeat = {
   externalId: "seat-1",
@@ -20,6 +20,38 @@ const seat: CanvasSeat = {
   x: 20,
   y: 20,
 };
+
+const rotatedZone: CanvasZone = {
+  externalId: "zone-1",
+  name: "主会场",
+  kind: "seating",
+  ordinal: 0,
+  fill: "#2a78d6",
+  stroke: "#2a78d6",
+  shape: {
+    type: "rect",
+    x: 10,
+    y: 20,
+    width: 180,
+    height: 60,
+    rotation: 18,
+  },
+};
+
+describe("ZoneGeometry", () => {
+  it("renders a rectangle rotation around its center", () => {
+    const { container } = render(
+      <svg aria-label="区域几何">
+        <ZoneGeometry zone={rotatedZone} />
+      </svg>,
+    );
+
+    expect(container.querySelector("rect")).toHaveAttribute(
+      "transform",
+      "rotate(18 100 50)",
+    );
+  });
+});
 
 type SeatState = {
   seat?: CanvasSeat;

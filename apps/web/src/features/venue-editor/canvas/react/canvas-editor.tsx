@@ -325,7 +325,12 @@ export function CanvasEditor({
             return;
           case "resizeZone": {
             const subject = finished.subject;
-            const next = resizeRect(subject.origin, subject.handle, delta);
+            const next = resizeRect(
+              subject.origin,
+              subject.handle,
+              delta,
+              subject.rotation,
+            );
             onCommand((s) => execute(s, resizeZone(subject.zoneId, next)));
             return;
           }
@@ -520,6 +525,7 @@ export function CanvasEditor({
           drag.subject.origin,
           drag.subject.handle,
           drag.delta,
+          drag.subject.rotation,
         );
         return {
           dragOffset: null,
@@ -607,7 +613,6 @@ export function CanvasEditor({
         </div>
 
         <div ref={containerRef} className="min-h-0 flex-1">
-          {/* biome-ignore lint/a11y/noStaticElementInteractions: 手势由 useGesture 绑在 ref 上 */}
           <svg
             ref={svgRef}
             {...bindGestures()}

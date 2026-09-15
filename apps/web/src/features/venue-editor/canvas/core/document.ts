@@ -27,14 +27,32 @@ export const ZONE_SHAPE_TYPES = ["rect", "ellipse", "polygon"] as const;
 export type ZoneShapeType = (typeof ZONE_SHAPE_TYPES)[number];
 
 export type ZoneShape =
-  | { type: "rect"; x: number; y: number; width: number; height: number }
-  | { type: "ellipse"; x: number; y: number; width: number; height: number }
+  | {
+      type: "rect";
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      /** 绕区域中心旋转的角度，SVG 坐标系下顺时针为正。旧数据缺省为 0。 */
+      rotation?: number;
+    }
+  | {
+      type: "ellipse";
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      /** 绕区域中心旋转的角度，SVG 坐标系下顺时针为正。旧数据缺省为 0。 */
+      rotation?: number;
+    }
   | {
       type: "polygon";
       x: number;
       y: number;
       width: number;
       height: number;
+      /** 绕区域中心旋转的角度，SVG 坐标系下顺时针为正。旧数据缺省为 0。 */
+      rotation?: number;
       /**
        * 相对 (x,y) 左上角的顶点，闭合多边形，至少 3 个点。存相对值的理由跟
        * 座位的相对坐标一样：整块搬动或缩放区域时，顶点不需要单独重算一遍——
@@ -114,6 +132,12 @@ export type CanvasRow = {
 
 export const WORLD_WIDTH = 1600;
 export const WORLD_HEIGHT = 1000;
+
+/** 兼容没有旋转字段的历史区域，并把非法的运行时值安全地当作 0。 */
+export const zoneRotation = (shape: ZoneShape): number =>
+  typeof shape.rotation === "number" && Number.isFinite(shape.rotation)
+    ? shape.rotation
+    : 0;
 
 /**
  * 区域类型的默认颜色，只在**新建时**取用一次，之后就是这块区域自己的数据，
@@ -227,12 +251,20 @@ function parseShape(raw: unknown): ZoneShape | null {
     width: raw.width as number,
     height: raw.height as number,
   };
+  const rotation =
+    raw.rotation === undefined
+      ? undefined
+      : isFiniteNumber(raw.rotation)
+        ? raw.rotation
+        : null;
+  if (rotation === null) return null;
+  const rotatedBox = rotation === undefined ? box : { ...box, rotation };
 
   if (raw.type === "polygon") {
     if (!isPointArray(raw.points)) return null;
-    return { type: "polygon", ...box, points: raw.points };
+    return { type: "polygon", ...rotatedBox, points: raw.points };
   }
-  return { type: raw.type, ...box };
+  return { type: raw.type, ...rotatedBox };
 }
 
 function parseZone(raw: unknown): CanvasZone | null {
@@ -405,6 +437,7 @@ export function canvasDocFromProjection(
         y: Math.floor(index / columns) * cellHeight + gap,
         width: Math.max(80, cellWidth - gap * 2),
         height: Math.max(80, cellHeight - gap * 2),
+        rotation: 0,
       },
     };
   });

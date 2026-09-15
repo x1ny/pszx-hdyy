@@ -1,5 +1,10 @@
 import { memo } from "react";
-import type { CanvasDoc, CanvasSeat, CanvasZone } from "../core/document";
+import {
+  type CanvasDoc,
+  type CanvasSeat,
+  type CanvasZone,
+  zoneRotation,
+} from "../core/document";
 import { type Point, pointsToSvg, type Rect } from "../core/geometry";
 import {
   handleRects,
@@ -240,6 +245,11 @@ export const SeatNode = memo(function SeatNode({
 export function ZoneGeometry({ zone }: { zone: CanvasZone }) {
   const { fill, stroke } = zone;
   const common = { fill, fillOpacity: 0.14, stroke, strokeWidth: 2 } as const;
+  const rotation = zoneRotation(zone.shape);
+  const centerX = zone.shape.x + zone.shape.width / 2;
+  const centerY = zone.shape.y + zone.shape.height / 2;
+  const transform =
+    rotation === 0 ? undefined : `rotate(${rotation} ${centerX} ${centerY})`;
 
   switch (zone.shape.type) {
     case "rect":
@@ -250,6 +260,7 @@ export function ZoneGeometry({ zone }: { zone: CanvasZone }) {
           width={zone.shape.width}
           height={zone.shape.height}
           rx={6}
+          transform={transform}
           {...common}
         />
       );
@@ -260,6 +271,7 @@ export function ZoneGeometry({ zone }: { zone: CanvasZone }) {
           cy={zone.shape.y + zone.shape.height / 2}
           rx={zone.shape.width / 2}
           ry={zone.shape.height / 2}
+          transform={transform}
           {...common}
         />
       );

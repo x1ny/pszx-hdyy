@@ -1,5 +1,9 @@
 import { canvasEditor } from "./canvas";
-import type { CanvasDoc, CanvasZone } from "./canvas/core/document";
+import {
+  type CanvasDoc,
+  type CanvasZone,
+  zoneRotation,
+} from "./canvas/core/document";
 import { ZoneGeometry } from "./canvas/react/canvas-view";
 
 /**
@@ -138,6 +142,7 @@ function MapZone({
           width={zone.shape.width + 6}
           height={zone.shape.height + 6}
           rx={8}
+          transform={`rotate(${zoneRotation(zone.shape)} ${cx} ${cy})`}
           fill="none"
           stroke="var(--primary)"
           strokeWidth={3}

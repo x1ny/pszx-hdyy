@@ -90,6 +90,7 @@ export function boxShapeFromDrag(
     y: rect.y,
     width: Math.max(MIN_ZONE_SIZE, isCircle ? side : rect.width),
     height: Math.max(MIN_ZONE_SIZE, isCircle ? side : rect.height),
+    rotation: 0,
   };
 }
 
@@ -109,6 +110,7 @@ export function polygonShapeFromPoints(points: Point[]): ZoneShape | null {
     y: bounds.y,
     width,
     height,
+    rotation: 0,
     points: points.map((p) => ({ x: p.x - bounds.x, y: p.y - bounds.y })),
   };
 }
@@ -167,7 +169,9 @@ export const resizeZone = (zoneId: string, next: Rect): Command => ({
 /** 改名、改类型、改颜色，合成一个命令——都是"这块区域的属性"，没必要拆三个。 */
 export const patchZone = (
   zoneId: string,
-  patch: Partial<Pick<CanvasZone, "name" | "kind" | "fill" | "stroke">>,
+  patch: Partial<Pick<CanvasZone, "name" | "kind" | "fill" | "stroke">> & {
+    rotation?: number;
+  },
 ): Command => ({
   label: "修改区域",
   apply: (draft) => {
@@ -177,6 +181,9 @@ export const patchZone = (
     if (patch.kind !== undefined) zone.kind = patch.kind;
     if (patch.fill !== undefined) zone.fill = patch.fill;
     if (patch.stroke !== undefined) zone.stroke = patch.stroke;
+    if (patch.rotation !== undefined && Number.isFinite(patch.rotation)) {
+      zone.shape.rotation = patch.rotation;
+    }
   },
 });
 

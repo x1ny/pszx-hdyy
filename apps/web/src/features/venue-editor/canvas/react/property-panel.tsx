@@ -2,6 +2,8 @@ import {
   ArrowLeftIcon,
   LayersIcon,
   LogInIcon,
+  RotateCcwIcon,
+  RotateCwIcon,
   SofaIcon,
   Trash2Icon,
 } from "lucide-react";
@@ -62,7 +64,13 @@ export type ZonePropertyPanelProps = {
   onClearSelection: () => void;
   onPatchZone: (
     zoneId: string,
-    patch: { name?: string; kind?: ZoneKind; fill?: string; stroke?: string },
+    patch: {
+      name?: string;
+      kind?: ZoneKind;
+      fill?: string;
+      stroke?: string;
+      rotation?: number;
+    },
   ) => void;
   onRemoveZone: (zoneId: string) => void;
   onEnterZone: (zoneId: string) => void;
@@ -110,6 +118,11 @@ export function ZonePropertyPanel({
   const seatCount = doc.seats.filter(
     (seat) => seat.zoneExternalId === zone.externalId,
   ).length;
+  const rotation = zone.shape.rotation ?? 0;
+  const patchRotation = (next: number) =>
+    onPatchZone(zone.externalId, {
+      rotation: Math.max(-180, Math.min(180, next)),
+    });
 
   return (
     <PanelShell key={zone.externalId}>
@@ -182,6 +195,52 @@ export function ZonePropertyPanel({
           />
         </Field>
       </div>
+
+      <Field>
+        <FieldLabel htmlFor="zone-rotation">旋转角度</FieldLabel>
+        <div className="flex items-center gap-1.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="size-9 shrink-0"
+            title="逆时针旋转 15°"
+            aria-label="逆时针旋转 15°"
+            onClick={() => patchRotation(rotation - 15)}
+          >
+            <RotateCcwIcon />
+          </Button>
+          <Input
+            id="zone-rotation"
+            type="number"
+            min={-180}
+            max={180}
+            step={1}
+            value={rotation}
+            onChange={(event) => {
+              const next = Number(event.target.value);
+              if (Number.isFinite(next)) patchRotation(next);
+            }}
+            className="text-center"
+            aria-label="区域旋转角度"
+          />
+          <span className="text-muted-foreground text-sm">°</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="size-9 shrink-0"
+            title="顺时针旋转 15°"
+            aria-label="顺时针旋转 15°"
+            onClick={() => patchRotation(rotation + 15)}
+          >
+            <RotateCwIcon />
+          </Button>
+        </div>
+        <p className="text-muted-foreground text-xs">
+          以区域中心为轴，正数为顺时针；可用多个区域分别旋转出弧形分区。
+        </p>
+      </Field>
 
       {extra?.(zone)}
 

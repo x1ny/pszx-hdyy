@@ -1,4 +1,9 @@
-import type { CanvasDoc, CanvasZone, ZoneShapeType } from "./document";
+import {
+  type CanvasDoc,
+  type CanvasZone,
+  type ZoneShapeType,
+  zoneRotation,
+} from "./document";
 import {
   ellipseContains,
   normalizeRect,
@@ -7,7 +12,9 @@ import {
   type Rect,
   rectContains,
   rectsIntersect,
+  rotatePoint,
   toAbsolutePoints,
+  unrotatePoint,
 } from "./geometry";
 
 /**
@@ -63,7 +70,14 @@ export type DragSubject =
       start: Point;
     }
   | { kind: "moveZones"; zoneIds: string[] }
-  | { kind: "resizeZone"; zoneId: string; handle: ResizeHandle; origin: Rect }
+  | {
+      kind: "resizeZone";
+      zoneId: string;
+      handle: ResizeHandle;
+      origin: Rect;
+      /** 只有旋转区域才带这个字段，保持未旋转场景的旧对象形状不变。 */
+      rotation?: number;
+    }
   | { kind: "moveSeats"; seatIds: string[] }
   /** 空白处拉框选座位。 */
   | { kind: "marquee"; start: Point };
@@ -86,10 +100,20 @@ export const zoneRect = (zone: CanvasZone): Rect => ({
   height: zone.shape.height,
 });
 
-/** 区域的绝对顶点——只有多边形有意义，其余形状用不到。 */
+export const zoneCenter = (zone: CanvasZone): Point => ({
+  x: zone.shape.x + zone.shape.width / 2,
+  y: zone.shape.y + zone.shape.height / 2,
+});
+
+/** 区域的绝对顶点——只有多边形有意义，其余形状用不到。返回渲染后的顶点。 */
 export const zonePolygonPoints = (zone: CanvasZone): Point[] =>
   zone.shape.type === "polygon"
-    ? toAbsolutePoints({ x: zone.shape.x, y: zone.shape.y }, zone.shape.points)
+    ? toAbsolutePoints(
+        { x: zone.shape.x, y: zone.shape.y },
+        zone.shape.points,
+      ).map((point) =>
+        rotatePoint(point, zoneCenter(zone), zoneRotation(zone.shape)),
+      )
     : [];
 
 /** 座位在世界坐标里的位置 = 所属区域左上角 + 相对坐标。 */
@@ -118,27 +142,43 @@ export function handleRects(
     sw: { x, y: y + height },
     se: { x: x + width, y: y + height },
   };
+  const center = zoneCenter(zone);
+  const rotation = zoneRotation(zone.shape);
 
   return (Object.keys(corners) as ResizeHandle[]).map((handle) => ({
     handle,
-    rect: {
-      x: corners[handle].x - half,
-      y: corners[handle].y - half,
-      width: size,
-      height: size,
-    },
+    rect: (() => {
+      const corner = rotatePoint(corners[handle], center, rotation);
+      return {
+        x: corner.x - half,
+        y: corner.y - half,
+        width: size,
+        height: size,
+      };
+    })(),
   }));
 }
 
-/** 一个点是否落在某块区域内，按形状分派——矩形/椭圆用几何测试，多边形用射线法。 */
+/** 一个点是否落在某块区域内，按未旋转坐标系做几何测试。 */
 export function zoneContains(zone: CanvasZone, point: Point): boolean {
+  const localPoint = unrotatePoint(
+    point,
+    zoneCenter(zone),
+    zoneRotation(zone.shape),
+  );
   switch (zone.shape.type) {
     case "rect":
-      return rectContains(zoneRect(zone), point);
+      return rectContains(zoneRect(zone), localPoint);
     case "ellipse":
-      return ellipseContains(zoneRect(zone), point);
+      return ellipseContains(zoneRect(zone), localPoint);
     case "polygon":
-      return pointInPolygon(point, zonePolygonPoints(zone));
+      return pointInPolygon(
+        localPoint,
+        toAbsolutePoints(
+          { x: zone.shape.x, y: zone.shape.y },
+          zone.shape.points,
+        ),
+      );
     default:
       return false;
   }
@@ -157,14 +197,25 @@ function hitHandle(
   selection: Selection,
   point: Point,
   scale: number,
-): { zoneId: string; handle: ResizeHandle; origin: Rect } | null {
+): {
+  zoneId: string;
+  handle: ResizeHandle;
+  origin: Rect;
+  rotation?: number;
+} | null {
   // 只有被选中的区域才显示手柄，所以也只有它们能被命中。
   for (const zoneId of selection.zoneIds) {
     const zone = doc.zones.find((item) => item.externalId === zoneId);
     if (!zone) continue;
     for (const { handle, rect } of handleRects(zone, scale)) {
       if (rectContains(rect, point)) {
-        return { zoneId, handle, origin: zoneRect(zone) };
+        const rotation = zoneRotation(zone.shape);
+        return {
+          zoneId,
+          handle,
+          origin: zoneRect(zone),
+          ...(rotation ? { rotation } : {}),
+        };
       }
     }
   }
@@ -207,6 +258,7 @@ export function resolveDragSubject(input: {
       zoneId: handle.zoneId,
       handle: handle.handle,
       origin: handle.origin,
+      ...(handle.rotation ? { rotation: handle.rotation } : {}),
     };
   }
 
@@ -226,16 +278,26 @@ export function resizeRect(
   origin: Rect,
   handle: ResizeHandle,
   delta: Point,
+  rotation = 0,
 ): Rect {
+  // 手柄跟着区域一起旋转，先把屏幕上的位移还原到区域自己的坐标系，
+  // 再沿用未旋转矩形的缩放规则。
+  const localDelta = rotatePoint(
+    { x: delta.x, y: delta.y },
+    { x: 0, y: 0 },
+    -rotation,
+  );
   const left = handle === "nw" || handle === "sw";
   const top = handle === "nw" || handle === "ne";
 
-  const x1 = left ? origin.x + delta.x : origin.x;
-  const y1 = top ? origin.y + delta.y : origin.y;
-  const x2 = left ? origin.x + origin.width : origin.x + origin.width + delta.x;
+  const x1 = left ? origin.x + localDelta.x : origin.x;
+  const y1 = top ? origin.y + localDelta.y : origin.y;
+  const x2 = left
+    ? origin.x + origin.width
+    : origin.x + origin.width + localDelta.x;
   const y2 = top
     ? origin.y + origin.height
-    : origin.y + origin.height + delta.y;
+    : origin.y + origin.height + localDelta.y;
 
   // 拖过头时靠 normalizeRect 翻转，宽高不会变负。
   return normalizeRect({ x: x1, y: y1 }, { x: x2, y: y2 });
