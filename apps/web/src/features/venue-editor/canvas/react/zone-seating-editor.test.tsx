@@ -42,5 +42,11 @@ describe("ZoneSeatingEditor headerContent", () => {
     );
 
     expect(frameRef.current).toContainElement(screen.getByText("正在连续选座"));
+    expect(
+      screen.queryByRole("checkbox", { name: "画排" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "排管理" }),
+    ).not.toBeInTheDocument();
   });
 });

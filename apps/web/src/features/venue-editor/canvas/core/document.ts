@@ -87,6 +87,29 @@ export type CanvasDoc = {
   world: { width: number; height: number };
   zones: CanvasZone[];
   seats: CanvasSeat[];
+  /** 显式有序的排；旧文档没有此字段，不从坐标或编号推断。 */
+  rows?: CanvasRow[];
+};
+
+export type CanvasRow = {
+  externalId: string;
+  zoneExternalId: string;
+  name: string;
+  /** 数组顺序就是排内顺序，排自身的顺序由 doc.rows 保存。 */
+  seatIds: string[];
+  shape: "line" | "circle";
+  x: number;
+  y: number;
+  angle: number;
+  spacing: number;
+  aisleEvery: number;
+  /** 只用于新增座位；已有座位的自定义编号始终保留。 */
+  numbering?: {
+    prefix: string;
+    suffix: string;
+    start: number;
+    padding: number;
+  };
 };
 
 export const WORLD_WIDTH = 1600;
@@ -119,7 +142,7 @@ export const emptyCanvasDoc = (): CanvasDoc => ({
  * 元素标识。只要求"同一份文档内唯一 + 保存前后稳定"——它是服务端归并的键，
  * 不承担跨编辑器的语义（底层设计 §4）。
  */
-export const newId = (prefix: "z" | "s") =>
+export const newId = (prefix: "z" | "s" | "r") =>
   `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 // ---------------------------------------------------------------------------
@@ -281,11 +304,65 @@ export function parseCanvasDoc(raw: unknown): CanvasDoc | null {
     seats.push(seat);
   }
 
+  const rows: CanvasRow[] = [];
+  if (raw.rows !== undefined) {
+    if (!Array.isArray(raw.rows)) return null;
+    const seen = new Set<string>();
+    const rowIds = new Set<string>();
+    const seatById = new Map(seats.map((seat) => [seat.externalId, seat]));
+    for (const row of raw.rows) {
+      if (
+        !isRecord(row) ||
+        !isText(row.externalId, 128) ||
+        !isText(row.zoneExternalId, 128) ||
+        !isText(row.name, 128) ||
+        !zones.some((zone) => zone.externalId === row.zoneExternalId) ||
+        !isOneOf(row.shape, ["line", "circle"] as const) ||
+        ![row.x, row.y, row.angle, row.spacing, row.aisleEvery].every(
+          isFiniteNumber,
+        ) ||
+        (row.spacing as number) <= 0 ||
+        !Number.isInteger(row.aisleEvery) ||
+        (row.aisleEvery as number) < 0 ||
+        !Array.isArray(row.seatIds) ||
+        rowIds.has(row.externalId)
+      )
+        return null;
+      rowIds.add(row.externalId);
+      if (row.numbering !== undefined) {
+        const numbering = row.numbering;
+        if (
+          !isRecord(numbering) ||
+          typeof numbering.prefix !== "string" ||
+          typeof numbering.suffix !== "string" ||
+          numbering.prefix.length + numbering.suffix.length > 50 ||
+          !Number.isSafeInteger(numbering.start) ||
+          (numbering.start as number) < 0 ||
+          !Number.isSafeInteger(numbering.padding) ||
+          (numbering.padding as number) < 0 ||
+          (numbering.padding as number) > 10
+        )
+          return null;
+      }
+      for (const id of row.seatIds) {
+        if (
+          typeof id !== "string" ||
+          seen.has(id) ||
+          seatById.get(id)?.zoneExternalId !== row.zoneExternalId
+        )
+          return null;
+        seen.add(id);
+      }
+      rows.push(row as CanvasRow);
+    }
+  }
+
   return {
     schemaVersion: 1,
     world: { width: world.width, height: world.height },
     zones,
     seats,
+    ...(raw.rows !== undefined ? { rows } : {}),
   };
 }
 

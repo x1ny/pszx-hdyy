@@ -5,6 +5,7 @@ import {
   LayoutTemplateIcon,
   MousePointer2Icon,
   RedoIcon,
+  Rows3Icon,
   ScanIcon,
   SofaIcon,
   TypeIcon,
@@ -23,8 +24,9 @@ import {
   moveSeats,
   removeSeats,
 } from "../core/commands";
-import type { CanvasDoc, CanvasZone } from "../core/document";
+import { type CanvasDoc, type CanvasZone, newId } from "../core/document";
 import {
+  boundsOf,
   normalizeRect,
   type Point,
   seatContentBounds,
@@ -51,12 +53,24 @@ import {
   type Selection,
 } from "../core/interaction";
 import {
+  addRow,
+  DEFAULT_ROW_PARAMS,
+  moveRowOrder,
+  type RowParams,
+  removeRow,
+  rowParamsFromDrag,
+  rowPoints,
+  updateRow,
+  validRowParams,
+} from "../core/rows";
+import {
   NAME_READABLE_PITCH_PX,
   type SeatOccupantVisual,
   scaleForPitch,
   seatRenderSpec,
 } from "../seat-occupant-visual";
 import { SeatNode } from "./canvas-view";
+import { RowPanel } from "./row-panel";
 import { TemplateDialog } from "./template-dialog";
 import { useViewport, type Viewport } from "./use-viewport";
 
@@ -92,6 +106,7 @@ const TOOL_ITEMS: { value: SeatTool; label: string; icon: typeof SofaIcon }[] =
     { value: "select", label: "选择", icon: MousePointer2Icon },
     { value: "pan", label: "平移", icon: HandIcon },
     { value: "seat", label: "点放位置", icon: SofaIcon },
+    { value: "row", label: "画排", icon: Rows3Icon },
   ];
 
 export function ZoneSeatingEditor({
@@ -183,6 +198,24 @@ export function ZoneSeatingEditor({
   const [tool, setTool] = useState<SeatTool>("select");
   const [spaceDown, setSpaceDown] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
+  const [rowDefaults, setRowDefaults] = useState<RowParams>(DEFAULT_ROW_PARAMS);
+  const [activeRowId, setActiveRowId] = useState<string | null>(null);
+  const zoneRows = useMemo(
+    () =>
+      (state.doc.rows ?? []).filter(
+        (row) => row.zoneExternalId === zone.externalId,
+      ),
+    [state.doc.rows, zone.externalId],
+  );
+  const activeRow = zoneRows.find((row) => row.externalId === activeRowId);
+  const createRow = (at: Point, params: RowParams) => {
+    if (assignOnly || !validRowParams(params)) return;
+    const id = newId("r");
+    onCommand((s) => execute(s, addRow(zone.externalId, at, params, id)));
+    setActiveRowId(id);
+    setTool("select");
+    onSelectionChange(EMPTY_SELECTION, "clear");
+  };
 
   const zoneSeats = useMemo(
     () =>
@@ -195,6 +228,10 @@ export function ZoneSeatingEditor({
    * 不跟着缩放变，所以只在增删座位时重算一次。
    */
   const worldPitch = useMemo(() => seatFieldPitch(zoneSeats), [zoneSeats]);
+  const zoneSeatById = useMemo(
+    () => new Map(zoneSeats.map((seat) => [seat.externalId, seat])),
+    [zoneSeats],
+  );
   const contentBounds = useMemo(
     () => seatContentBounds(zoneSeats, worldPitch),
     [zoneSeats, worldPitch],
@@ -245,6 +282,7 @@ export function ZoneSeatingEditor({
   );
 
   const live = useRef({
+    activeRowId,
     viewport,
     localDoc,
     selection,
@@ -257,9 +295,13 @@ export function ZoneSeatingEditor({
     onEscape,
   });
   live.current = {
+    activeRowId,
     viewport,
     localDoc,
-    selection,
+    selection:
+      activeRow && !assignOnly
+        ? { zoneIds: [], seatIds: activeRow.seatIds }
+        : selection,
     tool,
     spaceDown,
     hitRadius,
@@ -325,6 +367,13 @@ export function ZoneSeatingEditor({
         if (live.current.assignOnly && subject.kind === "moveSeats") {
           subject = { kind: "none" };
         }
+        if (
+          subject.kind === "marquee" ||
+          (subject.kind === "moveSeats" &&
+            activeRow &&
+            subject.seatIds.some((id) => !activeRow.seatIds.includes(id)))
+        )
+          setActiveRowId(null);
 
         setDragState({
           subject,
@@ -393,6 +442,12 @@ export function ZoneSeatingEditor({
         }
 
         switch (finished.subject.kind) {
+          case "drawRow":
+            createRow(
+              finished.start,
+              rowParamsFromDrag(finished.start, point, rowDefaults),
+            );
+            return;
           case "moveSeats":
             onCommand((s) =>
               execute(
@@ -442,6 +497,11 @@ export function ZoneSeatingEditor({
 
   const handleTap = (point: Point, currentTool: SeatTool) => {
     const { localDoc: d } = live.current;
+    if (currentTool === "row" && !live.current.assignOnly) {
+      createRow(point, rowDefaults);
+      return;
+    }
+    setActiveRowId(null);
 
     // 防御性判断：assignOnly 时工具栏根本不渲染"点放位置"按钮，tool 理论上
     // 不可能是 "seat"，这里再挡一道，不依赖"UI 没渲染就等于不会发生"。
@@ -500,11 +560,20 @@ export function ZoneSeatingEditor({
         return;
       }
       if (event.key === "Escape") {
+        setDragState(null);
+        setActiveRowId(null);
         onSelectionChange(EMPTY_SELECTION, "clear");
         setTool("select");
         return;
       }
       if (event.key === "Delete" || event.key === "Backspace") {
+        if (live.current.activeRowId) {
+          const id = live.current.activeRowId;
+          onCommand((s) => execute(s, removeRow(id)));
+          setActiveRowId(null);
+          onSelectionChange(EMPTY_SELECTION, "clear");
+          return;
+        }
         const sel = live.current.selection;
         if (sel.seatIds.length > 0) {
           onCommand((s) => execute(s, removeSeats(sel.seatIds)));
@@ -521,7 +590,7 @@ export function ZoneSeatingEditor({
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [onCommand, onSelectionChange]);
+  }, [onCommand, onSelectionChange, setDragState]);
 
   const dragOffset = useMemo(() => {
     if (!drag || drag.subject.kind !== "moveSeats") return null;
@@ -538,10 +607,12 @@ export function ZoneSeatingEditor({
       ? drag
         ? "grabbing"
         : "grab"
-      : tool === "seat"
+      : tool === "seat" || tool === "row"
         ? "copy"
         : "default";
-  const selectedSeats = new Set(selection.seatIds);
+  const selectedSeats = new Set(
+    activeRow && !assignOnly ? activeRow.seatIds : selection.seatIds,
+  );
 
   const showLabels = renderSpec.seatLabelChars > 0;
   /** 姓名还没写得下时，「看姓名」按钮才有意义。 */
@@ -587,13 +658,18 @@ export function ZoneSeatingEditor({
             <ToggleGroup
               value={[tool]}
               onValueChange={(values) => {
-                if (values.length) setTool(values[0] as SeatTool);
+                if (values.length) {
+                  setTool(values[0] as SeatTool);
+                  setActiveRowId(null);
+                }
               }}
               size="sm"
               aria-label="画布工具"
             >
               {(assignOnly
-                ? TOOL_ITEMS.filter((item) => item.value !== "seat")
+                ? TOOL_ITEMS.filter(
+                    (item) => item.value !== "seat" && item.value !== "row",
+                  )
                 : TOOL_ITEMS
               ).map((item) => (
                 <ToggleGroupItem
@@ -705,6 +781,53 @@ export function ZoneSeatingEditor({
                 <g
                   transform={`translate(${viewport.x} ${viewport.y}) scale(${viewport.scale})`}
                 >
+                  {!assignOnly && activeRow && (
+                    <polyline
+                      points={activeRow.seatIds
+                        .map((id) => zoneSeatById.get(id))
+                        .filter((seat) => !!seat)
+                        .map(
+                          (seat) =>
+                            `${seat.x + (dragOffset?.seatIds.has(seat.externalId) ? dragOffset.delta.x : 0)},${seat.y + (dragOffset?.seatIds.has(seat.externalId) ? dragOffset.delta.y : 0)}`,
+                        )
+                        .join(" ")}
+                      fill="none"
+                      stroke="var(--primary)"
+                      strokeOpacity={0.4}
+                      strokeWidth={2 / viewport.scale}
+                      pointerEvents="none"
+                    />
+                  )}
+                  {drag?.subject.kind === "drawRow" &&
+                    validRowParams(rowDefaults) && (
+                      <g pointerEvents="none" aria-label="新排预览">
+                        {rowPoints(
+                          {
+                            ...rowParamsFromDrag(
+                              drag.start,
+                              drag.current,
+                              rowDefaults,
+                            ),
+                            x: drag.start.x,
+                            y: drag.start.y,
+                          },
+                          rowParamsFromDrag(
+                            drag.start,
+                            drag.current,
+                            rowDefaults,
+                          ).count,
+                        ).map((point) => (
+                          <circle
+                            key={`${point.x},${point.y}`}
+                            cx={point.x}
+                            cy={point.y}
+                            r={renderSpec.hitRadiusPx / viewport.scale}
+                            fill="var(--primary)"
+                            fillOpacity={0.3}
+                          />
+                        ))}
+                      </g>
+                    )}
                   {zoneSeats.map((seat) => {
                     const status = seatStatus?.get(seat.externalId);
                     return (
@@ -749,7 +872,62 @@ export function ZoneSeatingEditor({
           {legend}
         </div>
 
-        {rightPanel}
+        {assignOnly ? (
+          rightPanel
+        ) : (
+          <div className="flex max-h-[calc(100dvh-15rem)] min-h-0 w-72 shrink-0 flex-col gap-3 overflow-y-auto [&>*]:w-full">
+            <RowPanel
+              rows={zoneRows}
+              activeRow={activeRow}
+              creating={tool === "row"}
+              defaults={rowDefaults}
+              onDefaults={setRowDefaults}
+              onSelect={(row) => {
+                setActiveRowId(row?.externalId ?? null);
+                setTool("select");
+                onSelectionChange(
+                  row ? { zoneIds: [], seatIds: row.seatIds } : EMPTY_SELECTION,
+                  "tap",
+                );
+              }}
+              onChange={(params) => {
+                if (activeRow) {
+                  onCommand((s) =>
+                    execute(s, updateRow(activeRow.externalId, params)),
+                  );
+                }
+              }}
+              onCreate={() => {
+                const rect = svgRef.current?.getBoundingClientRect();
+                if (!rect || !validRowParams(rowDefaults)) return;
+                const center = clientToWorld(
+                  rect.left + rect.width / 2,
+                  rect.top + rect.height / 2,
+                );
+                const bounds = boundsOf(
+                  rowPoints({ ...rowDefaults, x: 0, y: 0 }, rowDefaults.count),
+                );
+                createRow(
+                  {
+                    x: center.x - bounds.x - bounds.width / 2,
+                    y: center.y - bounds.y - bounds.height / 2,
+                  },
+                  rowDefaults,
+                );
+              }}
+              onRemove={() => {
+                if (activeRow)
+                  onCommand((s) => execute(s, removeRow(activeRow.externalId)));
+                setActiveRowId(null);
+                onSelectionChange(EMPTY_SELECTION, "clear");
+              }}
+              onOrder={(id, direction) =>
+                onCommand((s) => execute(s, moveRowOrder(id, direction)))
+              }
+            />
+            {!activeRow && tool !== "row" && rightPanel}
+          </div>
+        )}
       </div>
 
       {!assignOnly && (
@@ -763,6 +941,7 @@ export function ZoneSeatingEditor({
               execute(s, applyLayoutToZone(zone.externalId, preset, params)),
             );
             onSelectionChange(EMPTY_SELECTION, "clear");
+            setActiveRowId(null);
           }}
         />
       )}

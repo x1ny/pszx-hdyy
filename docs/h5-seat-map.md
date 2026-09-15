@@ -9,8 +9,9 @@ read_when:
 
 2026-09-08 逐项确认。行程行上的「座位图」按钮推上来的那张图。
 
-**它回答的问题只有一个：我这个位置在这片区的哪个方位。** 不回答"邻座是谁"，
-也不回答"哪边是舞台"。下面每一条都是从这句话推出来的。
+个人座位图回答的是**我这个位置在这片区的哪个方位**；团体座位图回答的是**我所在
+团体占用了这片区的哪些位置**。两者都不回答"邻座是谁"，也不回答"哪边是舞台"。
+下面每一条都是从这句话推出来的。
 
 ## 只有一个区，不是产品选择而是数据事实
 
@@ -35,14 +36,15 @@ label/kind/rank/enabled/removedAt 但没有 x/y；反过来 `enabled` 和 `remov
 
 - **只读。** `saveLayout` / `createPlan` 的写路径继续不解析——归并靠前端投影好的
   `externalId`，不依赖 blob 结构。
-- **只取坐标。** 不读 zones、颜色、world 尺寸。
+- **只取 H5 必需字段。** 座位图取坐标；团体范围取 `rows[].seatIds` 的显式顺序，
+  不读 zones、颜色、world 尺寸。
 - **失败返回 null，不抛。** 为一张示意图让整个行程页 500 不划算。
 
 让 h5 自己解析（字面上保住那条不变量）是个假选择：耦合一样存在，只是从服务端
 搬到了 h5，代价是多一份手写解析器（web 已有一份，两个前端还不许共享代码）外加
 把整份 blob + 整份座位行都发下去让前端 join。
 
-## 两个接口
+## 三个接口
 
 `getItinerary` 的每条议程多一个 `hasSeatMap`：**便宜判定**——只 join
 `segment_seating_layout` 取 `renderer_kind`，**绝不取 `data` 列**。一位嘉宾可能
@@ -71,6 +73,13 @@ label/kind/rank/enabled/removedAt 但没有 x/y；反过来 `enabled` 和 `remov
   环节和环节不存在返回**同一个** NOT_FOUND，不区分是有意的。
 - `getSeatMap` 与行程查询保持同一条 `seating_enabled` 和 confirmed 口径；排位关闭
   后从旧页面或旧链接请求也返回 NOT_FOUND，不重新暴露历史座位图。
+
+`getOrganizationSeatMap` 同样按需取，但入口不是个人 `segmentMemberId`：它从当前
+嘉宾的 `segment_member` 出发，以该行的 `organizationId` 环节快照匹配同环节、已确认、
+未撤销的团体占位。没有个人排座的议程行才会露出入口。出参形状仍是
+`{ zoneName, seatLabel, map }`：`seatLabel` 已由服务端按 `rows[].seatIds` 合并为范围，
+例如 `5排03–05座、6排01–03座`；`aisleEvery` 只控制画布间距，**不切断范围**。图里
+所有团体占位均标红，其他位置只给无标签灰点；没有排关系的历史 blob 退回逐个座位号。
 
 `pitch`（典型座距）在服务端算，不让 h5 重算：算法要和管理端画布严格一致，否则
 同一片座位在两端会得出两种密度判断。

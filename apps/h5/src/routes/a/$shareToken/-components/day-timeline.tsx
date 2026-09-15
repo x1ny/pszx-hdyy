@@ -48,6 +48,7 @@ export function DayTimeline({
   entries,
   status,
   onOpenSeatMap,
+  onOpenOrganizationSeatMap,
 }: {
   entries: DayEntry[];
   /** 议程行的进行状态由页面统一算一次传进来，避免每行各自读一次时钟。 */
@@ -59,6 +60,7 @@ export function DayTimeline({
    * 每行一个 Drawer 就是四五套焦点陷阱和滚动锁定同时挂在 DOM 上。
    */
   onOpenSeatMap: (item: AgendaItem) => void;
+  onOpenOrganizationSeatMap: (item: AgendaItem) => void;
 }) {
   return (
     <div>
@@ -73,6 +75,7 @@ export function DayTimeline({
               endTime={entry.endTime}
               status={status(entry.item)}
               onOpenSeatMap={onOpenSeatMap}
+              onOpenOrganizationSeatMap={onOpenOrganizationSeatMap}
               {...shared}
             />
           );
@@ -177,6 +180,7 @@ function AgendaRow({
   index,
   isLast,
   onOpenSeatMap,
+  onOpenOrganizationSeatMap,
 }: {
   item: AgendaItem;
   startTime: string;
@@ -185,6 +189,7 @@ function AgendaRow({
   index: number;
   isLast: boolean;
   onOpenSeatMap: (item: AgendaItem) => void;
+  onOpenOrganizationSeatMap: (item: AgendaItem) => void;
 }) {
   return (
     <Row index={index} isLast={isLast}>
@@ -243,6 +248,40 @@ function AgendaRow({
               >
                 <Icon name="map" size={12} />
                 座位图
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* 有个人排座时，团体范围是文字补充，和参考稿一样不做成第二个座位图入口。 */}
+        {item.seat && item.organizationSeat && (
+          <div className="mt-1.5 flex items-start gap-1 text-caption text-ink-3">
+            <Icon
+              name="users-round"
+              size={12}
+              className="mt-[0.1875rem] shrink-0 text-ink-3"
+            />
+            <span>您的团体成员座位安排在 {item.organizationSeat.seat}</span>
+          </div>
+        )}
+
+        {/* 没有个人排座时，团体座位才作为主要位置和座位图入口。范围按编辑器显式
+            的排顺序汇总，过道不影响连续座号；点开后看的是团体高亮，不冒充个人座位。 */}
+        {!item.seat && item.organizationSeat && (
+          <div className="mt-1.5 flex items-center gap-2.5">
+            <PillTag variant="outline">
+              <span>{item.organizationSeat.zone}</span>
+              <span className="tabular-nums">{item.organizationSeat.seat}</span>
+            </PillTag>
+            {item.organizationSeat.hasSeatMap && (
+              <button
+                type="button"
+                onClick={() => onOpenOrganizationSeatMap(item)}
+                aria-label={`查看${item.organizationSeat.zone}团体座位图`}
+                className="relative flex shrink-0 items-center gap-0.5 text-brand text-caption before:absolute before:-inset-x-2 before:-inset-y-3 before:content-['']"
+              >
+                <Icon name="users-round" size={12} />
+                团体座位
               </button>
             )}
           </div>

@@ -246,10 +246,11 @@ export function resizeRect(
 // ---------------------------------------------------------------------------
 
 /** 排位画布只操作座位和视野，不编辑外层区域形状。 */
-export const SEAT_TOOLS = ["select", "seat", "pan"] as const;
+export const SEAT_TOOLS = ["select", "seat", "row", "pan"] as const;
 export type SeatTool = (typeof SEAT_TOOLS)[number];
 
 export type SeatDragSubject =
+  | { kind: "drawRow"; start: Point }
   | { kind: "none" }
   | { kind: "pan" }
   | { kind: "moveSeats"; seatIds: string[] }
@@ -326,6 +327,7 @@ export function resolveSeatDragSubject(input: {
 
   if (forcePan || tool === "pan") return { kind: "pan" };
   if (tool === "seat") return { kind: "none" };
+  if (tool === "row") return { kind: "drawRow", start: point };
 
   const seatId = hitSeat(doc, point, hitRadius);
   if (seatId) {

@@ -114,13 +114,13 @@ function SeatMapBody({ data }: { data: SeatMap }) {
           </div>
         </div>
       )}
-      <SeatMapCanvas map={data.map} mine={mine} />
+      <SeatMapCanvas map={data.map} highlights={[mine]} />
     </>
   );
 }
 
 /** 图画不出来时的样子。座位号已经在上面的卡片里，这里不用再说一遍。 */
-function SeatMapFallback() {
+export function SeatMapFallback() {
   return (
     <div className="rounded-xl bg-page px-4 py-6 text-center">
       <p className="text-body text-ink-2">座位图暂不可用</p>
@@ -128,22 +128,33 @@ function SeatMapFallback() {
   );
 }
 
-function SeatMapPlaceholder() {
+export function SeatMapPlaceholder() {
   return <div className="h-24 animate-pulse rounded-xl bg-page" />;
 }
 
 /**
  * 图本体。宽度要等 DOM 量出来才知道，所以布局是一次 layout effect 之后的事。
  */
-function SeatMapCanvas({
+export type SeatMapMarker = { x: number; y: number; label: string };
+export type SeatMapData = {
+  seats: { x: number; y: number }[];
+  mine: SeatMapMarker[];
+  pitch: number;
+};
+
+export function SeatMapCanvas({
   map,
-  mine,
+  highlights,
+  highlightMode = "pin",
 }: {
-  map: NonNullable<SeatMap["map"]>;
-  mine: NonNullable<SeatMap["map"]>["mine"][number];
+  map: SeatMapData;
+  highlights: readonly SeatMapMarker[];
+  /** 个人座位显示定位钉；团体座位按参考样式把所有占位都标红。 */
+  highlightMode?: "pin" | "seats";
 }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState<SeatMapLayout | null>(null);
+  const focus = highlights[0];
 
   /**
    * `useLayoutEffect` 而不是 `useEffect`：面板推上来之后紧接着量宽度、算完再
@@ -154,13 +165,13 @@ function SeatMapCanvas({
    */
   useLayoutEffect(() => {
     const box = boxRef.current;
-    if (!box) return;
+    if (!box || !focus) return;
 
     const measure = () => {
       setLayout(
         seatMapLayout({
           seats: map.seats,
-          mine,
+          mine: focus,
           pitch: map.pitch,
           viewWidth: box.clientWidth,
           // 下界：再扁的区也得有地方站定位钉。上界：面板本身最高
@@ -175,7 +186,10 @@ function SeatMapCanvas({
     const observer = new ResizeObserver(measure);
     observer.observe(box);
     return () => observer.disconnect();
-  }, [map, mine]);
+  }, [map, focus]);
+
+  if (!focus) return null;
+  const highlightPath = highlightsToPath(highlights);
 
   return (
     <div
@@ -190,7 +204,11 @@ function SeatMapCanvas({
             height="100%"
             viewBox={layout.viewBox}
             role="img"
-            aria-label={`座位 ${mine.label} 在所在区域的位置示意图`}
+            aria-label={
+              highlightMode === "seats"
+                ? "团体座位在所在区域的位置示意图"
+                : `座位 ${focus.label} 在所在区域的位置示意图`
+            }
           >
             {/*
               一条 path 装下全部座位。`M x y h0` 是零长度子路径，靠
@@ -206,6 +224,26 @@ function SeatMapCanvas({
               strokeLinecap="round"
               vectorEffect="non-scaling-stroke"
             />
+            {highlightMode === "seats" && (
+              <>
+                <path
+                  d={highlightPath}
+                  fill="none"
+                  stroke="white"
+                  strokeWidth={layout.dotDiameter + 7}
+                  strokeLinecap="round"
+                  vectorEffect="non-scaling-stroke"
+                />
+                <path
+                  d={highlightPath}
+                  fill="none"
+                  stroke="var(--color-brand)"
+                  strokeWidth={layout.dotDiameter + 1}
+                  strokeLinecap="round"
+                  vectorEffect="non-scaling-stroke"
+                />
+              </>
+            )}
           </svg>
 
           {/*
@@ -214,12 +252,22 @@ function SeatMapCanvas({
             的唯一理由。位置能用一行乘法算准，靠的是 viewBox 长宽比和盒子完全
             一致（见 seat-map-layout.ts）。
           */}
-          <span
-            className="-translate-x-1/2 -translate-y-1/2 pointer-events-none absolute block h-3 w-3 rounded-full border-2 border-white bg-brand shadow-[0_0_0_0.25rem_rgba(232,68,46,0.25)]"
-            style={{ left: `${layout.pin.left}px`, top: `${layout.pin.top}px` }}
-          />
+          {highlightMode === "pin" && (
+            <span
+              className="-translate-x-1/2 -translate-y-1/2 pointer-events-none absolute block h-3 w-3 rounded-full border-2 border-white bg-brand shadow-[0_0_0_0.25rem_rgba(232,68,46,0.25)]"
+              style={{
+                left: `${layout.pin.left}px`,
+                top: `${layout.pin.top}px`,
+              }}
+            />
+          )}
         </>
       )}
     </div>
   );
+}
+
+/** 团体高亮同样压成一条 path，避免团体占了几百个位置时造出几百个 DOM 节点。 */
+function highlightsToPath(highlights: readonly SeatMapMarker[]) {
+  return highlights.map((seat) => `M${seat.x} ${seat.y}h0`).join("");
 }

@@ -65,6 +65,22 @@ const layoutData = {
     },
   ],
   seats: seats.map(({ id: _id, ...seat }) => seat),
+  // 关系顺序和几何坐标分别保存：H5 团体范围按这份明确的排顺序合并，绝不从
+  // A/B 标签或 y 坐标猜「下一排」；`aisleEvery` 只是几何留白，不切断座号范围。
+  rows: Array.from({ length: SEAT_ROWS }, (_, row) => ({
+    externalId: `demo-forum-row-${row + 1}`,
+    zoneExternalId: "zone-main",
+    name: `${String.fromCharCode("A".charCodeAt(0) + row)}排`,
+    seatIds: seats
+      .slice(row * SEAT_COLUMNS, (row + 1) * SEAT_COLUMNS)
+      .map((seat) => seat.externalId),
+    shape: "line",
+    x: CANVAS_PADDING,
+    y: CANVAS_PADDING + row * SEAT_Y_GAP,
+    angle: 0,
+    spacing: SEAT_X_GAP,
+    aisleEvery: 5,
+  })),
 };
 
 export const seed: SeedFn = async (db, { userId }) => {
@@ -122,7 +138,8 @@ export const seed: SeedFn = async (db, { userId }) => {
     })),
   );
 
-  // 同一人预占两座，另有团体占位，覆盖多座展示、统计、解绑和 H5 定位。
+  // 王芳预占两座；纺织商会保留单席团体占位；时尚产业促进会占 A4–A6，供没有
+  // 个人排座的成员在 H5 验收「我的团体座位」和过道不断开范围的路径。
   await db.insert(seatAssignment).values([
     {
       id: 1,
@@ -151,5 +168,14 @@ export const seed: SeedFn = async (db, { userId }) => {
       segmentMemberId: assignedMember.id,
       assignedBy: userId,
     },
+    ...[3, 4, 5].map((index) => ({
+      id: index + 1,
+      planId: DEMO.seatingPlanId,
+      segmentId: DEMO.segmentIds.forum,
+      segmentSeatId: seats[index]?.id ?? index + 1,
+      occupantType: "organization" as const,
+      organizationId: DEMO.organizationIds.fashionAssociation,
+      assignedBy: userId,
+    })),
   ]);
 };

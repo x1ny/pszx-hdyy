@@ -77,6 +77,13 @@ export function buildPlanDoc(input: {
     world: { width: bounds.width, height: bounds.height },
     zones: [zone],
     seats,
+    ...(source?.rows
+      ? {
+          rows: source.rows.filter(
+            (row) => row.zoneExternalId === input.zoneExternalId,
+          ),
+        }
+      : {}),
   };
 
   return { doc, seats: projectPlanSeats(doc) };

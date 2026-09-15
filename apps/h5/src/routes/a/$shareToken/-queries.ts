@@ -23,11 +23,21 @@ export type SeatMap = ApiData<
   InferResponseType<typeof api.api.h5.getSeatMap.$post>
 >;
 
+export type OrganizationSeatMap = ApiData<
+  InferResponseType<typeof api.api.h5.getOrganizationSeatMap.$post>
+>;
+
 export const itineraryKeys = {
   all: ["itinerary"] as const,
   detail: (shareToken: string) => [...itineraryKeys.all, shareToken] as const,
   seatMap: (shareToken: string, segmentId: number) =>
     [...itineraryKeys.detail(shareToken), "seatMap", segmentId] as const,
+  organizationSeatMap: (shareToken: string, segmentId: number) =>
+    [
+      ...itineraryKeys.detail(shareToken),
+      "organizationSeatMap",
+      segmentId,
+    ] as const,
 };
 
 export const itineraryQueryOptions = (shareToken: string) =>
@@ -62,6 +72,23 @@ export const seatMapQueryOptions = (
       unwrap(
         api.api.h5.getSeatMap.$post({
           // enabled 保证了只有 segmentId 非空时才会跑到这里。
+          json: { shareToken, segmentId: segmentId as number },
+        }),
+      ),
+    enabled: segmentId !== null,
+    staleTime: 5 * 60 * 1000,
+  });
+
+/** 团体座位图同样按需取，避免把画布坐标塞进行程首屏。 */
+export const organizationSeatMapQueryOptions = (
+  shareToken: string,
+  segmentId: number | null,
+) =>
+  queryOptions({
+    queryKey: itineraryKeys.organizationSeatMap(shareToken, segmentId ?? 0),
+    queryFn: () =>
+      unwrap(
+        api.api.h5.getOrganizationSeatMap.$post({
           json: { shareToken, segmentId: segmentId as number },
         }),
       ),

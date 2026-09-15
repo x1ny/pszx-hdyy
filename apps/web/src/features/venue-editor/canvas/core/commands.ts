@@ -15,7 +15,11 @@ import {
   type Rect,
   scalePoints,
 } from "./geometry";
-import { generateLayout, type LayoutParams, type LayoutPreset } from "./layout";
+import {
+  generateLayoutRows,
+  type LayoutParams,
+  type LayoutPreset,
+} from "./layout";
 
 /**
  * 对文档的所有修改都走 Command。
@@ -185,6 +189,8 @@ export const removeZones = (zoneIds: string[]): Command => ({
     draft.seats = draft.seats.filter(
       (seat) => !targets.has(seat.zoneExternalId),
     );
+    if (draft.rows)
+      draft.rows = draft.rows.filter((row) => !targets.has(row.zoneExternalId));
   },
 });
 
@@ -213,19 +219,34 @@ export const applyLayoutToZone = (
     const zone = findZone(draft, zoneId);
     if (!zone) return;
 
-    const generated = generateLayout(preset, params);
+    const generated = generateLayoutRows(preset, params);
 
     draft.seats = draft.seats.filter((seat) => seat.zoneExternalId !== zoneId);
-    generated.forEach((seat, index) => {
-      draft.seats.push({
-        externalId: newId("s"),
+    draft.rows = (draft.rows ?? []).filter(
+      (row) => row.zoneExternalId !== zoneId,
+    );
+    let index = 0;
+    generated.forEach(({ seats, ...row }) => {
+      const seatIds: string[] = [];
+      seats.forEach((seat) => {
+        const id = newId("s");
+        seatIds.push(id);
+        draft.seats.push({
+          externalId: id,
+          zoneExternalId: zoneId,
+          label: seat.label,
+          kind: "seat",
+          rank: "normal",
+          ordinal: index++,
+          x: seat.x,
+          y: seat.y,
+        });
+      });
+      draft.rows?.push({
+        ...row,
+        externalId: newId("r"),
         zoneExternalId: zoneId,
-        label: seat.label,
-        kind: "seat",
-        rank: "normal",
-        ordinal: index,
-        x: seat.x,
-        y: seat.y,
+        seatIds,
       });
     });
   },
@@ -258,6 +279,13 @@ export const moveSeats = (seatIds: string[], delta: Point): Command => ({
   apply: (draft) => {
     const targets = new Set(seatIds);
     const zoneIds = new Set(draft.zones.map((zone) => zone.externalId));
+
+    for (const row of draft.rows ?? []) {
+      if (row.seatIds.length && row.seatIds.every((id) => targets.has(id))) {
+        row.x += delta.x;
+        row.y += delta.y;
+      }
+    }
 
     for (const seat of draft.seats) {
       if (!targets.has(seat.externalId)) continue;
@@ -292,5 +320,7 @@ export const removeSeats = (seatIds: string[]): Command => ({
   apply: (draft) => {
     const targets = new Set(seatIds);
     draft.seats = draft.seats.filter((seat) => !targets.has(seat.externalId));
+    for (const row of draft.rows ?? [])
+      row.seatIds = row.seatIds.filter((id) => !targets.has(id));
   },
 });

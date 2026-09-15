@@ -31,6 +31,7 @@ import { type DayEntry, DayTimeline } from "./day-timeline";
 export function ScheduleList({
   agenda,
   onOpenSeatMap,
+  onOpenOrganizationSeatMap,
   trips,
   cars,
 }: {
@@ -39,6 +40,7 @@ export function ScheduleList({
   cars: Car[];
   /** 座位图面板挂在页面上，这里只把"打开哪一场"透传下去。 */
   onOpenSeatMap: (item: AgendaItem) => void;
+  onOpenOrganizationSeatMap: (item: AgendaItem) => void;
 }) {
   // `activity_resource.start_time` 可空。没有时间的用车不进任何日期，统一放到
   // 页尾的「待定安排」卡片里，避免猜日期或时间顺序。
@@ -173,6 +175,7 @@ export function ScheduleList({
               entries={entriesByDay.get(days[0] ?? "") ?? []}
               status={status}
               onOpenSeatMap={onOpenSeatMap}
+              onOpenOrganizationSeatMap={onOpenOrganizationSeatMap}
             />
           ) : (
             days.map((day) => {
@@ -190,6 +193,7 @@ export function ScheduleList({
                     entries={entries}
                     status={status}
                     onOpenSeatMap={onOpenSeatMap}
+                    onOpenOrganizationSeatMap={onOpenOrganizationSeatMap}
                   />
                 </DayCard>
               );
@@ -208,6 +212,7 @@ export function ScheduleList({
                 entries={pendingEntries}
                 status={status}
                 onOpenSeatMap={onOpenSeatMap}
+                onOpenOrganizationSeatMap={onOpenOrganizationSeatMap}
               />
             </DayCard>
           )}

@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { db } from "../../infra/db";
 import { err, ok } from "../../shared/result";
 import {
+  formatOrganizationSeatRanges,
   parseSeatPoints,
   SEAT_CANVAS_RENDERER_KIND,
   seatFieldPitch,
@@ -21,7 +22,11 @@ import {
 import { memberTrip } from "../trip/schema";
 import { activityVenueZone } from "../venue/schema";
 import { type H5Variables, requireH5Member } from "./auth";
-import { GetItineraryInput, GetSeatMapInput } from "./validation";
+import {
+  GetItineraryInput,
+  GetOrganizationSeatMapInput,
+  GetSeatMapInput,
+} from "./validation";
 
 /**
  * 活动简介按换行拆段。`activity.description` 是纯文本（刻意不接富文本，理由见
@@ -150,6 +155,73 @@ export const itinerarySeatsQuery = (activityId: number, memberId: number) =>
     );
 
 /**
+ * 这个人在某环节所属团体的已确认占位。
+ *
+ * 团体不是成员主档的当前属性，而是 `segment_member.organization_id` 的环节快照：
+ * 人换了团体也不能把旧场次的座位跟着换走。查询从这条快照出发，并把团体分配钉在
+ * 同一个环节；因此请求者只能得到自己在该环节所属团体的座位，不能拿组织 id 探查
+ * 其他团体。
+ *
+ * `data` 只在这里读取，是为了把明确的 rows 顺序压缩成范围文字后立刻丢弃，绝不
+ * 回传画布 blob。团体占位通常只有一两个环节；没有团体占位的嘉宾也不会付出这个
+ * jsonb 读取成本。
+ */
+export const itineraryOrganizationSeatsQuery = (
+  activityId: number,
+  memberId: number,
+) =>
+  db
+    .select({
+      segmentId: segmentMember.segmentId,
+      seats: sql<{ label: string; externalId: string }[]>`json_agg(
+        json_build_object('label', ${segmentSeat.label}, 'externalId', ${segmentSeat.externalId})
+        order by ${segmentSeat.ordinal}, ${segmentSeat.id}
+      )`.as("seats"),
+      zone: activityVenueZone.name,
+      rendererKind: segmentSeatingLayout.rendererKind,
+      data: segmentSeatingLayout.data,
+    })
+    .from(segmentMember)
+    .innerJoin(
+      seatAssignment,
+      and(
+        eq(seatAssignment.organizationId, segmentMember.organizationId),
+        eq(seatAssignment.segmentId, segmentMember.segmentId),
+        eq(seatAssignment.occupantType, "organization"),
+        isNull(seatAssignment.revokedAt),
+      ),
+    )
+    .innerJoin(
+      segmentSeatingPlan,
+      and(
+        eq(segmentSeatingPlan.id, seatAssignment.planId),
+        eq(segmentSeatingPlan.status, "confirmed"),
+      ),
+    )
+    .innerJoin(segmentSeat, eq(segmentSeat.id, seatAssignment.segmentSeatId))
+    .innerJoin(
+      activityVenueZone,
+      eq(activityVenueZone.id, segmentSeatingPlan.activityVenueZoneId),
+    )
+    .leftJoin(
+      segmentSeatingLayout,
+      eq(segmentSeatingLayout.planId, segmentSeatingPlan.id),
+    )
+    .where(
+      and(
+        eq(segmentMember.activityId, activityId),
+        eq(segmentMember.memberId, memberId),
+        isNull(segmentSeat.removedAt),
+      ),
+    )
+    .groupBy(
+      segmentMember.segmentId,
+      activityVenueZone.name,
+      segmentSeatingLayout.rendererKind,
+      segmentSeatingLayout.data,
+    );
+
+/**
  * 座位图：我在这个环节的位置，外加这份方案的画布 blob。
  *
  * **越权就挡在这条查询的形状上**，不在 handler 的 if 里：入口是 `segment_member`
@@ -189,6 +261,68 @@ export const seatMapQuery = (
       seatAssignment,
       and(
         eq(seatAssignment.segmentMemberId, segmentMember.id),
+        isNull(seatAssignment.revokedAt),
+      ),
+    )
+    .innerJoin(
+      segmentSeatingPlan,
+      and(
+        eq(segmentSeatingPlan.id, seatAssignment.planId),
+        eq(segmentSeatingPlan.status, "confirmed"),
+      ),
+    )
+    .innerJoin(segmentSeat, eq(segmentSeat.id, seatAssignment.segmentSeatId))
+    .innerJoin(
+      activityVenueZone,
+      eq(activityVenueZone.id, segmentSeatingPlan.activityVenueZoneId),
+    )
+    .innerJoin(
+      segmentSeatingLayout,
+      eq(segmentSeatingLayout.planId, segmentSeatingPlan.id),
+    )
+    .where(
+      and(
+        eq(segmentMember.activityId, activityId),
+        eq(segmentMember.memberId, memberId),
+        eq(segmentMember.segmentId, segmentId),
+        isNull(segmentSeat.removedAt),
+      ),
+    )
+    .groupBy(
+      segmentSeatingPlan.id,
+      activityVenueZone.id,
+      segmentSeatingLayout.planId,
+    )
+    .limit(1);
+
+/**
+ * 团体座位图：返回的是本人在该环节所属团体的占位，整片区其余座位仍只有无标签
+ * 坐标。个人座位和团体座位分接口，避免一个人有固定座位时误把团体占位当成自己的
+ * 座位入口。
+ */
+export const organizationSeatMapQuery = (
+  activityId: number,
+  memberId: number,
+  segmentId: number,
+) =>
+  db
+    .select({
+      planId: segmentSeatingPlan.id,
+      zoneName: activityVenueZone.name,
+      organizationSeats: sql<{ label: string; externalId: string }[]>`json_agg(
+        json_build_object('label', ${segmentSeat.label}, 'externalId', ${segmentSeat.externalId})
+        order by ${segmentSeat.ordinal}, ${segmentSeat.id}
+      )`.as("organization_seats"),
+      rendererKind: segmentSeatingLayout.rendererKind,
+      data: segmentSeatingLayout.data,
+    })
+    .from(segmentMember)
+    .innerJoin(
+      seatAssignment,
+      and(
+        eq(seatAssignment.organizationId, segmentMember.organizationId),
+        eq(seatAssignment.segmentId, segmentMember.segmentId),
+        eq(seatAssignment.occupantType, "organization"),
         isNull(seatAssignment.revokedAt),
       ),
     )
@@ -364,18 +498,29 @@ export const h5Routes = new Hono<{ Variables: H5Variables }>()
       return c.json(err({ code: "NOT_FOUND", message: "活动不存在" }));
     }
 
-    // 六个查询互不依赖，并发发出去省掉五个往返。
-    const [segments, seatRows, trips, cars, heroRows, contactRows] =
-      await Promise.all([
-        itinerarySegmentsQuery(activityId, me.memberId),
-        itinerarySeatsQuery(activityId, me.memberId),
-        itineraryTripsQuery(me.activityMemberId),
-        itineraryCarsQuery(me.activityMemberId),
-        itineraryHeroQuery(activityId),
-        itineraryContactQuery(me.activityMemberId),
-      ]);
+    // 七个查询互不依赖，并发发出去省掉六个往返。
+    const [
+      segments,
+      seatRows,
+      organizationSeatRows,
+      trips,
+      cars,
+      heroRows,
+      contactRows,
+    ] = await Promise.all([
+      itinerarySegmentsQuery(activityId, me.memberId),
+      itinerarySeatsQuery(activityId, me.memberId),
+      itineraryOrganizationSeatsQuery(activityId, me.memberId),
+      itineraryTripsQuery(me.activityMemberId),
+      itineraryCarsQuery(me.activityMemberId),
+      itineraryHeroQuery(activityId),
+      itineraryContactQuery(me.activityMemberId),
+    ]);
     const hero = heroRows[0];
     const seatBySegment = new Map(seatRows.map((row) => [row.segmentId, row]));
+    const organizationSeatBySegment = new Map(
+      organizationSeatRows.map((row) => [row.segmentId, row]),
+    );
 
     // ownerPhone 为空/空白时整块不给：前端拿到 null 就不渲染联系人卡，而不是
     // 渲染一张没有电话可拨的卡片。
@@ -406,6 +551,23 @@ export const h5Routes = new Hono<{ Variables: H5Variables }>()
         },
         agenda: segments.map((segment) => {
           const assigned = seatBySegment.get(segment.id);
+          const organizationAssigned = organizationSeatBySegment.get(
+            segment.id,
+          );
+          // 团体范围是成员的补充现场信息，不替代个人座位：有固定座位的人也要知道
+          // 自己的同团成员在哪一片。前端只在没有个人座位时开放团体图入口。
+          const organizationSeat = organizationAssigned
+            ? {
+                zone: organizationAssigned.zone,
+                seat: formatOrganizationSeatRanges(
+                  organizationAssigned.data,
+                  organizationAssigned.seats,
+                ),
+                hasSeatMap:
+                  organizationAssigned.rendererKind ===
+                  SEAT_CANVAS_RENDERER_KIND,
+              }
+            : null;
           return {
             ...segment,
             zone: assigned?.zone ?? null,
@@ -418,6 +580,7 @@ export const h5Routes = new Hono<{ Variables: H5Variables }>()
              * 写下去的），但它仍然有降级文案，不会给出一个空面板。
              */
             hasSeatMap: assigned?.rendererKind === SEAT_CANVAS_RENDERER_KIND,
+            organizationSeat,
           };
         }),
         trips,
@@ -463,7 +626,49 @@ export const h5Routes = new Hono<{ Variables: H5Variables }>()
         ),
       }),
     );
-  });
+  })
+
+  /** 团体占位的示意图，授权和个人座位图一样落在查询形状上。 */
+  .post(
+    "/getOrganizationSeatMap",
+    jsonBody(GetOrganizationSeatMapInput),
+    async (c) => {
+      const activityId = c.get("h5Activity").id;
+      const me = c.get("h5Member");
+      const { segmentId } = c.req.valid("json");
+
+      const [row] = await organizationSeatMapQuery(
+        activityId,
+        me.memberId,
+        segmentId,
+      );
+      if (!row) {
+        return c.json(
+          err({ code: "NOT_FOUND", message: "没有找到您所在团体的座位" }),
+        );
+      }
+
+      return c.json(
+        ok({
+          zoneName: row.zoneName,
+          seatLabel: formatOrganizationSeatRanges(
+            row.data,
+            row.organizationSeats,
+          ),
+          map: buildSeatMap(
+            {
+              mySeats: row.organizationSeats,
+              rendererKind: row.rendererKind,
+              data: row.data,
+            },
+            (await planLiveSeatIdsQuery(row.planId)).map(
+              (seat) => seat.externalId,
+            ),
+          ),
+        }),
+      );
+    },
+  );
 
 /**
  * 画布 blob + 座位行 → 一份能直接画的点集。画不出来返回 null。

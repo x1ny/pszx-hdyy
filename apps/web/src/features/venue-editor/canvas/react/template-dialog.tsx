@@ -42,8 +42,7 @@ import {
  * 还是照旧把"上次用的模板"显示成当前选中——像是"这个区域仍然是剧场排位"，
  * 其实早就不是了。
  *
- * 改成对话框之后：模板只是**输入**，点"生成"那一刻起消费掉、产出一批普通座位，
- * 关闭对话框后不留任何痕迹——跟直接用「点放位置」逐个摆出来的座位没有任何区别。
+ * 模板只是输入，生成后保留排对象与座位。每排可以独立调参，座位也可自由移动。
  * `CanvasZone` 因此也不用再存 `preset`/`params`（见 `document.ts`）。
  *
  * 只列剧场/宴会/秀场三种真正生成座位的预设，不再把"自由排座"也做成一张卡片——
@@ -132,7 +131,7 @@ export function TemplateDialog({
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader
           title="导入排位模板"
-          description="选一种排法快速生成座位，生成之后就是普通座位，可以随时手动调整。"
+          description="按排生成座位，之后可逐排调整数量、间距和方向，也可自由移动单个座位。"
         />
         <DialogBody className="flex flex-col gap-4">
           <div className="grid grid-cols-3 gap-3">

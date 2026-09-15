@@ -8,8 +8,9 @@
  * - **只读。** 写路径（`venue/saveLayout`、`seating/saveLayout`、`createPlan`）
  *   继续一个字节都不解析——座位由前端投影好传上来，服务端按 `externalId` 归并。
  *   那条不变量保护的是归并逻辑不依赖 blob 结构，这里不碰它。
- * - **只取坐标。** 不读 zones、不读颜色、不读 world 尺寸。多读一个字段就多一分
- *   将来编辑器改格式时这里静默失效的面积。
+ * - **只取 H5 必需的字段。** 座位图只读坐标；团体座位范围只读排名和座位在排内
+ *   的顺序。不读 zones、颜色、world 尺寸等呈现细节。多读一个字段就多一分将来
+ *   编辑器改格式时这里静默失效的面积。
  * - **失败就是 null，不抛。** 唯一的消费方是 h5 的座位图，拿到 null 时降级成
  *   「只给编号不给图」。为一张示意图让嘉宾的整个行程页 500 是不划算的。
  *
@@ -65,6 +66,122 @@ export function parseSeatPoints(data: unknown): SeatPoint[] | null {
   }
 
   return points;
+}
+
+type SeatReference = { externalId: string; label: string };
+
+type NumberedLabel = {
+  prefix: string;
+  number: number;
+  rawNumber: string;
+  suffix: string;
+};
+
+/**
+ * 团体占位 → 面向嘉宾的排内范围。
+ *
+ * 座位画在什么位置和它在一排里的先后是两件事：坐标靠猜不出「5 排后面是 6 排」，
+ * 而 `rows[].seatIds` 正是编辑器显式保存的业务顺序。这里按它来合并连续编号，**不
+ * 看 `aisleEvery`**；过道只影响画布上的间距，不能把 `03、04` 说成两段座位。
+ *
+ * 历史布局没有 `rows`、某个位置没挂到排、或者编号不是可连续的数字时，保守退回
+ * 到已确认座位行的稳定顺序。座位信息仍能给出，只是不能伪造一个范围。
+ */
+export function formatOrganizationSeatRanges(
+  data: unknown,
+  seats: readonly SeatReference[],
+) {
+  if (seats.length === 0) return "";
+
+  const fallback = seats.map((seat) => seat.label).join("、");
+  if (
+    !isRecord(data) ||
+    data.schemaVersion !== 1 ||
+    !Array.isArray(data.rows)
+  ) {
+    return fallback;
+  }
+
+  const labelById = new Map(seats.map((seat) => [seat.externalId, seat.label]));
+  const used = new Set<string>();
+  const ranges: string[] = [];
+
+  for (const rawRow of data.rows) {
+    if (!isRecord(rawRow)) continue;
+    if (typeof rawRow.name !== "string" || !Array.isArray(rawRow.seatIds)) {
+      continue;
+    }
+
+    const rowSeats = rawRow.seatIds.flatMap((externalId) => {
+      if (typeof externalId !== "string" || used.has(externalId)) return [];
+      const label = labelById.get(externalId);
+      if (label === undefined) return [];
+      used.add(externalId);
+      return [{ label, numbered: parseNumberedLabel(label) }];
+    });
+
+    for (const run of splitConsecutiveRuns(rowSeats)) {
+      ranges.push(formatRowRun(rawRow.name, run));
+    }
+  }
+
+  // 一份手改过的历史 blob 可能没把所有座位挂到排上。排过的先按编辑器顺序说，
+  // 其余仍按 segment_seat 的 ordinal 顺序补上，绝不静默少报位置。
+  for (const seat of seats) {
+    if (!used.has(seat.externalId)) ranges.push(seat.label);
+  }
+
+  return ranges.length > 0 ? ranges.join("、") : fallback;
+}
+
+function parseNumberedLabel(label: string): NumberedLabel | null {
+  const match = /^(.*?)(\d+)(\D*)$/.exec(label);
+  if (!match) return null;
+  const [, prefix, rawNumber, suffix] = match;
+  const number = Number(rawNumber);
+  return Number.isSafeInteger(number)
+    ? { prefix, number, rawNumber, suffix }
+    : null;
+}
+
+function splitConsecutiveRuns(
+  seats: { label: string; numbered: NumberedLabel | null }[],
+) {
+  const runs: (typeof seats)[] = [];
+  for (const seat of seats) {
+    const current = runs.at(-1);
+    const previous = current?.at(-1);
+    if (
+      current &&
+      previous &&
+      previous.numbered &&
+      seat.numbered &&
+      previous.numbered.prefix === seat.numbered.prefix &&
+      previous.numbered.suffix === seat.numbered.suffix &&
+      previous.numbered.number + 1 === seat.numbered.number
+    ) {
+      current.push(seat);
+    } else {
+      runs.push([seat]);
+    }
+  }
+  return runs;
+}
+
+function formatRowRun(
+  rowName: string,
+  run: { label: string; numbered: NumberedLabel | null }[],
+) {
+  const first = run[0];
+  const last = run.at(-1);
+  if (!first || !last || !first.numbered || !last.numbered) {
+    return run.map((seat) => seat.label).join("、");
+  }
+
+  const prefix = first.numbered.prefix || rowName;
+  const start = `${prefix}${first.numbered.rawNumber}`;
+  if (run.length === 1) return `${start}${first.numbered.suffix}`;
+  return `${start}–${last.numbered.rawNumber}${first.numbered.suffix}`;
 }
 
 /** 一片区域里一个座位都没有（或只有一个）时的兜底座距。同画布编辑器的取值。 */

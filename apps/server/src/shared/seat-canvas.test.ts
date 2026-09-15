@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   DEFAULT_SEAT_PITCH,
+  formatOrganizationSeatRanges,
   parseSeatPoints,
   seatFieldPitch,
 } from "./seat-canvas";
@@ -112,6 +113,55 @@ describe("parseSeatPoints —— 脏座位只跳过它自己", () => {
     seats[500] = seat("broken", Number.NaN, 0);
 
     expect(parseSeatPoints(doc(seats))).toHaveLength(999);
+  });
+});
+
+describe("formatOrganizationSeatRanges —— 团体座位按排的显式顺序合并", () => {
+  const rows = {
+    schemaVersion: 1,
+    rows: [
+      {
+        name: "5排",
+        // 5 排 03 和 04 之间有过道；业务顺序仍是连续的，不能被过道切断。
+        aisleEvery: 3,
+        seatIds: ["5-01", "5-02", "5-03", "5-04", "5-05", "5-06"],
+      },
+      {
+        name: "6排",
+        seatIds: ["6-01", "6-02", "6-03", "6-04"],
+      },
+    ],
+  };
+
+  test("连续座号跨过道照样合并，排与排之间保持分段", () => {
+    expect(
+      formatOrganizationSeatRanges(rows, [
+        { externalId: "5-03", label: "03座" },
+        { externalId: "5-04", label: "04座" },
+        { externalId: "5-05", label: "05座" },
+        { externalId: "6-01", label: "01座" },
+        { externalId: "6-02", label: "02座" },
+        { externalId: "6-03", label: "03座" },
+      ]),
+    ).toBe("5排03–05座、6排01–03座");
+  });
+
+  test("非连续座号不冒充范围", () => {
+    expect(
+      formatOrganizationSeatRanges(rows, [
+        { externalId: "5-03", label: "03座" },
+        { externalId: "5-05", label: "05座" },
+      ]),
+    ).toBe("5排03座、5排05座");
+  });
+
+  test("没有排关系的历史布局保留座位行的稳定顺序", () => {
+    expect(
+      formatOrganizationSeatRanges({ schemaVersion: 1, seats: [] }, [
+        { externalId: "a", label: "A3" },
+        { externalId: "b", label: "A4" },
+      ]),
+    ).toBe("A3、A4");
   });
 });
 

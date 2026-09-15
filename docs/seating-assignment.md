@@ -24,7 +24,7 @@ read_when:
 - 团体统计 `assignedPersonCount` 按 `segmentMemberId` 去重；一个人占多座仍只算一个已排人员。`remainingMemberCount = max(0, totalMembers - assignedPersonCount - organizationSeatCount)`。
 - 方案 `assignedCount` 与 `assignments.length` 是占用位置数，页面使用“已占位置”，不能标成“人数”。
 - 候选人的 `takenSeatLabel`、活动人员详情的 `seatLabel` 保持可空字符串契约，以 `、` 连接全部有效座位，按 `ordinal`、座位 ID 排序。没有座位返回 null；每名候选人、每个参与环节只返回一行。
-- H5 行程每个环节一行，展示全部座位号；座位图可逐个选择本人座位定位，详见 [H5 座位图](h5-seat-map.md)。
+- H5 行程每个环节一行，展示全部个人座位号；座位图可逐个选择本人座位定位。成员所属团体有占位时，个人座位下方附“您的团体成员座位安排在 …”及排内范围；没有个人排座时，团体范围作为主位置并提供「我的团体座位」图：全区只给无标签灰点，团体占位统一标红。范围按画布的显式排顺序合并，过道不切断连续座号，详见 [H5 座位图](h5-seat-map.md)。
 
 ## 数据迁移与交付
 

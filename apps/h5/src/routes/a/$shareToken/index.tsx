@@ -9,6 +9,7 @@ import { useState } from "react";
 import { PageMessage } from "#/shared/components/page-message";
 import { ApiError, H5_UNAUTHORIZED } from "#/shared/lib/api";
 import { EventHero } from "./-components/event-hero";
+import { OrganizationSeatMapSheet } from "./-components/organization-seat-map-sheet";
 import { ScheduleList } from "./-components/schedule-list";
 import { SeatMapSheet } from "./-components/seat-map-sheet";
 import { ToastLayer } from "./-components/toast-layer";
@@ -83,6 +84,8 @@ function ItineraryPage() {
    * 五套焦点陷阱和滚动锁定 —— 而其中至多一个会被打开。
    */
   const [seatMapFor, setSeatMapFor] = useState<AgendaItem | null>(null);
+  const [organizationSeatMapFor, setOrganizationSeatMapFor] =
+    useState<AgendaItem | null>(null);
 
   return (
     <ToastLayer>
@@ -95,6 +98,7 @@ function ItineraryPage() {
             trips={data.trips}
             cars={data.cars}
             onOpenSeatMap={setSeatMapFor}
+            onOpenOrganizationSeatMap={setOrganizationSeatMapFor}
           />
         </div>
       </div>
@@ -103,6 +107,11 @@ function ItineraryPage() {
         shareToken={shareToken}
         item={seatMapFor}
         onClose={() => setSeatMapFor(null)}
+      />
+      <OrganizationSeatMapSheet
+        shareToken={shareToken}
+        item={organizationSeatMapFor}
+        onClose={() => setOrganizationSeatMapFor(null)}
       />
     </ToastLayer>
   );

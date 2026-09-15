@@ -9,9 +9,11 @@ import {
   itineraryCarsQuery,
   itineraryContactQuery,
   itineraryHeroQuery,
+  itineraryOrganizationSeatsQuery,
   itinerarySeatsQuery,
   itinerarySegmentsQuery,
   itineraryTripsQuery,
+  organizationSeatMapQuery,
   planLiveSeatIdsQuery,
   seatMapQuery,
 } from "./routes";
@@ -154,6 +156,39 @@ describe("itinerarySeatsQuery —— 座位只认已确认且仍开启排位的�
   });
 });
 
+describe("itineraryOrganizationSeatsQuery —— 团体占位按环节快照取", () => {
+  const rendered = itineraryOrganizationSeatsQuery(7, 42).toSQL();
+
+  test("从本人的 segment_member 出发，用该环节团体快照匹配团体占位", () => {
+    expect(rendered.sql).toContain('from "segment_member"');
+    expect(rendered.sql).toContain(
+      '"seat_assignment"."organization_id" = "segment_member"."organization_id"',
+    );
+    expect(rendered.sql).toContain(
+      '"seat_assignment"."segment_id" = "segment_member"."segment_id"',
+    );
+    expect(rendered.sql).toContain('"segment_member"."member_id" =');
+    expect(rendered.params).toContain(42);
+  });
+
+  test("只认有效团体占位和已确认方案", () => {
+    expect(rendered.sql).toContain('"seat_assignment"."occupant_type" =');
+    expect(rendered.params).toContain("organization");
+    expect(rendered.sql).toContain('"seat_assignment"."revoked_at" is null');
+    expect(rendered.params).toContain("confirmed");
+  });
+
+  test("按座位稳定顺序聚合，画布只供服务端压缩范围而不进入 H5 响应", () => {
+    expect(rendered.sql).toContain("json_agg(");
+    expect(rendered.sql).toContain(
+      'order by "segment_seat"."ordinal", "segment_seat"."id"',
+    );
+    expect(rendered.sql).toContain('"segment_seating_layout"."data"');
+    expect(rendered.sql).not.toContain('"member"."name"');
+    expect(rendered.sql).not.toContain("mobile");
+  });
+});
+
 describe("seatMapQuery —— 越权挡在查询形状上", () => {
   const rendered = seatMapQuery(7, 42, 99).toSQL();
 
@@ -203,6 +238,31 @@ describe("seatMapQuery —— 越权挡在查询形状上", () => {
     expect(rendered.sql).not.toContain('"member"."name"');
     expect(rendered.sql).not.toContain("mobile");
     expect(rendered.sql).not.toContain("organization");
+  });
+});
+
+describe("organizationSeatMapQuery —— 团体图只能看本人所属团体", () => {
+  const rendered = organizationSeatMapQuery(7, 42, 99).toSQL();
+
+  test("查询锚在本人、本活动和请求环节，团体只能由关系快照匹配", () => {
+    expect(rendered.sql).toContain('from "segment_member"');
+    expect(rendered.sql).toContain('"segment_member"."member_id" =');
+    expect(rendered.sql).toContain('"segment_member"."activity_id" =');
+    expect(rendered.sql).toContain('"segment_member"."segment_id" =');
+    expect(rendered.sql).toContain(
+      '"seat_assignment"."organization_id" = "segment_member"."organization_id"',
+    );
+    expect(rendered.params).toContain(42);
+    expect(rendered.params).toContain(7);
+    expect(rendered.params).toContain(99);
+  });
+
+  test("只发团体占位的标签和坐标，不带人员或其他团体资料", () => {
+    expect(rendered.params).toContain("organization");
+    expect(rendered.sql).toContain('"seat_assignment"."revoked_at" is null');
+    expect(rendered.params).toContain("confirmed");
+    expect(rendered.sql).not.toContain('"member"."name"');
+    expect(rendered.sql).not.toContain("mobile");
   });
 });
 

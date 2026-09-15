@@ -40,3 +40,8 @@ export const GetItineraryInput = H5ScopedInput;
 export const GetSeatMapInput = H5ScopedInput.extend({
   segmentId: z.number().int().positive(),
 });
+
+/** 团体座位图与个人座位图一样按环节取，授权口径由查询形状保证。 */
+export const GetOrganizationSeatMapInput = H5ScopedInput.extend({
+  segmentId: z.number().int().positive(),
+});

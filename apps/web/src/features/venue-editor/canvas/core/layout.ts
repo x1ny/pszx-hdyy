@@ -1,4 +1,6 @@
+import type { CanvasRow } from "./document";
 import type { Point } from "./geometry";
+import { rowPoints, rowRadius } from "./rows";
 
 /**
  * 座位布局生成。按统一默认间距向外展开，不读取外层区域尺寸。
@@ -80,120 +82,137 @@ function makeLabeler(params: LayoutParams) {
   };
 }
 
-function genTheater(params: LayoutParams): GeneratedSeat[] {
-  const { rows, cols, aisleEvery } = params;
-  if (rows <= 0 || cols <= 0) return [];
-
-  const label = makeLabeler(params);
-  const seats: GeneratedSeat[] = [];
-
-  for (let row = 0; row < rows; row += 1) {
-    let slot = 0;
-    for (let col = 0; col < cols; col += 1) {
-      if (aisleEvery > 0 && col > 0 && col % aisleEvery === 0) slot += 1;
-      seats.push({
-        x: slot * LAYOUT_SPACING.seat,
-        y: row * LAYOUT_SPACING.row,
-        label: label(row, col),
-      });
-      slot += 1;
-    }
-  }
-
-  return seats;
-}
-
-function genBanquet(params: LayoutParams): GeneratedSeat[] {
-  const { tableCount, seatsPerTable } = params;
-  if (tableCount <= 0 || seatsPerTable <= 0) return [];
-
-  // 桌子按接近正方形的网格排布，避免一长条。
-  const columns = Math.max(1, Math.ceil(Math.sqrt(tableCount)));
-  // 用相邻席位的弦长反推半径；每桌席位变多时扩大座位环，避免挤在一起。
-  const radius = Math.max(
-    LAYOUT_SPACING.seat,
-    seatsPerTable > 1
-      ? LAYOUT_SPACING.seat / (2 * Math.sin(Math.PI / seatsPerTable))
-      : 0,
-  );
-  const cellSize = radius * 2 + LAYOUT_SPACING.table;
-
-  const label = makeLabeler(params);
-  const seats: GeneratedSeat[] = [];
-
-  for (let table = 0; table < tableCount; table += 1) {
-    const centerX = radius + (table % columns) * cellSize;
-    const centerY = radius + Math.floor(table / columns) * cellSize;
-
-    for (let seat = 0; seat < seatsPerTable; seat += 1) {
-      // 从正上方开始顺时针，跟真实宴会厅的主位习惯一致。
-      const angle = (seat / seatsPerTable) * Math.PI * 2 - Math.PI / 2;
-      seats.push({
-        x: centerX + Math.cos(angle) * radius,
-        y: centerY + Math.sin(angle) * radius,
-        label: label(table, seat, table),
-      });
-    }
-  }
-
-  return seats;
-}
-
-/**
- * 秀场双边：中间留 T 台通道，两侧对称看台。
- *
- * 这是时尚周的主场景，也是从零设计最容易漏掉的一种——旧系统的 `runway` 预设
- * 专门做了它（docs/场地排位模块.md §5.3 特别点了名）。
- */
-function genRunway(params: LayoutParams): GeneratedSeat[] {
-  const { rows, cols } = params;
-  if (rows <= 0 || cols <= 0) return [];
-
-  const sideWidth = (cols - 1) * LAYOUT_SPACING.seat;
-  const label = makeLabeler(params);
-  const seats: GeneratedSeat[] = [];
-
-  for (let row = 0; row < rows; row += 1) {
-    // 左侧：从 T 台往外编号，靠台的是 1 号——离舞台越近序号越小，符合看座习惯。
-    for (let col = 0; col < cols; col += 1) {
-      seats.push({
-        x: sideWidth - col * LAYOUT_SPACING.seat,
-        y: row * LAYOUT_SPACING.row,
-        label: label(row, col),
-      });
-    }
-    // 右侧
-    for (let col = 0; col < cols; col += 1) {
-      seats.push({
-        x: sideWidth + LAYOUT_SPACING.runway + col * LAYOUT_SPACING.seat,
-        y: row * LAYOUT_SPACING.row,
-        label: label(row, cols + col),
-      });
-    }
-  }
-
-  return seats;
-}
-
-const GENERATORS: Record<
-  LayoutPreset,
-  (params: LayoutParams) => GeneratedSeat[]
-> = {
-  theater: genTheater,
-  banquet: genBanquet,
-  runway: genRunway,
-  // 自由摆放：不生成任何座位，用户自己拖进来。
-  free: () => [],
+export type GeneratedRow = Omit<
+  CanvasRow,
+  "externalId" | "zoneExternalId" | "seatIds"
+> & {
+  seats: GeneratedSeat[];
 };
 
-/**
- * 按预设生成独立座位坐标。模板整体替换旧座位，不读取任何外层几何。
- */
+/** 模板显式建立排关系；秀场两侧独立成排，每桌为一条环形排。 */
+export function generateLayoutRows(
+  preset: LayoutPreset,
+  params: LayoutParams,
+): GeneratedRow[] {
+  const rows: GeneratedRow[] = [];
+  const label = makeLabeler(params);
+  let running = 0;
+  const append = (
+    name: string,
+    x: number,
+    y: number,
+    angle: number,
+    count: number,
+    rowIndex: number,
+    colOffset = 0,
+    shape: "line" | "circle" = "line",
+    aisleEvery = 0,
+  ) => {
+    if (count <= 0) return;
+    const numbering =
+      params.numbering === "sequential"
+        ? {
+            prefix: params.startRowLabel,
+            suffix: "",
+            start: running + 1,
+            padding: 0,
+          }
+        : params.numbering === "tableSeat"
+          ? {
+              prefix: `${rowIndex + 1}桌`,
+              suffix: "号",
+              start: colOffset + 1,
+              padding: 0,
+            }
+          : {
+              prefix: rowLetter(params.startRowLabel, rowIndex),
+              suffix: "",
+              start: colOffset + 1,
+              padding: 0,
+            };
+    running += count;
+    const row = {
+      name,
+      x,
+      y,
+      angle,
+      shape,
+      spacing: LAYOUT_SPACING.seat,
+      aisleEvery,
+      numbering,
+    };
+    rows.push({
+      ...row,
+      seats: rowPoints(row, count).map((point, col) => ({
+        ...point,
+        label: label(
+          rowIndex,
+          col + colOffset,
+          preset === "banquet" ? rowIndex : undefined,
+        ),
+      })),
+    });
+  };
+  if (preset === "theater") {
+    for (let row = 0; row < params.rows; row += 1) {
+      append(
+        `${rowLetter(params.startRowLabel, row)}排`,
+        0,
+        row * LAYOUT_SPACING.row,
+        0,
+        params.cols,
+        row,
+        0,
+        "line",
+        params.aisleEvery,
+      );
+    }
+  } else if (preset === "runway") {
+    const width = (params.cols - 1) * LAYOUT_SPACING.seat;
+    for (let row = 0; row < params.rows; row += 1) {
+      append(
+        `左${rowLetter(params.startRowLabel, row)}排`,
+        width,
+        row * LAYOUT_SPACING.row,
+        180,
+        params.cols,
+        row,
+      );
+      append(
+        `右${rowLetter(params.startRowLabel, row)}排`,
+        width + LAYOUT_SPACING.runway,
+        row * LAYOUT_SPACING.row,
+        0,
+        params.cols,
+        row,
+        params.cols,
+      );
+    }
+  } else if (preset === "banquet") {
+    const columns = Math.max(1, Math.ceil(Math.sqrt(params.tableCount)));
+    const radius = rowRadius(LAYOUT_SPACING.seat, params.seatsPerTable);
+    const cell = radius * 2 + LAYOUT_SPACING.table;
+    for (let table = 0; table < params.tableCount; table += 1) {
+      append(
+        `第${table + 1}桌`,
+        radius + (table % columns) * cell,
+        radius + Math.floor(table / columns) * cell,
+        -90,
+        params.seatsPerTable,
+        table,
+        0,
+        "circle",
+      );
+    }
+  }
+  return rows;
+}
+
 export function generateLayout(
   preset: LayoutPreset,
   params: LayoutParams,
 ): GeneratedSeat[] {
-  return GENERATORS[preset](params);
+  return generateLayoutRows(preset, params).flatMap((row) => row.seats);
 }
 
 /** 每种预设实际会用到哪几个参数，用来决定参数面板显示哪些输入框。 */
