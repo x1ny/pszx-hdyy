@@ -206,11 +206,15 @@ export function SeatAssignPanel({
             <ToggleGroupItem
               type="button"
               value="unassigned"
-              className="flex-1"
+              className="flex-1 aria-pressed:bg-primary aria-pressed:text-primary-foreground"
             >
               未排座人员
             </ToggleGroupItem>
-            <ToggleGroupItem type="button" value="all" className="flex-1">
+            <ToggleGroupItem
+              type="button"
+              value="all"
+              className="flex-1 aria-pressed:bg-primary aria-pressed:text-primary-foreground"
+            >
               全部人员
             </ToggleGroupItem>
           </ToggleGroup>
