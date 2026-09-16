@@ -493,6 +493,28 @@ test("多分区独立坐标不会叠图，H5 只返回本人涉及的分区且�
           { externalId: "b", zoneExternalId: "A2", x: 0, y: 0 },
           { externalId: "c", zoneExternalId: "B1", x: 0, y: 0 },
         ],
+        rows: [
+          {
+            name: "A1 的桌",
+            zoneExternalId: "A1",
+            shape: "circle",
+            x: 100,
+            y: 100,
+            angle: 0,
+            spacing: 48,
+            seatIds: ["a", "a2"],
+          },
+          {
+            name: "B1 的桌",
+            zoneExternalId: "B1",
+            shape: "circle",
+            x: -100,
+            y: -100,
+            angle: 0,
+            spacing: 48,
+            seatIds: ["c", "c"],
+          },
+        ],
       },
     },
     ["a", "a2", "b", "c"],
@@ -504,4 +526,13 @@ test("多分区独立坐标不会叠图，H5 只返回本人涉及的分区且�
   ]);
   expect(map?.sections?.[1].seats).toEqual([{ x: 0, y: 0 }]);
   expect(map?.sections?.[1].mine[0].label).toBe("A2 · 1号");
+
+  // 桌子按分区过滤：A1 分区只看到自己的桌，看不到 B1 的桌（哪怕坐标碰巧
+  // 落在附近）；没有桌的 A2 分区是空数组，不是 undefined。顶层 tables 落回
+  // 第一个分区，跟 seats 的兜底逻辑一致。
+  expect(map?.sections?.[0].tables).toEqual([
+    { shape: "circle", x: 100, y: 100, radius: expect.any(Number) },
+  ]);
+  expect(map?.sections?.[1].tables).toEqual([]);
+  expect(map?.tables).toEqual(map?.sections?.[0].tables);
 });
