@@ -21,6 +21,30 @@ describe("unbounded venue seats", () => {
         .success,
     ).toBe(false);
   });
+
+  test("不同桌可以复用座号，同桌仍拒绝重复", () => {
+    const seat = (externalId: string, tableExternalId: string) => ({
+      externalId,
+      zoneExternalId: "z",
+      label: "1号",
+      tableExternalId,
+      ordinal: 0,
+    });
+    const input = {
+      venueId: 1,
+      layout: { rendererKind: "svg-canvas-v1", rendererVersion: 1, data: {} },
+      zones: [{ externalId: "z", name: "区域", kind: "seating" }],
+      seats: [seat("s1", "t1"), seat("s2", "t2")],
+    };
+
+    expect(SaveVenueLayoutInput.safeParse(input).success).toBe(true);
+    expect(
+      SaveVenueLayoutInput.safeParse({
+        ...input,
+        seats: [seat("s1", "t1"), seat("s2", "t1")],
+      }).success,
+    ).toBe(false);
+  });
 });
 
 test("业务区域层级必须有效，父区域不能直接挂座位", () => {

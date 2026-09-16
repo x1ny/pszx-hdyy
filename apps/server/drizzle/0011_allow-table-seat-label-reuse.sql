@@ -1,0 +1,1 @@
+DROP INDEX "uk_segment_seat_label";

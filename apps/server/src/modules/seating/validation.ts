@@ -60,13 +60,15 @@ const PlanSeatDraftInput = z.object({
   sourceExternalId: externalId.nullish(),
   zoneExternalId: externalId.nullish(),
   label: required("位置编号", 200),
+  /** 桌席允许跨桌复用座号；只用于校验范围，不写入位置表。 */
+  tableExternalId: externalId.optional(),
   kind: SeatKindEnum.default("seat"),
   rank: SeatRankEnum.default("normal"),
   enabled: z.boolean().default(true),
   ordinal: z.number().int().min(0).default(0),
 });
 
-/** 编号唯一性守在这里，理由同 venue：数据库那条 partial unique 挡不住编号对调。 */
+/** 普通排按区域查重；桌席按桌查重。数据库不再建全局座号唯一索引。 */
 const uniqueSeats = (
   input: { seats: z.infer<typeof PlanSeatDraftInput>[] },
   ctx: z.RefinementCtx,
@@ -87,7 +89,11 @@ const uniqueSeats = (
     // 只有启用的位置参与编号查重：停用的位置留在方案里只是"这次不用"，
     // 它跟别人重号不会造成任何实际歧义。
     if (!seat.enabled) continue;
-    const labelKey = JSON.stringify([seat.zoneExternalId ?? "", seat.label]);
+    const labelKey = JSON.stringify([
+      seat.zoneExternalId ?? "",
+      seat.tableExternalId ?? "",
+      seat.label,
+    ]);
     if (labels.has(labelKey)) {
       ctx.addIssue({
         code: "custom",

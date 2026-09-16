@@ -157,21 +157,29 @@ describe("planSeats", () => {
 });
 
 describe("resolveSeatZones", () => {
-  const draft = (zoneExternalId: string): SeatDraft => ({
+  const draft = (
+    zoneExternalId: string,
+    tableExternalId?: string,
+  ): SeatDraft => ({
     externalId: "s1",
     zoneExternalId,
     label: "A1",
+    ...(tableExternalId ? { tableExternalId } : {}),
     kind: "seat",
     rank: "normal",
     ordinal: 0,
   });
 
-  test("按 externalId 换成 zoneId，并且不把 zoneExternalId 带下去", () => {
-    const resolved = resolveSeatZones([draft("z1")], new Map([["z1", 42]]));
+  test("按 externalId 换成 zoneId，并且不把临时范围字段带下去", () => {
+    const resolved = resolveSeatZones(
+      [draft("z1", "table-1")],
+      new Map([["z1", 42]]),
+    );
 
     expect(resolved).toHaveLength(1);
     expect(resolved?.[0]?.zoneId).toBe(42);
     expect(resolved?.[0]).not.toHaveProperty("zoneExternalId");
+    expect(resolved?.[0]).not.toHaveProperty("tableExternalId");
   });
 
   test("指向不存在的区域时整批返回 null", () => {

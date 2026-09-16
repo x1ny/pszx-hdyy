@@ -63,6 +63,7 @@ import {
   generateLayout,
   type LayoutParams,
 } from "./layout";
+import { addRow, DEFAULT_ROW_PARAMS } from "./rows";
 
 /**
  * 画布编辑器的 core 层。**零 React、零 DOM，所以全部可测**——
@@ -1444,5 +1445,46 @@ describe("投影与序列化", () => {
 
   test("生成出来的文档能通过共用校验", () => {
     expect(validateProjection(projectCanvas(richDoc()))).toEqual([]);
+  });
+
+  test("不同桌可以复用座号，但同桌重复仍提示", () => {
+    let state = initialState(docWithRectZone());
+    const zoneId = state.doc.zones[0].externalId;
+    for (const [rowId, x] of [
+      ["table-a", 0],
+      ["table-b", 200],
+    ] as const) {
+      state = execute(
+        state,
+        addRow(
+          zoneId,
+          { x, y: 0 },
+          { ...DEFAULT_ROW_PARAMS, shape: "circle", count: 2 },
+          rowId,
+        ),
+      );
+    }
+
+    const projection = projectCanvas(state.doc);
+    expect(validateProjection(projection)).toEqual([]);
+    expect(projection.seats.map((seat) => seat.tableExternalId)).toEqual([
+      "table-a",
+      "table-a",
+      "table-b",
+      "table-b",
+    ]);
+
+    const firstTableSeatIds = state.doc.rows?.[0]?.seatIds ?? [];
+    const invalidProjection = {
+      ...projection,
+      seats: projection.seats.map((seat) =>
+        firstTableSeatIds.includes(seat.externalId)
+          ? { ...seat, label: "1号" }
+          : seat,
+      ),
+    };
+    expect(validateProjection(invalidProjection)).toEqual([
+      "同一桌内编号重复：1号",
+    ]);
   });
 });

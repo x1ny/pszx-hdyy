@@ -1,5 +1,5 @@
 import type { Command } from "./commands";
-import { type CanvasRow, newId } from "./document";
+import { type CanvasDoc, type CanvasRow, newId } from "./document";
 import { type Point, rotatePoint } from "./geometry";
 
 export type TableSides = {
@@ -268,6 +268,19 @@ function uniqueSeatLabel(used: Set<string>, row: CanvasRow, index: number) {
   return label;
 }
 
+function usedSeatLabels(doc: Pick<CanvasDoc, "seats">, row: CanvasRow) {
+  const rowSeatIds = new Set(row.seatIds);
+  return new Set(
+    doc.seats
+      .filter((seat) =>
+        row.shape === "line"
+          ? seat.zoneExternalId === row.zoneExternalId
+          : rowSeatIds.has(seat.externalId),
+      )
+      .map((seat) => seat.label),
+  );
+}
+
 export const addRow = (
   zoneId: string,
   at: Point,
@@ -307,11 +320,8 @@ export const addRow = (
           seat.zoneExternalId === zoneId ? Math.max(max, seat.ordinal) : max,
         -1,
       ) + 1;
-    const used = new Set(
-      doc.seats
-        .filter((seat) => seat.zoneExternalId === zoneId)
-        .map((seat) => seat.label),
-    );
+    // 普通排在区域内查重；桌席只在桌内查重，允许不同桌从 1 号重新开始。
+    const used = usedSeatLabels(doc, row);
     rowPoints(row, params.count).forEach((point, index) => {
       const id = newId("s");
       row.seatIds.push(id);
@@ -365,11 +375,7 @@ export const updateRow = (rowId: string, params: RowParams): Command => ({
     });
     const points = rowPoints(row, count);
     const byId = new Map(doc.seats.map((seat) => [seat.externalId, seat]));
-    const used = new Set(
-      doc.seats
-        .filter((seat) => seat.zoneExternalId === row.zoneExternalId)
-        .map((seat) => seat.label),
-    );
+    const used = usedSeatLabels(doc, row);
     let ordinal =
       doc.seats.reduce((max, seat) => Math.max(max, seat.ordinal), -1) + 1;
     points.forEach((point, index) => {

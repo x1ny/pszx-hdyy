@@ -30,6 +30,8 @@ export type PlanSeatDraft = {
   externalId: string;
   sourceExternalId?: string | null;
   label: string;
+  /** 桌席的座号查重范围；只用于请求校验，不落到 segment_seat。 */
+  tableExternalId?: string;
   kind: SeatKind;
   rank: SeatRank;
   enabled: boolean;

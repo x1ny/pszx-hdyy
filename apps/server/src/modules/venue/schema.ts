@@ -38,7 +38,8 @@ export type ZoneKind = (typeof ZONE_KINDS)[number];
  * 位置种类。**只有"能坐人的"两种**，理由见下面 venueSeat 的注释。
  *
  * 结论单 C-006 列的是"座位、桌位、站位"——"桌位"是桌子旁边的一个座位
- * （label 形如「3桌2号」），不是桌子本身，所以它落在 `seat` 上。
+ * （label 形如「1号」），不是桌子本身，所以它落在 `seat` 上；桌归属由画布
+ * 排关系在保存校验时临时传递。
  */
 export const SEAT_KINDS = ["seat", "standing"] as const;
 export type SeatKind = (typeof SEAT_KINDS)[number];
@@ -205,7 +206,7 @@ export const venueSeat = pgTable(
 
     externalId: text("external_id").notNull(),
 
-    /** 座位编号，形如 `A1` / `3桌2号`。 */
+    /** 座位编号，形如 `A1` / `1号`；桌席的查重范围不落在这张表。 */
     label: text("label").notNull(),
 
     kind: text("kind").$type<SeatKind>().notNull().default("seat"),
@@ -229,10 +230,11 @@ export const venueSeat = pgTable(
     /**
      * ⚠️ 故意**没有** unique(zone_id, label)。
      *
-     * 同区域内编号不重复这条规则是要守的，但守在应用层（validation.ts 的
-     * superRefine）而不是数据库：把 A1 和 A2 两个位置的编号对调是完全合法的
-     * 操作，而 Postgres 的唯一约束默认逐语句检查，两条 UPDATE 里的第一条就会
-     * 撞上。DEFERRABLE 能绕开，但 drizzle 没有稳定的表达方式。
+     * 普通排/散座按区域查重，桌席按临时的 tableExternalId 在应用层按桌查重；
+     * 不同桌允许复用座号。这里不把桌标识落库，也不建区域级编号约束：把 A1
+     * 和 A2 两个位置的编号对调是完全合法的操作，而 Postgres 的唯一约束默认
+     * 逐语句检查，两条 UPDATE 里的第一条就会撞上。DEFERRABLE 能绕开，但
+     * drizzle 没有稳定的表达方式。
      *
      * 之所以敢只靠应用层：`seat` 只有 saveLayout 一条写入路径，那条路径上
      * 100% 会过 superRefine。等出现第二条写入路径，这个判断要重新做。
@@ -502,6 +504,8 @@ export type SeatDraft = {
   externalId: string;
   zoneExternalId: string;
   label: string;
+  /** 桌席的座号查重范围；仅用于保存校验，不落到 venue_seat。 */
+  tableExternalId?: string;
   kind: SeatKind;
   rank: SeatRank;
   ordinal: number;

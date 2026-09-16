@@ -78,6 +78,8 @@ const SeatDraftInput = z.object({
   externalId,
   zoneExternalId: externalId,
   label: required("位置编号", 64),
+  /** 桌席允许跨桌复用座号；该字段只用于校验范围，不写入数据库。 */
+  tableExternalId: externalId.optional(),
   kind: SeatKindEnum.default("seat"),
   rank: SeatRankEnum.default("normal"),
   ordinal: z.number().int().min(0).default(0),
@@ -122,8 +124,8 @@ export const SaveVenueLayoutInput = z
     }
 
     const seatIds = new Set<string>();
-    /** 同一区域内的编号不能撞，跨区域可以（A 区和 B 区都能有 A1）。 */
-    const labelsByZone = new Map<string, Set<string>>();
+    /** 普通排按区域查重；桌席按桌查重，允许不同桌复用座号。 */
+    const labelsByScope = new Map<string, Set<string>>();
 
     for (const seat of input.seats) {
       if (seatIds.has(seat.externalId)) {
@@ -148,16 +150,22 @@ export const SaveVenueLayoutInput = z
         continue;
       }
 
-      const labels = labelsByZone.get(seat.zoneExternalId) ?? new Set<string>();
+      const scopeKey = JSON.stringify([
+        seat.zoneExternalId,
+        seat.tableExternalId ?? "",
+      ]);
+      const labels = labelsByScope.get(scopeKey) ?? new Set<string>();
       if (labels.has(seat.label)) {
         ctx.addIssue({
           code: "custom",
           path: ["seats"],
-          message: `同一区域内编号重复：${seat.label}`,
+          message: seat.tableExternalId
+            ? `同一桌内编号重复：${seat.label}`
+            : `同一区域内编号重复：${seat.label}`,
         });
       }
       labels.add(seat.label);
-      labelsByZone.set(seat.zoneExternalId, labels);
+      labelsByScope.set(scopeKey, labels);
     }
   });
 

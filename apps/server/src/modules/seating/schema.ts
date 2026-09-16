@@ -232,13 +232,10 @@ export const segmentSeat = pgTable(
     unique("uk_segment_seat_id_plan").on(table.id, table.planId),
 
     /**
-     * 同方案内编号不重复。这里**敢**建数据库约束（场地库那边不敢，见
-     * venue_seat 的注释），因为它是 partial index：软删的行不参与，而编号对调
-     * 那种逐语句冲突……依然存在。所以应用层仍要先校验，这条只是最后一道网。
+     * 不建座号唯一索引：不同桌允许复用 `1号`、`2号`，桌内范围由 saveLayout 的
+     * `tableExternalId` 在应用层校验；普通排/散座则按区域查重。编号对调也不能
+     * 依赖 Postgres 的逐语句唯一约束。
      */
-    uniqueIndex("uk_segment_seat_label")
-      .on(table.planId, table.label)
-      .where(sql`${table.removedAt} is null`),
   ],
 );
 

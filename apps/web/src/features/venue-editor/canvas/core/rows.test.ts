@@ -301,6 +301,57 @@ describe("桌：圆桌/方桌是排的两种 shape", () => {
     expect(tableGeometry({ ...row, shape: "line" }, 6)).toBeNull();
   });
 
+  test("不同桌默认都从 1 号开始，不追加 -2", () => {
+    let { state, zoneId } = fixture();
+    for (const [rowId, x] of [
+      ["t5", 0],
+      ["t6", 200],
+    ] as const) {
+      state = execute(
+        state,
+        addRow(
+          zoneId,
+          { x, y: 0 },
+          { ...DEFAULT_ROW_PARAMS, shape: "circle", count: 3 },
+          rowId,
+        ),
+      );
+    }
+
+    expect(
+      state.doc.rows
+        ?.filter((row) => row.externalId === "t5" || row.externalId === "t6")
+        .map((row) =>
+          row.seatIds.map(
+            (seatId) =>
+              state.doc.seats.find((seat) => seat.externalId === seatId)?.label,
+          ),
+        ),
+    ).toEqual([
+      ["1号", "2号", "3号"],
+      ["1号", "2号", "3号"],
+    ]);
+
+    const plan = buildPlanDoc({
+      layoutData: state.doc,
+      zoneExternalId: zoneId,
+      zoneName: "测试",
+      zoneKind: "seating",
+    });
+    expect(
+      plan.seats
+        .filter((seat) => seat.tableExternalId)
+        .map((seat) => [seat.tableExternalId, seat.label]),
+    ).toEqual([
+      ["t5", "1号"],
+      ["t5", "2号"],
+      ["t5", "3号"],
+      ["t6", "1号"],
+      ["t6", "2号"],
+      ["t6", "3号"],
+    ]);
+  });
+
   test("改四侧人数触发重排，位置更新但存活座位 ID 不变；改名不影响几何", () => {
     let { state, zoneId } = fixture();
     state = execute(

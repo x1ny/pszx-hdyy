@@ -43,7 +43,10 @@ export type SeatRow = {
 };
 
 /** 位置草稿在解析出 zoneId 之后的样子。 */
-export type ResolvedSeatDraft = Omit<SeatDraft, "zoneExternalId"> & {
+export type ResolvedSeatDraft = Omit<
+  SeatDraft,
+  "zoneExternalId" | "tableExternalId"
+> & {
   zoneId: number;
 };
 
@@ -140,7 +143,11 @@ export function resolveSeatZones(
 ): ResolvedSeatDraft[] | null {
   const resolved: ResolvedSeatDraft[] = [];
 
-  for (const { zoneExternalId, ...rest } of drafts) {
+  for (const {
+    zoneExternalId,
+    tableExternalId: _tableExternalId,
+    ...rest
+  } of drafts) {
     const zoneId = zoneIdByExternalId.get(zoneExternalId);
     if (zoneId === undefined) return null;
     resolved.push({ ...rest, zoneId });

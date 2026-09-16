@@ -41,8 +41,10 @@ export type ZoneDraft = {
 export type SeatDraft = {
   externalId: string;
   zoneExternalId: string;
-  /** 位置编号，形如 A1 / 3桌2号。 */
+  /** 位置编号，形如 A1 / 1号。 */
   label: string;
+  /** 桌席的座号查重范围；仅用于保存校验，不作为座位业务字段落库。 */
+  tableExternalId?: string;
   kind: SeatKind;
   rank: SeatRank;
   ordinal: number;
@@ -99,21 +101,30 @@ export function validateProjection(projection: VenueProjection): string[] {
     zoneIds.add(zone.externalId);
   }
 
-  // 同区域内编号不能撞，跨区域可以（A 区和 B 区都能有 A1）。这条规则数据库上
-  // 刻意没建约束——编号对调是合法操作，会撞逐语句检查——所以守在这里。
-  const labelsByZone = new Map<string, Set<string>>();
+  // 普通排/散座按区域查重；桌席按桌查重，所以不同桌可以有相同的座号。
+  // 这条规则数据库上刻意没建约束——编号对调是合法操作，会撞逐语句检查——
+  // 所以守在这里。
+  const labelsByScope = new Map<string, Set<string>>();
   for (const seat of projection.seats) {
     if (!seat.label.trim()) issues.push("有位置没填编号");
     if (!zoneIds.has(seat.zoneExternalId)) {
       issues.push(`位置 ${seat.label} 所属的区域已被删除`);
       continue;
     }
-    const labels = labelsByZone.get(seat.zoneExternalId) ?? new Set<string>();
+    const scopeKey = JSON.stringify([
+      seat.zoneExternalId,
+      seat.tableExternalId ?? "",
+    ]);
+    const labels = labelsByScope.get(scopeKey) ?? new Set<string>();
     if (labels.has(seat.label)) {
-      issues.push(`同一区域内编号重复：${seat.label}`);
+      issues.push(
+        seat.tableExternalId
+          ? `同一桌内编号重复：${seat.label}`
+          : `同一区域内编号重复：${seat.label}`,
+      );
     }
     labels.add(seat.label);
-    labelsByZone.set(seat.zoneExternalId, labels);
+    labelsByScope.set(scopeKey, labels);
   }
 
   return issues;

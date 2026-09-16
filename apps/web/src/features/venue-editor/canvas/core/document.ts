@@ -184,6 +184,22 @@ export const emptyCanvasDoc = (): CanvasDoc => ({
 export const newId = (prefix: "z" | "s" | "r") =>
   `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
+/**
+ * 返回桌席座位对应的排标识。普通排不带范围，跨桌重复座号只在桌内查重。
+ * `CanvasRow` 仍然只存在画布 blob 中，返回的标识是投影阶段的临时校验上下文。
+ */
+export function tableExternalIdBySeatId(
+  doc: Pick<CanvasDoc, "rows">,
+): Map<string, string> {
+  const tableIdBySeatId = new Map<string, string>();
+  for (const row of doc.rows ?? []) {
+    if (row.shape === "line") continue;
+    for (const seatId of row.seatIds)
+      tableIdBySeatId.set(seatId, row.externalId);
+  }
+  return tableIdBySeatId;
+}
+
 // ---------------------------------------------------------------------------
 // 投影：编辑器私有格式 → 核心语义
 // ---------------------------------------------------------------------------
@@ -208,19 +224,24 @@ export function projectCanvas(doc: CanvasDoc): VenueProjection {
   }));
 
   const known = new Set(zones.map((zone) => zone.externalId));
+  const tableIdBySeatId = tableExternalIdBySeatId(doc);
 
   const seats: SeatDraft[] = doc.seats
     // 区域被删时命令层已经连带清了座位，这里再挡一道：宁可少投影一个，
     // 也不要发一条指向不存在区域的记录出去被服务端整批拒绝。
     .filter((seat) => known.has(seat.zoneExternalId))
-    .map((seat) => ({
-      externalId: seat.externalId,
-      zoneExternalId: seat.zoneExternalId,
-      label: seat.label,
-      kind: seat.kind,
-      rank: seat.rank,
-      ordinal: seat.ordinal,
-    }));
+    .map((seat) => {
+      const tableExternalId = tableIdBySeatId.get(seat.externalId);
+      return {
+        externalId: seat.externalId,
+        zoneExternalId: seat.zoneExternalId,
+        label: seat.label,
+        ...(tableExternalId ? { tableExternalId } : {}),
+        kind: seat.kind,
+        rank: seat.rank,
+        ordinal: seat.ordinal,
+      };
+    });
 
   return { zones, seats };
 }

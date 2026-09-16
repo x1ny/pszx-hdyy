@@ -22,6 +22,35 @@ describe("list plans validation", () => {
   });
 });
 
+describe("plan seat label validation", () => {
+  test("不同桌可以复用座号，同桌仍拒绝重复", () => {
+    const seat = (externalId: string, tableExternalId: string) => ({
+      externalId,
+      zoneExternalId: "z",
+      label: "1号",
+      tableExternalId,
+      ordinal: 0,
+    });
+    const input = {
+      planId: 1,
+      layout: {
+        rendererKind: "svg-canvas-v1",
+        rendererVersion: 1,
+        data: {},
+      },
+      seats: [seat("s1", "t1"), seat("s2", "t2")],
+    };
+
+    expect(SavePlanLayoutInput.safeParse(input).success).toBe(true);
+    expect(
+      SavePlanLayoutInput.safeParse({
+        ...input,
+        seats: [seat("s1", "t1"), seat("s2", "t1")],
+      }).success,
+    ).toBe(false);
+  });
+});
+
 describe("seat assignment validation", () => {
   test("旧个人分配请求保持 segmentMemberId 入参", () => {
     expect(

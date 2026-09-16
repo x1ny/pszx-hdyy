@@ -3,6 +3,7 @@ import {
   type CanvasDoc,
   type CanvasSeat,
   type CanvasZone,
+  tableExternalIdBySeatId,
   ZONE_KIND_DEFAULT_COLOR,
 } from "./canvas/core/document";
 import { seatContentBounds } from "./canvas/core/geometry";
@@ -25,6 +26,8 @@ export type PlanSeatDraft = {
   zoneExternalId?: string;
   sourceExternalId: string | null;
   label: string;
+  /** 桌席的座号查重范围；只随保存请求传递，不写入方案位置表。 */
+  tableExternalId?: string;
   kind: SeatKind;
   rank: SeatRank;
   enabled: boolean;
@@ -127,8 +130,10 @@ export function projectPlanSeats(
   previous?: Map<string, { enabled: boolean; sourceExternalId: string | null }>,
   grouped = doc.zones.length > 1,
 ): PlanSeatDraft[] {
+  const tableIdBySeatId = tableExternalIdBySeatId(doc);
   return doc.seats.map((seat) => {
     const prior = previous?.get(seat.externalId);
+    const tableExternalId = tableIdBySeatId.get(seat.externalId);
     return {
       externalId: seat.externalId,
       /**
@@ -141,6 +146,7 @@ export function projectPlanSeats(
       label: grouped
         ? `${doc.zones.find((zone) => zone.externalId === seat.zoneExternalId)?.name ?? ""} · ${seat.label}`
         : seat.label,
+      ...(tableExternalId ? { tableExternalId } : {}),
       kind: seat.kind,
       rank: seat.rank,
       // 编辑器不认识 enabled（它是方案层概念），所以保存时从库里那份沿用；
