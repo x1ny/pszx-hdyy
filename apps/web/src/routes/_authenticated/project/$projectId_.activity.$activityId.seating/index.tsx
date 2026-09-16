@@ -149,16 +149,25 @@ function SeatingPage() {
         (item) => item.activityVenueId === zone.activityVenueId,
       );
 
-      const { doc, seats } = buildPlanDoc({
+      const { doc, seats, sections } = buildPlanDoc({
         layoutData: layout?.data ?? null,
         zoneExternalId: zone.externalId,
         zoneName: zone.name,
         zoneKind: zone.kind,
+        sectionExternalIds: spaceQuery.data?.zones
+          .filter(
+            (child) =>
+              child.activityVenueId === zone.activityVenueId &&
+              child.parentExternalId === zone.externalId &&
+              child.status === "active",
+          )
+          .map((child) => child.externalId),
       });
 
       return createSeatingPlan({
         segmentId,
         activityVenueZoneId: zoneId,
+        sections,
         layout: {
           rendererKind: canvasEditor.kind,
           rendererVersion: canvasEditor.version,

@@ -58,7 +58,8 @@ const PlanSeatDraftInput = z.object({
   externalId,
   /** 从活动区域复制过来时带上，之后新增的位置没有来源。 */
   sourceExternalId: externalId.nullish(),
-  label: required("位置编号", 64),
+  zoneExternalId: externalId.nullish(),
+  label: required("位置编号", 200),
   kind: SeatKindEnum.default("seat"),
   rank: SeatRankEnum.default("normal"),
   enabled: z.boolean().default(true),
@@ -86,14 +87,15 @@ const uniqueSeats = (
     // 只有启用的位置参与编号查重：停用的位置留在方案里只是"这次不用"，
     // 它跟别人重号不会造成任何实际歧义。
     if (!seat.enabled) continue;
-    if (labels.has(seat.label)) {
+    const labelKey = JSON.stringify([seat.zoneExternalId ?? "", seat.label]);
+    if (labels.has(labelKey)) {
       ctx.addIssue({
         code: "custom",
         path: ["seats"],
         message: `编号重复：${seat.label}`,
       });
     }
-    labels.add(seat.label);
+    labels.add(labelKey);
   }
 };
 
@@ -108,6 +110,9 @@ export const CreatePlanInput = z
   .object({
     segmentId: id,
     activityVenueZoneId: id,
+    sections: z
+      .array(z.object({ externalId, name: required("分区名称", 128) }))
+      .optional(),
     layout: LayoutBlobInput,
     seats: z.array(PlanSeatDraftInput),
   })

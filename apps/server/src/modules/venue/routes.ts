@@ -42,6 +42,8 @@ const zoneFields = {
   name: venueZone.name,
   kind: venueZone.kind,
   ordinal: venueZone.ordinal,
+  isGroup: venueZone.isGroup,
+  parentExternalId: venueZone.parentExternalId,
 };
 
 const seatFields = {
@@ -105,7 +107,13 @@ async function applyLayout(
   for (const { id, draft } of zonePlan.update) {
     await tx
       .update(venueZone)
-      .set({ name: draft.name, kind: draft.kind, ordinal: draft.ordinal })
+      .set({
+        name: draft.name,
+        kind: draft.kind,
+        ordinal: draft.ordinal,
+        isGroup: draft.isGroup ?? false,
+        parentExternalId: draft.parentExternalId ?? null,
+      })
       .where(eq(venueZone.id, id));
   }
   const insertedZones = zonePlan.insert.length

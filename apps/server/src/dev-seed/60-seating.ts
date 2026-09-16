@@ -108,6 +108,7 @@ export const seed: SeedFn = async (db, { userId }) => {
     // （modules/h5/routes.ts 里那段口径）。留 pending 的话本地一打开 h5 就是
     // 「座位待安排」，那块根本调不了。管理端的排位流程不受影响：确认态同样
     // 可以改、可以驳回，只是多点一步。
+    sections: [],
     status: "confirmed",
     version: 0,
     savedBy: userId,

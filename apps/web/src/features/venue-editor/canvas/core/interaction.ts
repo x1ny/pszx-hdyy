@@ -187,7 +187,7 @@ export function zoneContains(zone: CanvasZone, point: Point): boolean {
 export function hitZone(doc: CanvasDoc, point: Point): string | null {
   for (let index = doc.zones.length - 1; index >= 0; index -= 1) {
     const zone = doc.zones[index];
-    if (zoneContains(zone, point)) return zone.externalId;
+    if (!zone.isGroup && zoneContains(zone, point)) return zone.externalId;
   }
   return null;
 }
@@ -206,7 +206,7 @@ function hitHandle(
   // 只有被选中的区域才显示手柄，所以也只有它们能被命中。
   for (const zoneId of selection.zoneIds) {
     const zone = doc.zones.find((item) => item.externalId === zoneId);
-    if (!zone) continue;
+    if (!zone || zone.isGroup) continue;
     for (const { handle, rect } of handleRects(zone, scale)) {
       if (rectContains(rect, point)) {
         const rotation = zoneRotation(zone.shape);

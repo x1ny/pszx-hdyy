@@ -66,6 +66,7 @@ export type ZonePropertyPanelProps = {
     zoneId: string,
     patch: {
       name?: string;
+      parentExternalId?: string | null;
       kind?: ZoneKind;
       fill?: string;
       stroke?: string;
@@ -118,7 +119,7 @@ export function ZonePropertyPanel({
   const seatCount = doc.seats.filter(
     (seat) => seat.zoneExternalId === zone.externalId,
   ).length;
-  const isSeating = zone.kind === "seating";
+  const isSeating = zone.kind === "seating" && !zone.isGroup;
   const rotation = zone.shape.rotation ?? 0;
   const patchRotation = (next: number) =>
     onPatchZone(zone.externalId, {
@@ -160,94 +161,155 @@ export function ZonePropertyPanel({
         />
       </Field>
 
-      <div className="grid grid-cols-[1fr_auto] gap-3">
+      {!zone.isGroup && zone.kind === "seating" && (
         <Field>
-          <FieldLabel>类型</FieldLabel>
+          <FieldLabel>所属业务区域</FieldLabel>
           <Select
-            items={ZONE_KIND_LABELS}
-            value={zone.kind}
+            value={zone.parentExternalId ?? "none"}
             onValueChange={(value) =>
-              onPatchZone(zone.externalId, { kind: value as ZoneKind })
+              onPatchZone(zone.externalId, {
+                parentExternalId: value === "none" ? null : value,
+              })
             }
           >
             <SelectTrigger>
-              <SelectValue />
+              <SelectValue>
+                {doc.zones.find(
+                  (item) => item.externalId === zone.parentExternalId,
+                )?.name ?? "独立区域"}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {(Object.keys(ZONE_KIND_LABELS) as ZoneKind[]).map((value) => (
-                <SelectItem key={value} value={value}>
-                  {ZONE_KIND_LABELS[value]}
-                </SelectItem>
-              ))}
+              <SelectItem value="none">独立区域</SelectItem>
+              {doc.zones
+                .filter((item) => item.isGroup)
+                .map((item) => (
+                  <SelectItem key={item.externalId} value={item.externalId}>
+                    {item.name}
+                  </SelectItem>
+                ))}
             </SelectContent>
           </Select>
         </Field>
-
-        <Field>
-          <FieldLabel htmlFor="zone-color">颜色</FieldLabel>
-          {/* 原生 color input：不引组件库就有跨浏览器一致的拾色器，
-              且天然产出 <input type="color"> 要求的 #rrggbb 格式，跟存储格式一致。 */}
-          <input
-            id="zone-color"
-            type="color"
-            value={zone.fill}
-            onChange={(event) =>
-              onPatchZone(zone.externalId, {
-                fill: event.target.value,
-                stroke: event.target.value,
-              })
-            }
-            className="h-9 w-11 cursor-pointer rounded-md border bg-transparent p-1"
-          />
-        </Field>
-      </div>
-
-      <Field>
-        <FieldLabel htmlFor="zone-rotation">旋转角度</FieldLabel>
-        <div className="flex items-center gap-1.5">
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="size-9 shrink-0"
-            title="逆时针旋转 15°"
-            aria-label="逆时针旋转 15°"
-            onClick={() => patchRotation(rotation - 15)}
-          >
-            <RotateCcwIcon />
-          </Button>
-          <Input
-            id="zone-rotation"
-            type="number"
-            min={-180}
-            max={180}
-            step={1}
-            value={rotation}
-            onChange={(event) => {
-              const next = Number(event.target.value);
-              if (Number.isFinite(next)) patchRotation(next);
-            }}
-            className="text-center"
-            aria-label="区域旋转角度"
-          />
-          <span className="text-muted-foreground text-sm">°</span>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="size-9 shrink-0"
-            title="顺时针旋转 15°"
-            aria-label="顺时针旋转 15°"
-            onClick={() => patchRotation(rotation + 15)}
-          >
-            <RotateCwIcon />
-          </Button>
+      )}
+      {zone.isGroup && (
+        <div className="flex flex-col gap-2">
+          <p className="text-muted-foreground text-xs">
+            业务区域 · 点击分区独立绘制座位
+          </p>
+          {doc.zones
+            .filter((item) => item.parentExternalId === zone.externalId)
+            .map((item) => (
+              <Button
+                key={item.externalId}
+                variant="outline"
+                onClick={() => onEnterZone(item.externalId)}
+              >
+                {item.name} ·{" "}
+                {
+                  doc.seats.filter(
+                    (seat) => seat.zoneExternalId === item.externalId,
+                  ).length
+                }{" "}
+                座
+              </Button>
+            ))}
         </div>
-        <p className="text-muted-foreground text-xs">
-          以区域中心为轴，正数为顺时针；可用多个区域分别旋转出弧形分区。
-        </p>
-      </Field>
+      )}
+      {!zone.isGroup && (
+        <>
+          <div className="grid grid-cols-[1fr_auto] gap-3">
+            <Field>
+              <FieldLabel>类型</FieldLabel>
+              <Select
+                disabled={!!zone.parentExternalId}
+                items={ZONE_KIND_LABELS}
+                value={zone.kind}
+                onValueChange={(value) =>
+                  onPatchZone(zone.externalId, { kind: value as ZoneKind })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(ZONE_KIND_LABELS) as ZoneKind[]).map(
+                    (value) => (
+                      <SelectItem key={value} value={value}>
+                        {ZONE_KIND_LABELS[value]}
+                      </SelectItem>
+                    ),
+                  )}
+                </SelectContent>
+              </Select>
+            </Field>
 
+            <Field>
+              <FieldLabel htmlFor="zone-color">颜色</FieldLabel>
+              {/* 原生 color input：不引组件库就有跨浏览器一致的拾色器，
+              且天然产出 <input type="color"> 要求的 #rrggbb 格式，跟存储格式一致。 */}
+              <input
+                id="zone-color"
+                type="color"
+                value={zone.fill}
+                onChange={(event) =>
+                  onPatchZone(zone.externalId, {
+                    fill: event.target.value,
+                    stroke: event.target.value,
+                  })
+                }
+                className="h-9 w-11 cursor-pointer rounded-md border bg-transparent p-1"
+              />
+            </Field>
+          </div>
+
+          <Field>
+            <FieldLabel htmlFor="zone-rotation">旋转角度</FieldLabel>
+            <div className="flex items-center gap-1.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="size-9 shrink-0"
+                title="逆时针旋转 15°"
+                aria-label="逆时针旋转 15°"
+                onClick={() => patchRotation(rotation - 15)}
+              >
+                <RotateCcwIcon />
+              </Button>
+              <Input
+                id="zone-rotation"
+                type="number"
+                min={-180}
+                max={180}
+                step={1}
+                value={rotation}
+                onChange={(event) => {
+                  const next = Number(event.target.value);
+                  if (Number.isFinite(next)) patchRotation(next);
+                }}
+                className="text-center"
+                aria-label="区域旋转角度"
+              />
+              <span className="text-muted-foreground text-sm">°</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="size-9 shrink-0"
+                title="顺时针旋转 15°"
+                aria-label="顺时针旋转 15°"
+                onClick={() => patchRotation(rotation + 15)}
+              >
+                <RotateCwIcon />
+              </Button>
+            </div>
+            <p className="text-muted-foreground text-xs">
+              以区域中心为轴，正数为顺时针；可用多个区域分别旋转出弧形分区。
+            </p>
+          </Field>
+        </>
+      )}
       {extra?.(zone)}
 
       {isSeating && (
@@ -268,7 +330,7 @@ export function ZonePropertyPanel({
         onClick={() => onRemoveZone(zone.externalId)}
       >
         <Trash2Icon />
-        删除区域及其位置
+        {zone.isGroup ? "解散区域（保留分区及座位）" : "删除区域及其位置"}
       </Button>
     </PanelShell>
   );
@@ -323,59 +385,85 @@ function ZoneList({
           </tr>
         </thead>
         <tbody>
-          {doc.zones.map((zone) => {
-            const count =
-              zone.kind === "seating"
-                ? (seatCountByZone.get(zone.externalId) ?? 0)
-                : 0;
-            return (
-              <tr
-                key={zone.externalId}
-                className="group border-b last:border-0"
-              >
-                <td className="max-w-0 p-0">
-                  <button
-                    type="button"
-                    onClick={() => onSelectZone(zone.externalId)}
-                    className="flex w-full cursor-pointer items-center gap-1.5 px-1 py-1.5 text-left hover:bg-muted/60"
-                  >
-                    <span
-                      className="size-2.5 shrink-0 rounded-sm"
-                      style={{ backgroundColor: zone.fill }}
-                      aria-hidden
-                    />
-                    <span className="truncate">{zone.name}</span>
-                  </button>
-                </td>
-                <td className="p-0 text-right">
-                  <button
-                    type="button"
-                    onClick={() => onSelectZone(zone.externalId)}
-                    className={cn(
-                      "block w-full cursor-pointer px-1 py-1.5 text-right hover:bg-muted/60",
-                      count > 0 ? "text-foreground" : "text-muted-foreground",
-                    )}
-                  >
-                    {count > 0 ? count : "—"}
-                  </button>
-                </td>
-                <td className="p-0">
-                  {zone.kind === "seating" && (
-                    <Button
+          {doc.zones
+            .filter((zone) => !zone.parentExternalId)
+            .flatMap((zone) => [
+              zone,
+              ...doc.zones.filter(
+                (child) => child.parentExternalId === zone.externalId,
+              ),
+            ])
+            .map((zone) => {
+              const count =
+                zone.kind === "seating"
+                  ? zone.isGroup
+                    ? doc.zones
+                        .filter(
+                          (child) => child.parentExternalId === zone.externalId,
+                        )
+                        .reduce(
+                          (sum, child) =>
+                            sum + (seatCountByZone.get(child.externalId) ?? 0),
+                          0,
+                        )
+                    : (seatCountByZone.get(zone.externalId) ?? 0)
+                  : 0;
+              return (
+                <tr
+                  key={zone.externalId}
+                  className="group border-b last:border-0"
+                >
+                  <td className="max-w-0 p-0">
+                    <button
                       type="button"
-                      variant="ghost"
-                      size="icon"
-                      title="进入排位"
-                      onClick={() => onEnterZone(zone.externalId)}
-                      className="size-7 text-muted-foreground opacity-0 group-hover:opacity-100"
+                      onClick={() => onSelectZone(zone.externalId)}
+                      className="flex w-full cursor-pointer items-center gap-1.5 px-1 py-1.5 text-left hover:bg-muted/60"
                     >
-                      <LogInIcon className="size-3.5" />
-                    </Button>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
+                      <span
+                        className="size-2.5 shrink-0 rounded-sm"
+                        style={{ backgroundColor: zone.fill }}
+                        aria-hidden
+                      />
+                      <span
+                        className={cn(
+                          "truncate",
+                          zone.parentExternalId && "pl-3",
+                        )}
+                      >
+                        {zone.isGroup ? "▾ " : ""}
+                        {zone.name}
+                      </span>
+                    </button>
+                  </td>
+                  <td className="p-0 text-right">
+                    <button
+                      type="button"
+                      onClick={() => onSelectZone(zone.externalId)}
+                      className={cn(
+                        "block w-full cursor-pointer px-1 py-1.5 text-right hover:bg-muted/60",
+                        count > 0 ? "text-foreground" : "text-muted-foreground",
+                      )}
+                    >
+                      {count > 0 ? count : "—"}
+                    </button>
+                  </td>
+                  <td className="p-0">
+                    {zone.kind === "seating" && !zone.isGroup && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        title="进入排位"
+                        onClick={() => onEnterZone(zone.externalId)}
+                        className="size-7 text-muted-foreground opacity-0 group-hover:opacity-100"
+                      >
+                        <LogInIcon className="size-3.5" />
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
         </tbody>
       </table>
     </>

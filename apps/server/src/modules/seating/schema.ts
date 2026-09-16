@@ -89,6 +89,11 @@ export const segmentSeatingPlan = pgTable(
       mode: "number",
     }).notNull(),
 
+    sections: jsonb("sections")
+      .$type<{ externalId: string; name: string }[]>()
+      .notNull()
+      .default([]),
+
     status: text("status").$type<PlanStatus>().notNull().default("pending"),
 
     /**
@@ -200,6 +205,7 @@ export const segmentSeat = pgTable(
      * 的（§5），存外键会悬空。它只用于"从场地重新同步"时对齐，没有别的读者。
      */
     sourceExternalId: text("source_external_id"),
+    zoneExternalId: text("zone_external_id"),
 
     label: text("label").notNull(),
     kind: text("kind").$type<SeatKind>().notNull().default("seat"),

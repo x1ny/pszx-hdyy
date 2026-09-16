@@ -47,11 +47,23 @@ export function SeatingZonePicker({
     (listQuery.data?.venues ?? []).map((v) => [v.id, v.name]),
   );
   const zones = (listQuery.data?.zones ?? [])
-    .filter((zone) => zone.status === "active")
+    .filter(
+      (zone) =>
+        zone.status === "active" &&
+        !zone.parentExternalId &&
+        zone.kind === "seating",
+    )
     // 带着来源区域进来的，把它顶到第一个——用户就是冲它来的，
     // 不该还要在列表里找一遍。
     .sort((a, b) =>
-      a.id === highlightZoneId ? -1 : b.id === highlightZoneId ? 1 : 0,
+      a.id === highlightZoneId ||
+      a.externalId ===
+        listQuery.data?.zones.find((zone) => zone.id === highlightZoneId)
+          ?.parentExternalId
+        ? -1
+        : b.id === highlightZoneId
+          ? 1
+          : 0,
     );
 
   return (
@@ -107,7 +119,10 @@ export function SeatingZonePicker({
                   </p>
                 </div>
                 <Badge variant="outline" className="shrink-0">
-                  {zone.capacity} 点位
+                  {zone.isGroup
+                    ? `${(listQuery.data?.zones ?? []).filter((child) => child.activityVenueId === zone.activityVenueId && child.parentExternalId === zone.externalId && child.status === "active").length} 个分区 · ${(listQuery.data?.zones ?? []).filter((child) => child.activityVenueId === zone.activityVenueId && child.parentExternalId === zone.externalId && child.status === "active").reduce((sum, child) => sum + child.capacity, 0)}`
+                    : zone.capacity}{" "}
+                  点位
                 </Badge>
               </button>
             ))

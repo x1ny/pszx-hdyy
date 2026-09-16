@@ -401,29 +401,39 @@ export function CanvasView({
         fill="url(#venue-grid)"
       />
 
-      {doc.zones.map((zone) => {
-        const preview =
-          resizePreview?.zoneId === zone.externalId ? resizePreview.rect : null;
-        const shown = preview
-          ? { ...zone, shape: { ...zone.shape, ...preview } }
-          : zone;
-        return (
-          <ZoneNode
-            key={zone.externalId}
-            zone={shown}
-            selected={selectedZones.has(zone.externalId)}
-            offset={
-              dragOffset?.zoneIds.has(zone.externalId) ? dragOffset.delta : null
-            }
-            seatCount={seatCountByZone.get(zone.externalId) ?? 0}
-          />
-        );
-      })}
+      {doc.zones
+        .filter((zone) => !zone.isGroup)
+        .map((zone) => {
+          const preview =
+            resizePreview?.zoneId === zone.externalId
+              ? resizePreview.rect
+              : null;
+          const shown = preview
+            ? { ...zone, shape: { ...zone.shape, ...preview } }
+            : zone;
+          return (
+            <ZoneNode
+              key={zone.externalId}
+              zone={shown}
+              selected={
+                selectedZones.has(zone.externalId) ||
+                (!!zone.parentExternalId &&
+                  selectedZones.has(zone.parentExternalId))
+              }
+              offset={
+                dragOffset?.zoneIds.has(zone.externalId)
+                  ? dragOffset.delta
+                  : null
+              }
+              seatCount={seatCountByZone.get(zone.externalId) ?? 0}
+            />
+          );
+        })}
 
       {/* 选中区域的缩放手柄。除以 scale 让它在屏幕上大小恒定——
           这是旧代码里少数值得原样保留的细节。手柄按包围盒给，跟形状无关。 */}
       {doc.zones
-        .filter((zone) => selectedZones.has(zone.externalId))
+        .filter((zone) => !zone.isGroup && selectedZones.has(zone.externalId))
         .flatMap((zone) =>
           handleRects(zone, viewport.scale).map(({ handle, rect }) => (
             <rect

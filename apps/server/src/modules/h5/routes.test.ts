@@ -444,3 +444,37 @@ describe("maskMobile", () => {
     expect(maskMobile("123")).toBe("123");
   });
 });
+
+test("多分区独立坐标不会叠图，H5 只返回本人涉及的分区且灰点无编号", () => {
+  const map = buildSeatMap(
+    {
+      rendererKind: "svg-canvas-v1",
+      mySeats: [
+        { externalId: "a", label: "A1 · 1号" },
+        { externalId: "b", label: "A2 · 1号" },
+      ],
+      data: {
+        schemaVersion: 1,
+        zones: [
+          { externalId: "A1", name: "A1" },
+          { externalId: "A2", name: "A2" },
+          { externalId: "B1", name: "B1" },
+        ],
+        seats: [
+          { externalId: "a", zoneExternalId: "A1", x: 0, y: 0 },
+          { externalId: "a2", zoneExternalId: "A1", x: 40, y: 0 },
+          { externalId: "b", zoneExternalId: "A2", x: 0, y: 0 },
+          { externalId: "c", zoneExternalId: "B1", x: 0, y: 0 },
+        ],
+      },
+    },
+    ["a", "a2", "b", "c"],
+  );
+  expect(map?.sections?.map((section) => section.name)).toEqual(["A1", "A2"]);
+  expect(map?.sections?.[0].seats).toEqual([
+    { x: 0, y: 0 },
+    { x: 40, y: 0 },
+  ]);
+  expect(map?.sections?.[1].seats).toEqual([{ x: 0, y: 0 }]);
+  expect(map?.sections?.[1].mine[0].label).toBe("A2 · 1号");
+});

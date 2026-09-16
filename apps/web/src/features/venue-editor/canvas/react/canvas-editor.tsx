@@ -15,6 +15,7 @@ import { cn } from "#/shared/lib/utils.ts";
 import {
   addZone,
   boxShapeFromDrag,
+  groupZones,
   moveZones,
   polygonShapeFromPoints,
   removeZones,
@@ -47,6 +48,7 @@ import {
 } from "../core/interaction";
 import { CanvasView } from "./canvas-view";
 import { useViewport } from "./use-viewport";
+import { ZoneGroupDialog } from "./zone-group-dialog";
 
 /**
  * 区域分布画布——两级架构的**顶层**。
@@ -337,7 +339,22 @@ export function CanvasEditor({
           case "marquee":
             // 顶层框选目前没有可选对象（座位不在这一层），点一下空白只是清空选中，
             // 拖一下框选也一样——保留这个分支只是让状态机完整，行为等价于空操作。
-            onSelectionChange(EMPTY_SELECTION);
+            {
+              const box = normalizeRect(finished.subject.start, point);
+              onSelectionChange({
+                zoneIds: doc.zones
+                  .filter(
+                    (zone) =>
+                      !zone.isGroup &&
+                      zone.shape.x >= box.x &&
+                      zone.shape.y >= box.y &&
+                      zone.shape.x + zone.shape.width <= box.x + box.width &&
+                      zone.shape.y + zone.shape.height <= box.y + box.height,
+                  )
+                  .map((zone) => zone.externalId),
+                seatIds: [],
+              });
+            }
             return;
           default:
         }
@@ -548,6 +565,14 @@ export function CanvasEditor({
     <div className="flex min-h-0 flex-1 gap-3">
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border bg-card shadow-sm">
         <div className="flex flex-wrap items-center gap-1 border-b px-2 py-1.5">
+          <ZoneGroupDialog
+            doc={doc}
+            selectedIds={selection.zoneIds}
+            onGroup={(ids, name) => {
+              onCommand((s) => execute(s, groupZones(ids, name)));
+              onSelectionChange(EMPTY_SELECTION);
+            }}
+          />
           {TOOL_ITEMS.map((item) => (
             <Button
               key={item.value}

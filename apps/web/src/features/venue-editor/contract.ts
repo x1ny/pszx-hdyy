@@ -27,6 +27,10 @@ export const SEAT_RANKS = ["normal", "vip"] as const;
 export type SeatRank = (typeof SEAT_RANKS)[number];
 
 export type ZoneDraft = {
+  /** 业务区域仅用于整组选区，座位仍属于叶子分区。 */
+  isGroup?: boolean;
+  parentExternalId?: string | null;
+
   /** 编辑器自己生成的稳定标识，只用来在下次保存时做增删改归并。 */
   externalId: string;
   name: string;

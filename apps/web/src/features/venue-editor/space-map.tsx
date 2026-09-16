@@ -48,8 +48,8 @@ export function SpaceMap({
 
   // 只画活动层认的区域。blob 里可能有活动导入之后场地库又加的区域——那些不属于
   // 这个活动的空间，画出来会让人以为能用。
-  const drawable = doc.zones.filter((zone) =>
-    metaByExternalId.has(zone.externalId),
+  const drawable = doc.zones.filter(
+    (zone) => !zone.isGroup && metaByExternalId.has(zone.externalId),
   );
 
   if (drawable.length === 0) {

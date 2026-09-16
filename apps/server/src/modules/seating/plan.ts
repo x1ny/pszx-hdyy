@@ -16,6 +16,7 @@ import type { SeatKind, SeatRank } from "../venue/schema";
 export type PlanSeatRow = {
   id: number;
   externalId: string;
+  zoneExternalId?: string | null;
   label: string;
   kind: SeatKind;
   rank: SeatRank;
@@ -25,6 +26,7 @@ export type PlanSeatRow = {
 
 /** 编辑器投影出来的方案位置。 */
 export type PlanSeatDraft = {
+  zoneExternalId?: string | null;
   externalId: string;
   sourceExternalId?: string | null;
   label: string;
@@ -97,6 +99,7 @@ export function planSeatMerge(
     }
 
     if (
+      (row.zoneExternalId ?? null) !== (draft.zoneExternalId ?? null) ||
       row.label !== draft.label ||
       row.kind !== draft.kind ||
       row.rank !== draft.rank ||

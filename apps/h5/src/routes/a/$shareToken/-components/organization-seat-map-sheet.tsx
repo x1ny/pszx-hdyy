@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type { AgendaItem, OrganizationSeatMap } from "../-queries";
 import { organizationSeatMapQueryOptions } from "../-queries";
 import { OverlaySheet } from "./overlay-sheet";
@@ -79,13 +79,37 @@ export function OrganizationSeatMapSheet({
 }
 
 function OrganizationSeatMapBody({ data }: { data: OrganizationSeatMap }) {
+  const [selectedSection, setSelectedSection] = useState<string | null>(null);
   if (!data.map || data.map.mine.length === 0) return <SeatMapFallback />;
 
+  const current =
+    data.map.sections?.find(
+      (section) => section.externalId === selectedSection,
+    ) ??
+    data.map.sections?.[0] ??
+    data.map;
   return (
-    <SeatMapCanvas
-      map={data.map}
-      highlights={data.map.mine}
-      highlightMode="seats"
-    />
+    <>
+      {data.map.sections && (
+        <div className="mb-3 flex flex-wrap gap-2">
+          {data.map.sections.map((section) => (
+            <button
+              key={section.externalId}
+              type="button"
+              aria-pressed={current === section}
+              className="rounded-lg bg-page px-3 py-2 text-body text-brand"
+              onClick={() => setSelectedSection(section.externalId)}
+            >
+              {section.name}
+            </button>
+          ))}
+        </div>
+      )}
+      <SeatMapCanvas
+        map={current}
+        highlights={current.mine}
+        highlightMode="seats"
+      />
+    </>
   );
 }

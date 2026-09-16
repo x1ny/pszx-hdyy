@@ -4,6 +4,7 @@ import { db } from "../../infra/db";
 import { err, ok } from "../../shared/result";
 import { jsonBody } from "../../shared/validate";
 import { type AuthedVariables, requireUser } from "../auth";
+import { activityZoneCapacity } from "./capacity";
 import type { ZoneDraft } from "./schema";
 import {
   activityVenue,
@@ -59,10 +60,12 @@ const activityZoneFields = {
   name: activityVenueZone.name,
   kind: activityVenueZone.kind,
   purpose: activityVenueZone.purpose,
-  capacity: activityVenueZone.capacity,
+  capacity: activityZoneCapacity,
   status: activityVenueZone.status,
   note: activityVenueZone.note,
   ordinal: activityVenueZone.ordinal,
+  isGroup: activityVenueZone.isGroup,
+  parentExternalId: activityVenueZone.parentExternalId,
 };
 
 const notFound = (message = "活动场地不存在") =>
@@ -304,6 +307,8 @@ export const activityVenueRoutes = new Hono<{ Variables: AuthedVariables }>()
           name: venueZone.name,
           kind: venueZone.kind,
           ordinal: venueZone.ordinal,
+          isGroup: venueZone.isGroup,
+          parentExternalId: venueZone.parentExternalId,
           seatCount: sql<number>`(
             select count(*)::int from ${venueSeat}
             where ${eq(venueSeat.zoneId, venueZone.id)}
@@ -323,8 +328,10 @@ export const activityVenueRoutes = new Hono<{ Variables: AuthedVariables }>()
             name: zone.name,
             kind: zone.kind,
             purpose: DEFAULT_PURPOSE_BY_KIND[zone.kind],
-            capacity: zone.seatCount,
+            capacity: zone.isGroup ? 0 : zone.seatCount,
             ordinal: zone.ordinal,
+            isGroup: zone.isGroup,
+            parentExternalId: zone.parentExternalId,
           })),
         );
       }
@@ -378,7 +385,10 @@ export const activityVenueRoutes = new Hono<{ Variables: AuthedVariables }>()
 
     const [row] = await db
       .update(activityVenueZone)
-      .set(input)
+      .set({
+        ...input,
+        capacity: sql`case when ${activityVenueZone.isGroup} then 0 else ${input.capacity} end`,
+      })
       .where(eq(activityVenueZone.id, id))
       .returning(activityZoneFields);
 
@@ -522,6 +532,8 @@ async function applyActivityLayout(
     if (!row) {
       insert.push(draft);
     } else if (
+      row.isGroup !== (draft.isGroup ?? false) ||
+      row.parentExternalId !== (draft.parentExternalId ?? null) ||
       row.name !== draft.name ||
       row.kind !== draft.kind ||
       row.ordinal !== draft.ordinal
@@ -542,7 +554,13 @@ async function applyActivityLayout(
   for (const { id, draft } of update) {
     await tx
       .update(activityVenueZone)
-      .set({ name: draft.name, kind: draft.kind, ordinal: draft.ordinal })
+      .set({
+        name: draft.name,
+        kind: draft.kind,
+        ordinal: draft.ordinal,
+        isGroup: draft.isGroup ?? false,
+        parentExternalId: draft.parentExternalId ?? null,
+      })
       .where(eq(activityVenueZone.id, id));
   }
   if (insert.length) {
@@ -559,6 +577,8 @@ async function applyActivityLayout(
         name: draft.name,
         kind: draft.kind,
         ordinal: draft.ordinal,
+        isGroup: draft.isGroup ?? false,
+        parentExternalId: draft.parentExternalId ?? null,
         purpose: DEFAULT_PURPOSE_BY_KIND[draft.kind],
         capacity: 0,
       })),

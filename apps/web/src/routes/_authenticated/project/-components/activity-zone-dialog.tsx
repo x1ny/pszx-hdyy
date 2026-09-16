@@ -142,6 +142,7 @@ export function ActivityZoneDialog({
             <FieldLabel htmlFor="zone-capacity">可用点位</FieldLabel>
             <Input
               id="zone-capacity"
+              disabled={zone?.isGroup}
               type="number"
               min={0}
               value={capacity}

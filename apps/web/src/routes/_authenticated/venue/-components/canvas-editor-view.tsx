@@ -106,7 +106,7 @@ export function CanvasEditorView({
 
   const enterZone = (zoneId: string) => {
     const zone = doc.zones.find((item) => item.externalId === zoneId);
-    if (zone?.kind !== "seating") return;
+    if (zone?.kind !== "seating" || zone.isGroup) return;
     setSelection(EMPTY_SELECTION);
     setActiveZoneId(zoneId);
   };

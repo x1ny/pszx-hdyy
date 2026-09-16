@@ -28,6 +28,8 @@ export const seed: SeedFn = async (db, { userId }) => {
       id: 1,
       venueId: DEMO.venueId,
       externalId: "zone-main",
+      isGroup: false,
+      parentExternalId: null,
       name: "主会场坐席区",
       kind: "seating",
       ordinal: 0,

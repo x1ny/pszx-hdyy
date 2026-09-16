@@ -37,6 +37,7 @@ import {
 } from "#/features/venue-editor/canvas/seat-occupant-visual";
 import { downloadSeatingPlanJpeg } from "#/features/venue-editor/canvas/seating-plan-jpeg";
 import { downloadSeatingPlanSvg } from "#/features/venue-editor/canvas/seating-plan-svg";
+import { SpaceMap } from "#/features/venue-editor/space-map";
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import { Skeleton } from "#/shared/components/ui/skeleton.tsx";
@@ -111,6 +112,7 @@ function SeatingCanvasPage() {
   );
   const bundle = planQuery.data;
 
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [selection, setSelection] = useState<Selection>(EMPTY_SELECTION);
   const [organizationBatchOpen, setOrganizationBatchOpen] = useState(false);
   const [organizationSelectionSession, setOrganizationSelectionSession] =
@@ -140,7 +142,11 @@ function SeatingCanvasPage() {
     return canvasEditor.safeParse(bundle.layout.data);
   }, [bundle?.layout]);
   const state = useMemo(() => (doc ? initialState(doc) : null), [doc]);
-  const zone = state?.doc.zones[0] ?? null;
+  const zone =
+    state?.doc.zones.find((item) => item.externalId === activeSectionId) ??
+    state?.doc.zones[0] ??
+    null;
+  const grouped = (bundle?.plan.sections.length ?? 0) > 0;
 
   const seatByExternalId = useMemo(
     () => new Map((bundle?.seats ?? []).map((seat) => [seat.externalId, seat])),
@@ -511,14 +517,24 @@ function SeatingCanvasPage() {
     setIsExporting(true);
     try {
       const input = {
-        doc,
+        doc: {
+          ...doc,
+          zones: doc.zones.filter(
+            (item) => item.externalId === zone?.externalId,
+          ),
+          seats: doc.seats.filter(
+            (seat) => seat.zoneExternalId === zone?.externalId,
+          ),
+        },
         seatStatus,
         title: `${bundle.plan.segmentName} · ${bundle.plan.zoneName} 排位图`,
         subtitle: [bundle.plan.venueName, bundle.plan.zoneName]
           .filter(Boolean)
           .join(" / "),
         segmentName: bundle.plan.segmentName,
-        zoneName: bundle.plan.zoneName,
+        zoneName: grouped
+          ? `${bundle.plan.zoneName} · ${zone?.name}`
+          : bundle.plan.zoneName,
       };
       if (format === "svg") {
         downloadSeatingPlanSvg(input);
@@ -604,6 +620,68 @@ function SeatingCanvasPage() {
     );
   }
 
+  if (grouped && !activeSectionId)
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-lg">
+              {bundle.plan.segmentName} · {bundle.plan.zoneName}
+            </h2>
+            <p className="text-muted-foreground text-sm">
+              {doc.zones.length} 个分区 · {bundle.seats.length} 个位置 · 已占{" "}
+              {bundle.assignments.length} 个位置
+            </p>
+          </div>
+          <Button variant="outline" onClick={goBack}>
+            返回排位列表
+          </Button>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
+          <div className="h-[560px] rounded-lg border bg-card">
+            <SpaceMap
+              doc={doc}
+              zones={doc.zones.map((section) => ({
+                externalId: section.externalId,
+                name: section.name,
+                caption: `${
+                  doc.seats.filter(
+                    (seat) => seat.zoneExternalId === section.externalId,
+                  ).length
+                } 座`,
+                disabled: false,
+              }))}
+              onSelect={setActiveSectionId}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            {doc.zones.map((section) => {
+              const seats = bundle.seats.filter(
+                (seat) => seat.zoneExternalId === section.externalId,
+              );
+              return (
+                <Button
+                  key={section.externalId}
+                  variant="outline"
+                  className="h-auto justify-between py-4"
+                  onClick={() => setActiveSectionId(section.externalId)}
+                >
+                  <span>{section.name}</span>
+                  <span>
+                    {
+                      seats.filter((seat) => assignmentBySeatId.has(seat.id))
+                        .length
+                    }{" "}
+                    / {seats.length} 已占
+                  </span>
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -658,6 +736,7 @@ function SeatingCanvasPage() {
       {!isFullscreen ? editorOperationNotices : null}
 
       <ZoneSeatingEditor
+        key={zone.externalId}
         frameRef={fullscreenRef}
         frameClassName={
           isFullscreen
@@ -672,8 +751,17 @@ function SeatingCanvasPage() {
         onCommand={() => {
           /* assignOnly：不会被真的调用，见 zone-seating-editor.tsx 里 assignOnly 的说明。 */
         }}
-        onBack={goBack}
-        backLabel="返回排位列表"
+        onBack={
+          grouped
+            ? () => {
+                setActiveSectionId(null);
+                setSelection(EMPTY_SELECTION);
+                setSwapFrom(null);
+                exitOrganizationSeatSelection();
+              }
+            : goBack
+        }
+        backLabel={grouped ? "返回分区总览" : "返回排位列表"}
         seatStatus={seatStatus}
         assignOnly
         pickMode={organizationSelectionSession !== null}
@@ -686,6 +774,25 @@ function SeatingCanvasPage() {
         }}
         toolbarActions={
           <>
+            {grouped &&
+              doc.zones.map((section) => (
+                <Button
+                  key={section.externalId}
+                  variant={
+                    section.externalId === zone.externalId
+                      ? "secondary"
+                      : "ghost"
+                  }
+                  size="sm"
+                  disabled={organizationSelectionSession !== null}
+                  onClick={() => {
+                    setActiveSectionId(section.externalId);
+                    setSelection(EMPTY_SELECTION);
+                  }}
+                >
+                  {section.name}
+                </Button>
+              ))}
             <Button
               type="button"
               variant="ghost"

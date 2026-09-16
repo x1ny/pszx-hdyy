@@ -20,6 +20,10 @@ import type {
 
 /** 库里现存的区域行，只取归并要用到的列。 */
 export type ZoneRow = {
+  /** 业务区域仅用于整组选区，座位仍属于叶子分区。 */
+  isGroup?: boolean;
+  parentExternalId?: string | null;
+
   id: number;
   externalId: string;
   name: string;
@@ -97,6 +101,8 @@ export function planZones(
     rows,
     drafts,
     (row, draft) =>
+      (row.isGroup ?? false) !== (draft.isGroup ?? false) ||
+      (row.parentExternalId ?? null) !== (draft.parentExternalId ?? null) ||
       row.name !== draft.name ||
       row.kind !== draft.kind ||
       row.ordinal !== draft.ordinal,

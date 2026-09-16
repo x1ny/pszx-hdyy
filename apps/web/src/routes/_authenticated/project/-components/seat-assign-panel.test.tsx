@@ -13,6 +13,7 @@ const DEFAULT_SEAT: PlanSeatRow = {
   id: 301,
   externalId: "seat-301",
   sourceExternalId: null,
+  zoneExternalId: null,
   label: "A1",
   kind: "seat",
   rank: "normal",

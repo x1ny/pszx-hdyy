@@ -5,6 +5,7 @@ import { err, ok } from "../../shared/result";
 import {
   formatOrganizationSeatRanges,
   parseSeatPoints,
+  parseSeatSections,
   SEAT_CANVAS_RENDERER_KIND,
   seatFieldPitch,
 } from "../../shared/seat-canvas";
@@ -720,8 +721,38 @@ export function buildSeatMap(
     .filter((point) => live.has(point.externalId))
     .map((point) => ({ x: point.x, y: point.y }));
 
+  const sections = parseSeatSections(row.data);
+  const maps =
+    sections.length > 1
+      ? sections.flatMap((section) => {
+          const ids = new Set(section.seatIds);
+          const sectionMine = row.mySeats
+            .filter((seat) => ids.has(seat.externalId))
+            .map((seat) => mine[row.mySeats.indexOf(seat)])
+            .filter(
+              (seat): seat is { x: number; y: number; label: string } => !!seat,
+            );
+          if (!sectionMine.length) return [];
+          const sectionSeats = points
+            .filter(
+              (point) =>
+                ids.has(point.externalId) && live.has(point.externalId),
+            )
+            .map((point) => ({ x: point.x, y: point.y }));
+          return [
+            {
+              name: section.name,
+              externalId: section.externalId,
+              seats: sectionSeats,
+              mine: sectionMine,
+              pitch: seatFieldPitch(sectionSeats),
+            },
+          ];
+        })
+      : [];
   return {
-    seats,
+    ...(maps.length ? { sections: maps } : {}),
+    seats: maps[0]?.seats ?? seats,
     mine,
     /**
      * 典型座距，前端据此决定圆点画多大、放大到什么程度就该停。**在这里算而不是

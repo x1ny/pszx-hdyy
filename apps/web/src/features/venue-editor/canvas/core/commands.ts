@@ -169,7 +169,9 @@ export const resizeZone = (zoneId: string, next: Rect): Command => ({
 /** 改名、改类型、改颜色，合成一个命令——都是"这块区域的属性"，没必要拆三个。 */
 export const patchZone = (
   zoneId: string,
-  patch: Partial<Pick<CanvasZone, "name" | "kind" | "fill" | "stroke">> & {
+  patch: Partial<
+    Pick<CanvasZone, "name" | "kind" | "fill" | "stroke" | "parentExternalId">
+  > & {
     rotation?: number;
   },
 ): Command => ({
@@ -178,7 +180,19 @@ export const patchZone = (
     const zone = findZone(draft, zoneId);
     if (!zone) return;
     if (patch.name !== undefined) zone.name = patch.name;
-    if (patch.kind !== undefined) zone.kind = patch.kind;
+    if (patch.kind !== undefined && !zone.isGroup && !zone.parentExternalId)
+      zone.kind = patch.kind;
+    if (
+      patch.parentExternalId !== undefined &&
+      !zone.isGroup &&
+      zone.kind === "seating"
+    ) {
+      const parent = patch.parentExternalId
+        ? findZone(draft, patch.parentExternalId)
+        : null;
+      if (!patch.parentExternalId || parent?.isGroup)
+        zone.parentExternalId = patch.parentExternalId;
+    }
     if (patch.fill !== undefined) zone.fill = patch.fill;
     if (patch.stroke !== undefined) zone.stroke = patch.stroke;
     if (patch.rotation !== undefined && Number.isFinite(patch.rotation)) {
@@ -192,6 +206,10 @@ export const removeZones = (zoneIds: string[]): Command => ({
   label: "删除区域",
   apply: (draft) => {
     const targets = new Set(zoneIds);
+    for (const zone of draft.zones) {
+      if (zone.parentExternalId && targets.has(zone.parentExternalId))
+        zone.parentExternalId = null;
+    }
     draft.zones = draft.zones.filter((zone) => !targets.has(zone.externalId));
     draft.seats = draft.seats.filter(
       (seat) => !targets.has(seat.zoneExternalId),
@@ -329,5 +347,35 @@ export const removeSeats = (seatIds: string[]): Command => ({
     draft.seats = draft.seats.filter((seat) => !targets.has(seat.externalId));
     for (const row of draft.rows ?? [])
       row.seatIds = row.seatIds.filter((id) => !targets.has(id));
+  },
+});
+
+/** 分组不动几何、排和座位标识；撤销一次恢复全部归属。 */
+export const groupZones = (zoneIds: string[], name: string): Command => ({
+  label: "归入业务区域",
+  apply: (draft) => {
+    const children = draft.zones.filter(
+      (zone) =>
+        zoneIds.includes(zone.externalId) &&
+        !zone.isGroup &&
+        zone.kind === "seating",
+    );
+    if (
+      !children.length ||
+      !name.trim() ||
+      draft.zones.some((zone) => zone.name === name.trim())
+    )
+      return;
+    const id = newId("z");
+    draft.zones.push({
+      externalId: id,
+      name: name.trim(),
+      kind: "seating",
+      isGroup: true,
+      ordinal: draft.zones.length,
+      shape: { type: "rect", x: 0, y: 0, width: 60, height: 60 },
+      ...ZONE_KIND_DEFAULT_COLOR.seating,
+    });
+    for (const child of children) child.parentExternalId = id;
   },
 });

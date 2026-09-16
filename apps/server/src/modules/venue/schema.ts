@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   foreignKey,
   index,
   integer,
@@ -157,6 +158,8 @@ export const venueZone = pgTable(
     externalId: text("external_id").notNull(),
     name: text("name").notNull(),
     kind: text("kind").$type<ZoneKind>().notNull(),
+    isGroup: boolean("is_group").notNull().default(false),
+    parentExternalId: text("parent_external_id"),
 
     /** 画布里的展示顺序，投影时按编辑器的图层序给出。 */
     ordinal: integer("ordinal").notNull().default(0),
@@ -427,6 +430,8 @@ export const activityVenueZone = pgTable(
 
     name: text("name").notNull(),
     kind: text("kind").$type<ZoneKind>().notNull(),
+    isGroup: boolean("is_group").notNull().default(false),
+    parentExternalId: text("parent_external_id"),
 
     purpose: text("purpose").$type<ZonePurpose>().notNull(),
 
@@ -482,6 +487,10 @@ export const activityVenueZone = pgTable(
 
 /** 编辑器 `project()` 产出的区域。 */
 export type ZoneDraft = {
+  /** 业务区域仅用于整组选区，座位仍属于叶子分区。 */
+  isGroup?: boolean;
+  parentExternalId?: string | null;
+
   externalId: string;
   name: string;
   kind: ZoneKind;

@@ -124,7 +124,14 @@ function SeatMapBody({ data }: { data: SeatMap }) {
           </div>
         </div>
       )}
-      <SeatMapCanvas map={data.map} highlights={[mine]} />
+      <SeatMapCanvas
+        map={
+          data.map.sections?.find((section) =>
+            section.mine.some((seat) => seat.label === mine.label),
+          ) ?? data.map
+        }
+        highlights={[mine]}
+      />
     </>
   );
 }

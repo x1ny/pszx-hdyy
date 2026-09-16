@@ -10,6 +10,7 @@ import { activityMemberOrderBy } from "../member/activity-member-order-by";
 import { ensureSegmentMemberFromActivity } from "../member/ladder";
 import { activityMember, member, segmentMember } from "../member/schema";
 import { organization } from "../organization/schema";
+import { activityZoneCapacity } from "../venue/capacity";
 import {
   activityVenue,
   activityVenueLayout,
@@ -67,6 +68,7 @@ const planFields = {
   segmentId: segmentSeatingPlan.segmentId,
   activityId: segmentSeatingPlan.activityId,
   activityVenueZoneId: segmentSeatingPlan.activityVenueZoneId,
+  sections: segmentSeatingPlan.sections,
   status: segmentSeatingPlan.status,
   version: segmentSeatingPlan.version,
   rejectedReason: segmentSeatingPlan.rejectedReason,
@@ -79,6 +81,7 @@ const seatFields = {
   externalId: segmentSeat.externalId,
   sourceExternalId: segmentSeat.sourceExternalId,
   label: segmentSeat.label,
+  zoneExternalId: segmentSeat.zoneExternalId,
   kind: segmentSeat.kind,
   rank: segmentSeat.rank,
   enabled: segmentSeat.enabled,
@@ -560,7 +563,7 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
         segmentName: activitySegment.name,
         zoneName: activityVenueZone.name,
         zoneExternalId: activityVenueZone.externalId,
-        zoneCapacity: activityVenueZone.capacity,
+        zoneCapacity: activityZoneCapacity,
         activityVenueId: activityVenueZone.activityVenueId,
         venueName: activityVenue.name,
         /**
@@ -746,6 +749,10 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
         .select({
           activityId: activityVenueZone.activityId,
           status: activityVenueZone.status,
+          externalId: activityVenueZone.externalId,
+          parentExternalId: activityVenueZone.parentExternalId,
+          isGroup: activityVenueZone.isGroup,
+          activityVenueId: activityVenueZone.activityVenueId,
         })
         .from(activityVenueZone)
         .where(eq(activityVenueZone.id, input.activityVenueZoneId));
@@ -756,6 +763,50 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
       if (zone.status === "disabled") {
         return { ok: false as const, error: "该区域已在本活动停用" };
       }
+
+      if (zone.parentExternalId)
+        return { ok: false as const, error: "请选择分区所属的业务区域" };
+      const children = zone.isGroup
+        ? await tx
+            .select({
+              externalId: activityVenueZone.externalId,
+              name: activityVenueZone.name,
+            })
+            .from(activityVenueZone)
+            .where(
+              and(
+                eq(activityVenueZone.activityVenueId, zone.activityVenueId),
+                eq(activityVenueZone.parentExternalId, zone.externalId),
+                eq(activityVenueZone.status, "active"),
+              ),
+            )
+        : [];
+      const allowed = new Set(children.map((child) => child.externalId));
+      if (
+        zone.isGroup &&
+        (!children.length ||
+          !input.sections ||
+          input.sections.length !== children.length ||
+          new Set(input.sections.map((section) => section.externalId)).size !==
+            children.length ||
+          input.sections.some((section) => !allowed.has(section.externalId)) ||
+          input.seats.some(
+            (seat) => !seat.zoneExternalId || !allowed.has(seat.zoneExternalId),
+          ))
+      ) {
+        return {
+          ok: false as const,
+          error: "分区已发生变化，请刷新后重新选择区域",
+        };
+      }
+      if (
+        !zone.isGroup &&
+        input.seats.some(
+          (seat) =>
+            seat.zoneExternalId && seat.zoneExternalId !== zone.externalId,
+        )
+      )
+        return { ok: false as const, error: "座位不属于所选区域" };
 
       const [existing] = await tx
         .select({ id: segmentSeatingPlan.id })
@@ -776,6 +827,7 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
           segmentId: input.segmentId,
           activityId: segment.activityId,
           activityVenueZoneId: input.activityVenueZoneId,
+          sections: children,
           status: "pending",
           savedBy: userId,
           savedAt: new Date(),
@@ -797,6 +849,7 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
             planId: plan.id,
             externalId: seat.externalId,
             sourceExternalId: seat.sourceExternalId ?? null,
+            zoneExternalId: seat.zoneExternalId ?? null,
             label: seat.label,
             kind: seat.kind,
             rank: seat.rank,
@@ -834,6 +887,7 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
       const [plan] = await tx
         .select({
           id: segmentSeatingPlan.id,
+          sections: segmentSeatingPlan.sections,
           status: segmentSeatingPlan.status,
         })
         .from(segmentSeatingPlan)
@@ -842,6 +896,17 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
       if (!isWritable(plan.status)) {
         return { kind: "invalid" as const, error: "方案已作废，不能再修改" };
       }
+
+      if (
+        plan.sections.length &&
+        input.seats.some(
+          (seat) =>
+            !plan.sections.some(
+              (section) => section.externalId === seat.zoneExternalId,
+            ),
+        )
+      )
+        return { kind: "invalid" as const, error: "座位分区不属于本方案" };
 
       const rows: PlanSeatRow[] = await tx
         .select(seatFields)
@@ -868,6 +933,7 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
           .update(segmentSeat)
           .set({
             label: draft.label,
+            zoneExternalId: draft.zoneExternalId ?? null,
             kind: draft.kind,
             rank: draft.rank,
             enabled: draft.enabled,
@@ -879,6 +945,7 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
         await tx.insert(segmentSeat).values(
           batch.map((seat) => ({
             planId: input.planId,
+            zoneExternalId: seat.zoneExternalId ?? null,
             externalId: seat.externalId,
             sourceExternalId: seat.sourceExternalId ?? null,
             label: seat.label,
@@ -1533,7 +1600,7 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
         .select({
           status: segmentSeatingPlan.status,
           version: segmentSeatingPlan.version,
-          capacity: activityVenueZone.capacity,
+          capacity: activityZoneCapacity,
           segmentStatus: activitySegment.status,
           segmentName: activitySegment.name,
         })

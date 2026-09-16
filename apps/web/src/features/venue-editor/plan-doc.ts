@@ -22,6 +22,7 @@ import type { SeatKind, SeatRank, ZoneKind } from "./contract";
 
 export type PlanSeatDraft = {
   externalId: string;
+  zoneExternalId?: string;
   sourceExternalId: string | null;
   label: string;
   kind: SeatKind;
@@ -33,6 +34,7 @@ export type PlanSeatDraft = {
 export type PlanDocBundle = {
   doc: CanvasDoc;
   seats: PlanSeatDraft[];
+  sections?: { externalId: string; name: string }[];
 };
 
 /** 源场地没画过平面图时，给个能用的空区域，用户进去套模板就能排。 */
@@ -44,6 +46,7 @@ export function buildPlanDoc(input: {
   zoneExternalId: string;
   zoneName: string;
   zoneKind: ZoneKind;
+  sectionExternalIds?: string[];
 }): PlanDocBundle {
   const source = input.layoutData
     ? canvasEditor.safeParse(input.layoutData)
@@ -52,6 +55,29 @@ export function buildPlanDoc(input: {
     (zone) => zone.externalId === input.zoneExternalId,
   );
 
+  if (sourceZone?.isGroup && source) {
+    const sections = source.zones.filter(
+      (zone) =>
+        zone.parentExternalId === sourceZone.externalId &&
+        (!input.sectionExternalIds ||
+          input.sectionExternalIds.includes(zone.externalId)),
+    );
+    const ids = new Set(sections.map((zone) => zone.externalId));
+    const doc: CanvasDoc = {
+      ...source,
+      zones: sections.map((zone) => ({ ...zone, parentExternalId: null })),
+      seats: source.seats.filter((seat) => ids.has(seat.zoneExternalId)),
+      rows: source.rows?.filter((row) => ids.has(row.zoneExternalId)),
+    };
+    return {
+      doc,
+      seats: projectPlanSeats(doc, undefined, true),
+      sections: sections.map((zone) => ({
+        externalId: zone.externalId,
+        name: zone.name,
+      })),
+    };
+  }
   const color = ZONE_KIND_DEFAULT_COLOR[input.zoneKind];
 
   // 保留区域元信息；坐标原点规范化不改变任何座位坐标。
@@ -99,6 +125,7 @@ export function buildPlanDoc(input: {
 export function projectPlanSeats(
   doc: CanvasDoc,
   previous?: Map<string, { enabled: boolean; sourceExternalId: string | null }>,
+  grouped = doc.zones.length > 1,
 ): PlanSeatDraft[] {
   return doc.seats.map((seat) => {
     const prior = previous?.get(seat.externalId);
@@ -110,7 +137,10 @@ export function projectPlanSeats(
        * 来自底图。
        */
       sourceExternalId: prior ? prior.sourceExternalId : seat.externalId,
-      label: seat.label,
+      zoneExternalId: seat.zoneExternalId,
+      label: grouped
+        ? `${doc.zones.find((zone) => zone.externalId === seat.zoneExternalId)?.name ?? ""} · ${seat.label}`
+        : seat.label,
       kind: seat.kind,
       rank: seat.rank,
       // 编辑器不认识 enabled（它是方案层概念），所以保存时从库里那份沿用；

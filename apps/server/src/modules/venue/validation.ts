@@ -66,6 +66,8 @@ const externalId = z
   .max(128, "元素标识过长");
 
 const ZoneDraftInput = z.object({
+  isGroup: z.boolean().optional(),
+  parentExternalId: externalId.nullish(),
   externalId,
   name: required("区域名称", 128),
   kind: ZoneKindEnum,
@@ -106,6 +108,7 @@ export const SaveVenueLayoutInput = z
   .superRefine((input, ctx) => {
     // 这四条是"投影出来的语义"层面的校验。放 superRefine 而不是 handler：
     // 它们只看入参、不看库，属于契约的一部分，且能在一次校验里把问题一起报出来。
+    validateZoneHierarchy(input.zones, ctx);
     const zoneIds = new Set<string>();
     for (const zone of input.zones) {
       if (zoneIds.has(zone.externalId)) {
@@ -132,7 +135,11 @@ export const SaveVenueLayoutInput = z
       }
       seatIds.add(seat.externalId);
 
-      if (!zoneIds.has(seat.zoneExternalId)) {
+      if (
+        !zoneIds.has(seat.zoneExternalId) ||
+        input.zones.find((zone) => zone.externalId === seat.zoneExternalId)
+          ?.isGroup
+      ) {
         ctx.addIssue({
           code: "custom",
           path: ["seats"],
@@ -226,6 +233,7 @@ export const SaveActivityVenueLayoutInput = z
     zones: z.array(ZoneDraftInput).max(200, "区域数量超出上限"),
   })
   .superRefine((input, ctx) => {
+    validateZoneHierarchy(input.zones, ctx);
     const zoneIds = new Set<string>();
     for (const zone of input.zones) {
       if (zoneIds.has(zone.externalId)) {
@@ -242,3 +250,30 @@ export const SaveActivityVenueLayoutInput = z
 export type SaveActivityVenueLayoutPayload = z.infer<
   typeof SaveActivityVenueLayoutInput
 >;
+
+/** 固定两层：业务区域不直接挂座位，分区只能挂在同批座席区域下。 */
+function validateZoneHierarchy(
+  zones: z.infer<typeof ZoneDraftInput>[],
+  ctx: z.RefinementCtx,
+) {
+  const byId = new Map(zones.map((zone) => [zone.externalId, zone]));
+  for (const zone of zones) {
+    const parent = zone.parentExternalId
+      ? byId.get(zone.parentExternalId)
+      : null;
+    if (
+      (zone.isGroup && (zone.parentExternalId || zone.kind !== "seating")) ||
+      (zone.parentExternalId &&
+        (!parent?.isGroup ||
+          parent.parentExternalId ||
+          zone.kind !== "seating" ||
+          parent.externalId === zone.externalId))
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["zones"],
+        message: "区域归属无效：只允许业务区域下包含座席分区",
+      });
+    }
+  }
+}

@@ -254,3 +254,38 @@ export function seatFieldPitch(points: readonly { x: number; y: number }[]) {
   const median = nearest[Math.floor(nearest.length / 2)];
   return median > 0 ? median : DEFAULT_SEAT_PITCH;
 }
+
+/** 多分区只读投影：不修改独立坐标，不向 H5 暴露其他人的编号。 */
+export function parseSeatSections(
+  data: unknown,
+): { externalId: string; name: string; seatIds: string[] }[] {
+  if (
+    !isRecord(data) ||
+    !Array.isArray(data.zones) ||
+    !Array.isArray(data.seats)
+  )
+    return [];
+  const seats = data.seats;
+  return data.zones.flatMap((zone) => {
+    if (
+      !isRecord(zone) ||
+      zone.isGroup ||
+      typeof zone.externalId !== "string" ||
+      typeof zone.name !== "string"
+    )
+      return [];
+    return [
+      {
+        externalId: zone.externalId,
+        name: zone.name,
+        seatIds: seats.flatMap((seat) =>
+          isRecord(seat) &&
+          seat.zoneExternalId === zone.externalId &&
+          typeof seat.externalId === "string"
+            ? [seat.externalId]
+            : [],
+        ),
+      },
+    ];
+  });
+}

@@ -69,6 +69,10 @@ export type ZoneShape =
  */
 
 export type CanvasZone = {
+  /** 业务区域仅用于整组选区，座位仍属于叶子分区。 */
+  isGroup?: boolean;
+  parentExternalId?: string | null;
+
   externalId: string;
   name: string;
   kind: ZoneKind;
@@ -186,6 +190,10 @@ export function projectCanvas(doc: CanvasDoc): VenueProjection {
     name: zone.name,
     kind: zone.kind,
     ordinal: zone.ordinal,
+    ...(zone.isGroup ? { isGroup: true } : {}),
+    ...(zone.parentExternalId
+      ? { parentExternalId: zone.parentExternalId }
+      : {}),
   }));
 
   const known = new Set(zones.map((zone) => zone.externalId));
@@ -275,6 +283,10 @@ function parseZone(raw: unknown): CanvasZone | null {
   if (!isFiniteNumber(raw.ordinal)) return null;
   if (!isColor(raw.fill) || !isColor(raw.stroke)) return null;
 
+  if (raw.isGroup !== undefined && typeof raw.isGroup !== "boolean")
+    return null;
+  if (raw.parentExternalId != null && !isText(raw.parentExternalId, 128))
+    return null;
   const shape = parseShape(raw.shape);
   if (!shape) return null;
 
@@ -286,6 +298,10 @@ function parseZone(raw: unknown): CanvasZone | null {
     fill: raw.fill,
     stroke: raw.stroke,
     shape,
+    ...(raw.isGroup ? { isGroup: true } : {}),
+    ...(typeof raw.parentExternalId === "string"
+      ? { parentExternalId: raw.parentExternalId }
+      : {}),
   };
 }
 
@@ -329,10 +345,22 @@ export function parseCanvasDoc(raw: unknown): CanvasDoc | null {
     zones.push(zone);
   }
 
+  const byId = new Map(zones.map((zone) => [zone.externalId, zone]));
+  if (
+    byId.size !== zones.length ||
+    zones.some(
+      (zone) =>
+        (zone.isGroup && (zone.parentExternalId || zone.kind !== "seating")) ||
+        (zone.parentExternalId &&
+          (!byId.get(zone.parentExternalId)?.isGroup ||
+            zone.kind !== "seating")),
+    )
+  )
+    return null;
   const seats: CanvasSeat[] = [];
   for (const item of raw.seats) {
     const seat = parseSeat(item);
-    if (!seat) return null;
+    if (!seat || byId.get(seat.zoneExternalId)?.isGroup) return null;
     seats.push(seat);
   }
 
@@ -429,6 +457,10 @@ export function canvasDocFromProjection(
       name: zone.name,
       kind: zone.kind,
       ordinal: zone.ordinal,
+      ...(zone.isGroup ? { isGroup: true } : {}),
+      ...(zone.parentExternalId
+        ? { parentExternalId: zone.parentExternalId }
+        : {}),
       fill: color.fill,
       stroke: color.stroke,
       shape: {
