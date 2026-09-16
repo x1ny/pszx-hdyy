@@ -13,7 +13,7 @@ import { cn } from "#/shared/lib/utils.ts";
 import type { PlanStatus } from "../../-venue-queries";
 import {
   formatTimelineBlockRange,
-  TIMELINE_PX_PER_MINUTE,
+  getTimelinePixelsPerMinute,
   type TimelineDay,
 } from "../-utils";
 import { SegmentConfigIcons } from "./segment-config-icons";
@@ -32,8 +32,8 @@ const TRACK_PADDING_PX = 32;
  * 取 max()：轨道比容器窄时铺满容器（短的一天在宽屏上照样占满），比容器宽时
  * 交给外层 overflow-x-auto 横向滚动。
  */
-const trackMinWidth = (spanMinutes: number) =>
-  `max(52rem, ${LANE_LABEL_PX + TRACK_PADDING_PX + Math.ceil(spanMinutes * TIMELINE_PX_PER_MINUTE)}px)`;
+const trackMinWidth = (day: TimelineDay) =>
+  `max(52rem, ${LANE_LABEL_PX + TRACK_PADDING_PX + Math.ceil(day.spanMinutes * getTimelinePixelsPerMinute(day))}px)`;
 
 /**
  * 议程时间轴：泳道 = 议程线，块按时间比例定位。
@@ -90,10 +90,7 @@ export function AgendaTimeline({
               跨度撑宽来保证可读，撑出去的部分在这里滚动——不回头去改单个块的
               宽度，那样刻度线和块的位置就对不上了 */}
           <div className="overflow-x-auto">
-            <div
-              className="px-4 py-3"
-              style={{ minWidth: trackMinWidth(day.spanMinutes) }}
-            >
+            <div className="px-4 py-3" style={{ minWidth: trackMinWidth(day) }}>
               <div className="flex">
                 <div className="w-32 shrink-0" />
                 <div className="relative h-5 flex-1">

@@ -157,8 +157,8 @@ export type TimelineDay = {
   bands: TimelineBand[];
   /**
    * 当天时间轴的跨度（分钟）。块宽是相对轨道的百分比，只有配上这个跨度才知道
-   * 一分钟折合多少像素——渲染层用它按 TIMELINE_PX_PER_MINUTE 把轨道撑到够宽，
-   * 而不是去改单个块的宽度（原因见 buildAgendaTimeline() 注释第 2 条）。
+   * 一分钟折合多少像素——渲染层用它和当天最短环节动态把轨道撑到够宽，而不是
+   * 去改单个块的宽度（原因见 buildAgendaTimeline() 注释第 2 条）。
    */
   spanMinutes: number;
 };
@@ -166,14 +166,45 @@ export type TimelineDay = {
 const MINUTE = 60_000;
 const HALF_HOUR = 30 * MINUTE;
 /**
- * 时间轴的横向尺度：每分钟 2px，即每小时 120px。
+ * 时间轴的基础横向尺度：每分钟 2px，即每小时 120px。
  *
- * 这个值是"短环节读得清"和"少横向滚动"之间的取舍点：30 分钟的环节 60px，
- * 名称截断但状态图标还看得见；08:00–18:00 这种常规会期一天 1200px，普通笔记本
- * 一屏正好装下，只有真排到深夜的长天才需要滚。轨道实际宽度取
- * max(容器宽, 跨度 × 本值)，所以短的一天在宽屏上照样铺满，不会变小。
+ * 没有特别短的环节时保持这个尺度，避免把正常的一天无谓拉长。
  */
 export const TIMELINE_PX_PER_MINUTE = 2;
+/** 卡片需要达到这个外框宽度，才足以同时显示名称、时间和配置状态。 */
+export const TIMELINE_MIN_BLOCK_WIDTH_PX = 112;
+/** 极短环节的保护上限：避免一个几分钟的异常数据把整天轨道拉得过长。 */
+export const TIMELINE_MAX_PX_PER_MINUTE = 8;
+
+/**
+ * 按当天最短的有效环节动态调整时间轴的像素密度。
+ *
+ * 卡片宽度仍然来自时间占比；这里提高的是整条轨道的每分钟像素，所以短卡片
+ * 能达到最小可读宽度，长卡片和刻度线也会同步放大，时间比例不会被破坏。零
+ * 时长环节没有可换算的时间宽度，继续由渲染层的微小 min-width 负责可点击性。
+ */
+export const getTimelinePixelsPerMinute = (
+  day: Pick<TimelineDay, "lanes" | "spanMinutes">,
+) => {
+  const shortestBlockMinutes = Math.min(
+    ...day.lanes
+      .flatMap((lane) => lane.rows.flat())
+      .map((block) => (block.widthPct / 100) * day.spanMinutes)
+      .filter((minutes) => minutes > 0 && Number.isFinite(minutes)),
+  );
+
+  if (!Number.isFinite(shortestBlockMinutes)) {
+    return TIMELINE_PX_PER_MINUTE;
+  }
+
+  return Math.min(
+    TIMELINE_MAX_PX_PER_MINUTE,
+    Math.max(
+      TIMELINE_PX_PER_MINUTE,
+      TIMELINE_MIN_BLOCK_WIDTH_PX / shortestBlockMinutes,
+    ),
+  );
+};
 /** 只有一个 20 分钟环节时，别把它拉成占满整条轴 */
 const MIN_SPAN = 2 * 60 * MINUTE;
 /**
@@ -258,10 +289,10 @@ function expandSegmentDays(segment: Segment): DayItem[] {
  *    （`resolveTickStep` 里有 24h / 7d 的档位），三天的活动画出来每个环节
  *    都是一根细线。
  * 2. **最小宽度加在轨道上，不加在块上。** 块宽严格按时间比例，"短环节太窄
- *    看不清"只能靠把整条轨道等比撑宽（`spanMinutes` × TIMELINE_PX_PER_MINUTE）
- *    再横向滚动来解决——轨道变宽，块和刻度线一起放大，比例关系不破。给块自己
- *    加 `min-width` 则会让宽度不再等于时长：块越过自己的结束时间压住后一个块，
- *    而 packRows() 是按时间判重叠的，根本发现不了（这正是曾经的重叠 bug）。
+ *    看不清"只能靠根据当天最短环节动态提高每分钟像素，把整条轨道等比撑宽，
+ *    再横向滚动来解决——轨道变宽，块和刻度线一起放大，比例关系不破。给块
+ *    自己加 `min-width` 则会让宽度不再等于时长：块越过自己的结束时间压住后一个
+ *    块，而 packRows() 是按时间判重叠的，根本发现不了（这正是曾经的重叠 bug）。
  *    但这也不是旧实现那种 60 行迭代碰撞检测（`calculateTrackWidth`），就是一
  *    个乘法，刻度线照样对得上。
  *

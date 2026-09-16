@@ -1,7 +1,7 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { AgendaLine, Segment } from "#/features/agenda/queries";
-import type { TimelineDay } from "../-utils";
+import { getTimelinePixelsPerMinute, type TimelineDay } from "../-utils";
 import { AgendaTimeline } from "./agenda-timeline";
 
 const mainLine: AgendaLine = {
@@ -61,6 +61,26 @@ const longDay: TimelineDay = {
   bands: [],
 };
 
+const shortBlockDay: TimelineDay = {
+  ...longDay,
+  spanMinutes: 16 * 60,
+  lanes: [
+    {
+      line: mainLine,
+      rows: [
+        [
+          {
+            ...longDay.lanes[0].rows[0][0],
+            segment: { ...testSegment, id: 2, name: "短环节" },
+            leftPct: 0,
+            widthPct: (30 / (16 * 60)) * 100,
+          },
+        ],
+      ],
+    },
+  ],
+};
+
 describe("AgendaTimeline", () => {
   it("leaves a visible gap between the text lines and bottom configuration marks", () => {
     const { container } = render(
@@ -100,5 +120,29 @@ describe("AgendaTimeline", () => {
     expect(ticks?.[0]).toHaveClass("translate-x-0");
     expect(ticks?.[1]).toHaveClass("-translate-x-1/2");
     expect(ticks?.[2]).toHaveClass("-translate-x-full");
+  });
+
+  it("uses the dynamic scale to give short blocks a readable track width", () => {
+    const { container } = render(
+      <AgendaTimeline
+        days={[shortBlockDay]}
+        demandsBySegment={new Map()}
+        memberCounts={new Map()}
+        seatingStatusBySegment={new Map()}
+        onSelect={() => undefined}
+      />,
+    );
+
+    const track = container.querySelector(".overflow-x-auto > div");
+    const trackWidth =
+      128 +
+      32 +
+      Math.ceil(
+        shortBlockDay.spanMinutes * getTimelinePixelsPerMinute(shortBlockDay),
+      );
+
+    expect(track?.getAttribute("style")).toBe(
+      `min-width: max(52rem, ${trackWidth}px);`,
+    );
   });
 });

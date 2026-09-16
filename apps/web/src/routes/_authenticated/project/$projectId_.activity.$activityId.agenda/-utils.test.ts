@@ -5,6 +5,8 @@ import {
   buildSequenceLabels,
   formatSegmentRange,
   formatTimelineBlockRange,
+  getTimelinePixelsPerMinute,
+  TIMELINE_MIN_BLOCK_WIDTH_PX,
   TIMELINE_PX_PER_MINUTE,
 } from "./-utils";
 
@@ -341,11 +343,28 @@ describe("buildAgendaTimeline", () => {
     expect(half.widthPct).toBeCloseTo((30 / day.spanMinutes) * 100, 10);
     expect(hour.widthPct).toBeCloseTo((60 / day.spanMinutes) * 100, 10);
 
-    // 轨道按 spanMinutes × 每分钟像素撑开后，30 分钟的块拿到 60px、
-    // 1 小时的块拿到 120px——短环节的可读性是这么来的，不是靠 min-width。
-    const trackPx = day.spanMinutes * TIMELINE_PX_PER_MINUTE;
-    expect((half.widthPct / 100) * trackPx).toBeCloseTo(60, 10);
-    expect((hour.widthPct / 100) * trackPx).toBeCloseTo(120, 10);
+    // 根据最短环节动态提高整条轨道的像素密度：30 分钟的块达到最小可读宽度，
+    // 1 小时的块仍保持严格的 2 倍时间比例。
+    const pixelsPerMinute = getTimelinePixelsPerMinute(day);
+    const trackPx = day.spanMinutes * pixelsPerMinute;
+    expect(pixelsPerMinute).toBeCloseTo(TIMELINE_MIN_BLOCK_WIDTH_PX / 30, 10);
+    expect((half.widthPct / 100) * trackPx).toBeCloseTo(
+      TIMELINE_MIN_BLOCK_WIDTH_PX,
+      10,
+    );
+    expect((hour.widthPct / 100) * trackPx).toBeCloseTo(
+      TIMELINE_MIN_BLOCK_WIDTH_PX * 2,
+      10,
+    );
+  });
+
+  it("只有零时长环节时保持基础尺度，不让它把时间轴放大到异常宽", () => {
+    const days = buildAgendaTimeline(
+      [MAIN],
+      [segment(1, "2026-08-20 09:00", "2026-08-20 09:00")],
+    );
+
+    expect(getTimelinePixelsPerMinute(days[0])).toBe(TIMELINE_PX_PER_MINUTE);
   });
 
   it("超过 12 小时的一天也按整点打刻度，不再退回两小时一格", () => {
