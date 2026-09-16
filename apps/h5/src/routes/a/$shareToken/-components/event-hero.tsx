@@ -35,7 +35,7 @@ export function EventHero({
   return (
     <section className="relative">
       <div className="relative h-[12.5rem] overflow-hidden bg-brand-gradient">
-        {/* 活动没有配置头图时使用 Demo 的泉州主题图，避免首屏只剩渐变占位。
+        {/* 活动没有配置头图时使用静态默认封面，避免首屏只剩渐变占位。
             配置了活动图片则仍优先读取 /api/file/:fileId。 */}
         <img
           src={heroSrc}
