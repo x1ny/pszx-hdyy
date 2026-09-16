@@ -942,7 +942,9 @@ export const activityMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
        * 时候连带发现的同一类问题，schema 注释里早写了"应该显式删记录"，
        * 只是一直没人实现。
        */
-      if (seatCount > 0) {
+      // 个人座位分配包含已撤销的历史行。历史行不进入影响清单，但仍通过
+      // `segment_member` 外键引用它；因此即使当前没有有效座位，也必须走清理出口。
+      if (segmentCount > 0) {
         await releaseSeatsByActivityMember(tx, id, userId);
       }
       if (organizationSeatCount > 0) {
@@ -1235,9 +1237,9 @@ export const segmentMemberRoutes = new Hono<{ Variables: AuthedVariables }>()
     }
 
     const row = await db.transaction(async (tx) => {
-      if (seats.length > 0) {
-        await releaseSeatsBySegmentMembers(tx, [id], userId);
-      }
+      // `seats` 只统计有效座位，不能用它判断是否存在已撤销的历史分配；后者
+      // 同样会阻止删除 segment_member，清理出口会一次性删除两类个人分配行。
+      await releaseSeatsBySegmentMembers(tx, [id], userId);
       if (organizationSeats.length > 0) {
         await releaseOrganizationSeatsLeavingScope(tx, [id], userId);
       }

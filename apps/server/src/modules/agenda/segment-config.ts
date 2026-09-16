@@ -293,9 +293,9 @@ export async function applySegmentConfig(
       };
     }
 
-    if (seats.length > 0) {
-      await releaseSeatsBySegmentMembers(tx, removeIds, userId);
-    }
+    // `seats` 只用于展示有效影响；已撤销的历史个人分配仍引用
+    // segment_member，也必须在删除关系前由同一个出口清理。
+    await releaseSeatsBySegmentMembers(tx, removeIds, userId);
     if (organizationSeats.length > 0) {
       await releaseOrganizationSeatsLeavingScope(tx, removeIds, userId);
     }
