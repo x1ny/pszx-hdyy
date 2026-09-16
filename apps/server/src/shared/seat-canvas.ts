@@ -68,6 +68,95 @@ export function parseSeatPoints(data: unknown): SeatPoint[] | null {
   return points;
 }
 
+/** 桌面外框：圆桌/方桌的家具形状，不含座位坐标。单位同画布，不表达米。 */
+export type TableShape =
+  | { shape: "circle"; x: number; y: number; radius: number }
+  | {
+      shape: "rect";
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      angle: number;
+    };
+
+const TABLE_MIN_SIDE = 48;
+const tableEdgeGap = (spacing: number) => Math.max(16, spacing * 0.35);
+
+function tableSeatRadius(spacing: number, count: number) {
+  return count > 1 ? spacing / (2 * Math.sin(Math.PI / count)) : 0;
+}
+
+/**
+ * blob → 桌面外框（圆桌/方桌的家具形状）。
+ *
+ * 跟 `apps/web` 的 `core/rows.ts` `tableGeometry` 是**同一份公式的移植**，
+ * 理由同 `seatFieldPitch`：两个前端不共享代码，但两端对同一份画布必须算出
+ * 同一个桌子形状，否则管理端画布和 h5 座位图会对不上。方桌宽高、圆桌半径
+ * 都只按 spacing / 座位数 / 四侧人数现算，编辑器本身也不落库，所以这里
+ * 只能跟着重算，不能指望字段里直接有尺寸。
+ *
+ * 返回 `null` = 这份数据没法解析（不是对象、版本不认、`rows` 不是数组）。
+ * `rows` 字段本身可选（旧画布没有），缺省按"没有桌子"处理，返回 `[]`。
+ * 单条排缺字段或形状不认识就跳过它自己，不作废整份——道理同 `parseSeatPoints`。
+ *
+ * 传 `zoneExternalId` 只取该分区的桌子——组合方案一份 blob 装着多个分区
+ * （见 `parseSeatSections`），不按分区过滤会把别的分区的桌子混进当前分区的
+ * 坐标系，各分区坐标独立，混进来的桌子会画在错误的位置，不只是隐私问题。
+ */
+export function parseTableShapes(
+  data: unknown,
+  zoneExternalId?: string,
+): TableShape[] | null {
+  if (!isRecord(data)) return null;
+  if (data.schemaVersion !== 1) return null;
+  if (data.rows === undefined) return [];
+  if (!Array.isArray(data.rows)) return null;
+
+  const shapes: TableShape[] = [];
+  for (const raw of data.rows) {
+    if (!isRecord(raw)) continue;
+    if (zoneExternalId !== undefined && raw.zoneExternalId !== zoneExternalId)
+      continue;
+    const { shape, x, y, angle, spacing, seatIds } = raw;
+    if (!isFiniteNumber(x) || !isFiniteNumber(y)) continue;
+    if (!isFiniteNumber(spacing) || spacing <= 0) continue;
+    const rowAngle = isFiniteNumber(angle) ? angle : 0;
+
+    if (shape === "circle") {
+      const count = Array.isArray(seatIds) ? seatIds.length : 0;
+      if (count < 2) continue;
+      const seatRadius = tableSeatRadius(spacing, count);
+      const radius = Math.max(
+        TABLE_MIN_SIDE / 4,
+        seatRadius - tableEdgeGap(spacing),
+      );
+      shapes.push({ shape: "circle", x, y, radius });
+      continue;
+    }
+
+    if (shape === "rect") {
+      const sides = raw.sides;
+      if (!isRecord(sides)) continue;
+      const side = (key: string) =>
+        isFiniteNumber(sides[key]) ? Math.max(0, sides[key]) : 0;
+      const extent = (count: number) => Math.max(0, count - 1) * spacing;
+      const width = Math.max(
+        TABLE_MIN_SIDE,
+        extent(side("top")),
+        extent(side("bottom")),
+      );
+      const height = Math.max(
+        TABLE_MIN_SIDE,
+        extent(side("left")),
+        extent(side("right")),
+      );
+      shapes.push({ shape: "rect", x, y, width, height, angle: rowAngle });
+    }
+  }
+  return shapes;
+}
+
 type SeatReference = { externalId: string; label: string };
 
 type NumberedLabel = {

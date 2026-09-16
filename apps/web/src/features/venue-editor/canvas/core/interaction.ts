@@ -1,5 +1,6 @@
 import {
   type CanvasDoc,
+  type CanvasRow,
   type CanvasZone,
   type ZoneShapeType,
   zoneRotation,
@@ -16,6 +17,7 @@ import {
   toAbsolutePoints,
   unrotatePoint,
 } from "./geometry";
+import { tableGeometry } from "./rows";
 
 /**
  * 交互判定：按下鼠标的那一刻，该开始哪一种拖拽？
@@ -372,9 +374,59 @@ export function marqueeSelect(
     .map((seat) => seat.externalId);
 }
 
+/** 排所属区域的世界坐标中心——排的 x/y 跟座位一样是区域内的相对坐标。 */
+function rowWorldCenter(doc: CanvasDoc, row: CanvasRow): Point | null {
+  const zone = doc.zones.find((item) => item.externalId === row.zoneExternalId);
+  if (!zone) return null;
+  return { x: zone.shape.x + row.x, y: zone.shape.y + row.y };
+}
+
+/**
+ * 命中桌面图形本体（圆桌的圆、方桌的矩形），用于点在座位之间的空档也能抓住
+ * 整张桌子拖动——跟顶层画布点区域本体就能拖动是同一个手感。`shape: "line"`
+ * 的普通排没有画出家具，不参与这项命中判定。
+ */
+export function hitTable(doc: CanvasDoc, point: Point): CanvasRow | null {
+  const rows = doc.rows ?? [];
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    if (row.shape === "line") continue;
+    const center = rowWorldCenter(doc, row);
+    if (!center) continue;
+    const shape = tableGeometry(
+      { ...row, x: center.x, y: center.y },
+      row.seatIds.length,
+    );
+    if (!shape) continue;
+    if (shape.shape === "circle") {
+      if (Math.hypot(point.x - shape.cx, point.y - shape.cy) <= shape.radius) {
+        return row;
+      }
+      continue;
+    }
+    const local = unrotatePoint(
+      point,
+      { x: shape.cx, y: shape.cy },
+      shape.angle,
+    );
+    const rect: Rect = {
+      x: shape.cx - shape.width / 2,
+      y: shape.cy - shape.height / 2,
+      width: shape.width,
+      height: shape.height,
+    };
+    if (rectContains(rect, local)) return row;
+  }
+  return null;
+}
+
 /**
  * 排位画布的按下判定。**没有区域可选**——这一层唯一的对象是座位，
  * 所以判定比顶层简单得多：命中座位就是拖它（或拖已选中的整组），否则框选。
+ *
+ * 桌（`shape` 为 `circle`/`rect` 的排）的座位不能单独拖动——它们是围着一张
+ * 实体桌子摆的，单独挪一个会让座位飞离桌面。命中桌座位或桌面本体时，拖动目标
+ * 始终是整桌的 `seatIds`，不取当前选区，也不允许只拖其中一个。
  */
 export function resolveSeatDragSubject(input: {
   point: Point;
@@ -393,11 +445,19 @@ export function resolveSeatDragSubject(input: {
 
   const seatId = hitSeat(doc, point, hitRadius);
   if (seatId) {
-    const seatIds = selection.seatIds.includes(seatId)
-      ? selection.seatIds
-      : [seatId];
+    const table = doc.rows?.find(
+      (row) => row.shape !== "line" && row.seatIds.includes(seatId),
+    );
+    const seatIds = table
+      ? table.seatIds
+      : selection.seatIds.includes(seatId)
+        ? selection.seatIds
+        : [seatId];
     return { kind: "moveSeats", seatIds };
   }
+
+  const table = hitTable(doc, point);
+  if (table) return { kind: "moveSeats", seatIds: table.seatIds };
 
   return { kind: "marquee", start: point };
 }

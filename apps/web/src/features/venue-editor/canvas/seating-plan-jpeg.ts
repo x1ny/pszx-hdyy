@@ -1,5 +1,6 @@
-import type { CanvasDoc, CanvasSeat } from "./core/document";
+import type { CanvasDoc, CanvasRow, CanvasSeat } from "./core/document";
 import { seatContentBounds, seatFieldPitch } from "./core/geometry";
+import { tableGeometry } from "./core/rows";
 import {
   DEFAULT_OCCUPIED_EXPORT_COLOR,
   NAME_READABLE_PITCH_PX,
@@ -257,6 +258,23 @@ function renderSeat(
   </g>`;
 }
 
+function renderTable(
+  row: CanvasRow,
+  shape: NonNullable<ReturnType<typeof tableGeometry>>,
+): string {
+  const strokeWidth = 2;
+  // 跟空座同一条描边色（EXPORT_COLORS.emptySeatBorder），桌面和座位是同一套
+  // 视觉语言，不用另外的灰色系。
+  const body =
+    shape.shape === "circle"
+      ? `<circle cx="${finiteNumber(shape.cx)}" cy="${finiteNumber(shape.cy)}" r="${finiteNumber(shape.radius)}" fill="${EXPORT_COLORS.background}" stroke="${EXPORT_COLORS.emptySeatBorder}" stroke-width="${strokeWidth}"/>`
+      : `<rect x="${finiteNumber(shape.cx - shape.width / 2)}" y="${finiteNumber(shape.cy - shape.height / 2)}" width="${finiteNumber(shape.width)}" height="${finiteNumber(shape.height)}" rx="${finiteNumber(Math.min(16, Math.min(shape.width, shape.height) / 4))}" fill="${EXPORT_COLORS.background}" stroke="${EXPORT_COLORS.emptySeatBorder}" stroke-width="${strokeWidth}"${shape.angle ? ` transform="rotate(${finiteNumber(shape.angle)} ${finiteNumber(shape.cx)} ${finiteNumber(shape.cy)})"` : ""}/>`;
+  return `<g data-export-table-id="${escapeXml(row.externalId)}">
+    ${body}
+    <text x="${finiteNumber(shape.cx)}" y="${finiteNumber(shape.cy)}" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="${EXPORT_COLORS.mutedForeground}">${escapeXml(row.name)}</text>
+  </g>`;
+}
+
 function legendItems(
   organizations: readonly OrganizationSeatLegendItem[],
 ): LegendItem[] {
@@ -347,15 +365,27 @@ export function buildSeatingPlanSvg(
     else byZone.set(seat.zoneExternalId, [seat]);
   }
 
+  const rowsByZone = new Map<string, CanvasRow[]>();
+  for (const row of input.doc.rows ?? []) {
+    const list = rowsByZone.get(row.zoneExternalId);
+    if (list) list.push(row);
+    else rowsByZone.set(row.zoneExternalId, [row]);
+  }
+
   // 每个区域的座位独立排布。即使旧快照仍带有外层 world/shape，也不参与范围计算。
   const sections = input.doc.zones.map((zone) => {
     const seats = byZone.get(zone.externalId) ?? [];
     const pitch = seatFieldPitch(seats);
     const planScale = Math.max(1, scaleForPitch(pitch, NAME_READABLE_PITCH_PX));
     const bounds = seatContentBounds(seats, pitch);
+    const tables = (rowsByZone.get(zone.externalId) ?? []).flatMap((row) => {
+      const shape = tableGeometry(row, row.seatIds.length);
+      return shape ? [{ row, shape }] : [];
+    });
     return {
       zone,
       seats,
+      tables,
       bounds,
       planScale,
       spec: seatRenderSpec(pitch * planScale),
@@ -369,7 +399,7 @@ export function buildSeatingPlanSvg(
   const logicalWidth = contentWidth + PAGE_PADDING * 2;
   let sectionY = PAGE_PADDING + (showTitle || subtitleText ? HEADER_HEIGHT : 0);
   const content = sections
-    .map(({ zone, seats, bounds, planScale, spec }) => {
+    .map(({ zone, seats, tables, bounds, planScale, spec }) => {
       const name = showZoneNames
         ? `<text x="${PAGE_PADDING}" y="${finiteNumber(sectionY + 18)}" font-size="14" font-weight="650" fill="${EXPORT_COLORS.foreground}">${escapeXml(zone.name)}</text>`
         : "";
@@ -377,6 +407,9 @@ export function buildSeatingPlanSvg(
       const x = PAGE_PADDING + (contentWidth - bounds.width * planScale) / 2;
       const y = sectionY;
       sectionY += bounds.height * planScale + LEGEND_GAP;
+      const tableNodes = tables
+        .map(({ row, shape }) => renderTable(row, shape))
+        .join("\n");
       const nodes = seats
         .map((seat) =>
           renderSeat(
@@ -391,7 +424,7 @@ export function buildSeatingPlanSvg(
       ${name}
       <g transform="translate(${finiteNumber(x)} ${finiteNumber(y)})">
         <g data-export-plan-scale="${finiteNumber(planScale)}" transform="scale(${finiteNumber(planScale)})">
-          <g transform="translate(${finiteNumber(-bounds.x)} ${finiteNumber(-bounds.y)})">${nodes}</g>
+          <g transform="translate(${finiteNumber(-bounds.x)} ${finiteNumber(-bounds.y)})">${tableNodes}${nodes}</g>
         </g>
       </g>
     </g>`;

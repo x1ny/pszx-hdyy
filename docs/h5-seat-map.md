@@ -60,8 +60,19 @@ label/kind/rank/enabled/removedAt 但没有 x/y；反过来 `enabled` 和 `remov
 `getSeatMap`（按需，点开才请求）出参：
 
 ```
-{ zoneName, seatLabel, map: { seats: [{x,y}], mine: [{x,y,label}], pitch } | null }
+{ zoneName, seatLabel, map: { seats: [{x,y}], mine: [{x,y,label}], pitch, tables } | null }
 ```
+
+`tables` 是圆桌/方桌的家具外框（`{shape:"circle",x,y,radius}` 或
+`{shape:"rect",x,y,width,height,angle}`），2026-09-16 随"桌"这个概念一起加的，
+决策见 [ADR](architecture-decisions.md#桌是排的两种-shape不是新的顶层概念)。
+它是下面"明确不做的"里"不画其他形状"这条唯一的例外：桌子数量是"几十"这个
+量级，不是座位的"上万"，多画几十个 `<rect>`/`<circle>` 不会碰到单路径换来的
+性能上限；服务端 `shared/seat-canvas.ts` 的 `parseTableShapes` 只读桌面的
+形状/位置/尺寸，跟圆桌半径同一份公式（`rowRadius`/`tableGeometry` 的服务端
+移植），不带名称、种类或人员，跟座位图"没有一个字段属于别人"的边界一致——
+这张图回答的仍然是"哪片区域"，不是"哪张桌"，所以不显示桌名。没有 `rows`
+的历史画布按"没有桌子"处理，返回空数组，不影响座位号和降级路径。
 
 - `zoneName` / `seatLabel` **恒定有值**，`map` 才可能为 null——降级不需要第二种
   响应形状，图画不出来时前端照样有话说。
@@ -148,9 +159,10 @@ letterbox 偏移，世界坐标到屏幕坐标是一次纯缩放，定位钉的�
 ## 验证
 
 服务端 `shared/seat-canvas.test.ts` 覆盖解析（版本不认、脏坐标只跳过它自己、
-空画布返回 `[]` 而不是 `null`）和座距（单排、中位数、全重合）；
-`modules/h5/routes.test.ts` 覆盖越权的查询形状、`data` 列没被拉进行程页、停用的
-位置没被过滤掉。
+空画布返回 `[]` 而不是 `null`）、座距（单排、中位数、全重合）和桌面外框
+（圆桌半径内缩、方桌宽高取四侧跨度较大值、没有 `rows` 时按"没有桌子"处理、
+单条排缺字段只跳过它自己）；`modules/h5/routes.test.ts` 覆盖越权的查询形状、
+`data` 列没被拉进行程页、停用的位置没被过滤掉、`tables` 不带名称。
 
 **`apps/h5` 这次装上了测试**（`bun test`，跟 `apps/server` 一样，不引入
 vitest——在深路径 worktree 下 `bun install` 是已知的脆弱环节，能不加依赖就不加），

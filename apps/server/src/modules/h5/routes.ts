@@ -6,6 +6,7 @@ import {
   formatOrganizationSeatRanges,
   parseSeatPoints,
   parseSeatSections,
+  parseTableShapes,
   SEAT_CANVAS_RENDERER_KIND,
   seatFieldPitch,
 } from "../../shared/seat-canvas";
@@ -746,6 +747,8 @@ export function buildSeatMap(
               seats: sectionSeats,
               mine: sectionMine,
               pitch: seatFieldPitch(sectionSeats),
+              // 按分区过滤，避免把别的分区的桌子混进这个分区的坐标系。
+              tables: parseTableShapes(row.data, section.externalId) ?? [],
             },
           ];
         })
@@ -760,5 +763,14 @@ export function buildSeatMap(
      * 密度判断），而这里已经有点集、也已经有测试装置。
      */
     pitch: seatFieldPitch(seats),
+    /**
+     * 圆桌/方桌的家具外框，只给形状和位置，不带名称、种类、人员——桌子数量
+     * 是"几十"这个量级，不是座位的"上万"，多画几十个 `<rect>`/`<circle>`
+     * 不会碰到座位那条单路径的性能红线（见 docs/h5-seat-map.md）。解析失败
+     * 时降级成空数组而不是丢整张图，桌子只是背景装饰，不是"我在哪"的答案。
+     * 单分区仍是不带过滤的全量（老行为不变）；多分区落回第一个分区，跟
+     * `seats` 同一套兜底逻辑。
+     */
+    tables: maps[0]?.tables ?? parseTableShapes(row.data) ?? [],
   };
 }

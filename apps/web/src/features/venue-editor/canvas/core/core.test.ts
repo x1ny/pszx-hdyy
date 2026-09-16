@@ -354,7 +354,10 @@ describe("layout 预设", () => {
     expect(gapAcross).toBeGreaterThan(gapInside);
   });
 
-  test("宴会预设每桌环绕，编号是「N桌M号」", () => {
+  test("宴会预设每桌环绕，本桌编号不带桌号前缀，每桌都从 1 号开始", () => {
+    // 桌名已经画在桌面中央（见 docs/seating-canvas.md「桌」一节），座位号
+    // 重复一遍桌号没有信息量，2026-09-16 按用户要求改成每桌从 1 开始的
+    // 纯座号。
     const params: LayoutParams = {
       ...DEFAULT_LAYOUT_PARAMS,
       tableCount: 2,
@@ -363,8 +366,8 @@ describe("layout 预设", () => {
     };
     const seats = generateLayout("banquet", params);
     expect(seats).toHaveLength(8);
-    expect(seats[0].label).toBe("1桌1号");
-    expect(seats[4].label).toBe("2桌1号");
+    expect(seats[0].label).toBe("1号");
+    expect(seats[4].label).toBe("1号");
   });
 
   test("秀场双边中间留出 T 台，两侧各一半", () => {

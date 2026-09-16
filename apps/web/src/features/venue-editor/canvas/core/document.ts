@@ -119,12 +119,23 @@ export type CanvasRow = {
   name: string;
   /** 数组顺序就是排内顺序，排自身的顺序由 doc.rows 保存。 */
   seatIds: string[];
-  shape: "line" | "circle";
+  /**
+   * `circle`/`rect` 是"桌"：圆桌或方桌，画布上会画出实体桌面图形，
+   * 座位围着它生成。`line` 是普通排，不画家具，行为不变。
+   */
+  shape: "line" | "circle" | "rect";
   x: number;
   y: number;
   angle: number;
   spacing: number;
   aisleEvery: number;
+  /**
+   * 仅 `shape: "rect"` 使用：桌子四条边各自的座位数，允许为 0。
+   * 座位顺时针从上边左端开始编号，两侧长桌就是上下两侧填 0 的特例。
+   * 桌面的宽高由这四个数和 `spacing` 派生（见 `rows.ts` 的 `tableGeometry`），
+   * 不单独存尺寸——跟圆桌的半径由 `spacing`/座位数派生是同一个道理。
+   */
+  sides?: { top: number; right: number; bottom: number; left: number };
   /** 只用于新增座位；已有座位的自定义编号始终保留。 */
   numbering?: {
     prefix: string;
@@ -377,7 +388,7 @@ export function parseCanvasDoc(raw: unknown): CanvasDoc | null {
         !isText(row.zoneExternalId, 128) ||
         !isText(row.name, 128) ||
         !zones.some((zone) => zone.externalId === row.zoneExternalId) ||
-        !isOneOf(row.shape, ["line", "circle"] as const) ||
+        !isOneOf(row.shape, ["line", "circle", "rect"] as const) ||
         ![row.x, row.y, row.angle, row.spacing, row.aisleEvery].every(
           isFiniteNumber,
         ) ||
@@ -388,6 +399,17 @@ export function parseCanvasDoc(raw: unknown): CanvasDoc | null {
         rowIds.has(row.externalId)
       )
         return null;
+      if (row.shape === "rect") {
+        const sides = row.sides;
+        if (
+          !isRecord(sides) ||
+          !(["top", "right", "bottom", "left"] as const).every(
+            (key) =>
+              Number.isSafeInteger(sides[key]) && (sides[key] as number) >= 0,
+          )
+        )
+          return null;
+      }
       rowIds.add(row.externalId);
       if (row.numbering !== undefined) {
         const numbering = row.numbering;

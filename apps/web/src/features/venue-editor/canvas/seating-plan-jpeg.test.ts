@@ -193,6 +193,34 @@ describe("seating plan JPEG export", () => {
     expect(raster.height).toBe(Math.floor(raster.logicalHeight * 2));
   });
 
+  it("导出图画出桌面图形，直排不画家具", () => {
+    const tableRow = {
+      externalId: "row-table",
+      zoneExternalId: "zone-rect",
+      name: "1桌",
+      seatIds: ["seat-person", "seat-organization"],
+      shape: "circle" as const,
+      x: 50,
+      y: 60,
+      angle: 0,
+      spacing: 48,
+      aisleEvery: 0,
+    };
+    const withTable: CanvasDoc = { ...doc, rows: [tableRow] };
+    const { svg } = buildSeatingPlanSvg({ ...jpegInput, doc: withTable });
+    expect(svg).toContain('data-export-table-id="row-table"');
+    expect(svg).toContain("<circle");
+    expect(svg).toContain(">1桌</text>");
+
+    const withPlainRow: CanvasDoc = {
+      ...doc,
+      rows: [{ ...tableRow, shape: "line" }],
+    };
+    expect(
+      buildSeatingPlanSvg({ ...jpegInput, doc: withPlainRow }).svg,
+    ).not.toContain("data-export-table-id");
+  });
+
   it("支持预览隐藏顶部标题和区域名称", () => {
     const { svg } = buildSeatingPlanSvg({
       ...jpegInput,

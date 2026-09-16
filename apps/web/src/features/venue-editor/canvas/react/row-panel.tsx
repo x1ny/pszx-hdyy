@@ -4,7 +4,19 @@ import { Button } from "#/shared/components/ui/button";
 import { Field, FieldLabel } from "#/shared/components/ui/field";
 import { Input } from "#/shared/components/ui/input";
 import type { CanvasRow } from "../core/document";
-import { type RowParams, validRowParams } from "../core/rows";
+import {
+  DEFAULT_TABLE_SIDES,
+  type RowParams,
+  sumSides,
+  validRowParams,
+} from "../core/rows";
+
+const SIDE_FIELDS = [
+  ["top", "上"],
+  ["right", "右"],
+  ["bottom", "下"],
+  ["left", "左"],
+] as const;
 
 export function RowPanel({
   rows,
@@ -45,7 +57,7 @@ export function RowPanel({
       {creating ? (
         <>
           <p className="text-muted-foreground text-xs">
-            直排拖出起点和方向；环形排从圆心向外拖。也可按参数在视野中心创建。
+            直排拖出起点和方向；环形排从圆心向外拖。圆桌/方桌按四周人数自动生成，不用手画，点一下或按参数在视野中心创建即可。
           </p>
           <RowFields params={defaults} onChange={onDefaults} />
           <Button
@@ -176,20 +188,35 @@ function RowFields({
   onChange: (params: RowParams) => void;
 }) {
   const id = useId();
+  const isRect = params.shape === "rect";
+  const sides = params.sides ?? DEFAULT_TABLE_SIDES;
   const fields: Array<
     ["count" | "spacing" | "angle" | "aisleEvery", string, number | undefined]
-  > = [
-    ["count", "座位数量", 1],
-    ["spacing", "座位中心间距", 1],
-    ["angle", "方向角度（°）", undefined],
-    ...(params.shape === "line"
-      ? [["aisleEvery", "每几座留过道", 0] as ["aisleEvery", string, number]]
-      : []),
-  ];
+  > = isRect
+    ? [
+        ["spacing", "座位中心间距", 1],
+        ["angle", "方向角度（°）", undefined],
+      ]
+    : [
+        ["count", "座位数量", 1],
+        ["spacing", "座位中心间距", 1],
+        ["angle", "方向角度（°）", undefined],
+        ...(params.shape === "line"
+          ? [
+              ["aisleEvery", "每几座留过道", 0] as [
+                "aisleEvery",
+                string,
+                number,
+              ],
+            ]
+          : []),
+      ];
   return (
     <div className="space-y-3">
       <Field>
-        <FieldLabel htmlFor={`${id}-name`}>排名称</FieldLabel>
+        <FieldLabel htmlFor={`${id}-name`}>
+          {isRect || params.shape === "circle" ? "桌名称" : "排名称"}
+        </FieldLabel>
         <Input
           id={`${id}-name`}
           aria-label="排名称"
@@ -214,9 +241,55 @@ function RowFields({
           variant={params.shape === "circle" ? "secondary" : "ghost"}
           onClick={() => onChange({ ...params, shape: "circle" })}
         >
-          环形排
+          圆桌
+        </Button>
+        <Button
+          size="sm"
+          variant={isRect ? "secondary" : "ghost"}
+          onClick={() =>
+            onChange({
+              ...params,
+              shape: "rect",
+              sides,
+              count: sumSides(sides),
+            })
+          }
+        >
+          方桌
         </Button>
       </fieldset>
+      {isRect && (
+        <div className="space-y-1">
+          <p className="text-muted-foreground text-xs">
+            桌子四周各自的座位数，允许为 0；两侧长桌把上下填 0 即可。
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            {SIDE_FIELDS.map(([key, label]) => (
+              <Field key={key}>
+                <FieldLabel htmlFor={id + key}>{label}侧人数</FieldLabel>
+                <Input
+                  id={id + key}
+                  aria-label={`${label}侧人数`}
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={sides[key]}
+                  onChange={(event) => {
+                    const next = {
+                      ...sides,
+                      [key]: Math.max(0, Number(event.target.value) || 0),
+                    };
+                    onChange({ ...params, sides: next, count: sumSides(next) });
+                  }}
+                />
+              </Field>
+            ))}
+          </div>
+          <p className="text-muted-foreground text-xs">
+            共 {sumSides(sides)} 座。
+          </p>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3">
         {fields.map(([key, label, min]) => (
           <Field key={key}>

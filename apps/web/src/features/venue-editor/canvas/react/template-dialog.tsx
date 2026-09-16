@@ -82,7 +82,7 @@ const PRESET_META: Record<
 const NUMBERING_LABELS: Record<NumberingMode, string> = {
   rowCol: "排号 + 列号（A1）",
   sequential: "顺序编号（A1…An）",
-  tableSeat: "桌号 + 座号（1桌2号）",
+  tableSeat: "本桌座号（1号、2号）",
 };
 
 const PARAM_LABELS = {

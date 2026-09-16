@@ -60,6 +60,7 @@ import {
   removeRow,
   rowParamsFromDrag,
   rowPoints,
+  tableGeometry,
   updateRow,
   validRowParams,
 } from "../core/rows";
@@ -277,8 +278,9 @@ export function ZoneSeatingEditor({
       world: contentBounds,
       zones: [{ ...zone, shape: { ...zone.shape, x: 0, y: 0 } }],
       seats: zoneSeats,
+      rows: zoneRows,
     }),
-    [zone, contentBounds, zoneSeats],
+    [zone, contentBounds, zoneSeats, zoneRows],
   );
 
   const live = useRef({
@@ -828,6 +830,59 @@ export function ZoneSeatingEditor({
                         ))}
                       </g>
                     )}
+                  {zoneRows
+                    .flatMap((row) => {
+                      const shape = tableGeometry(row, row.seatIds.length);
+                      return shape ? [{ row, shape }] : [];
+                    })
+                    .map(({ row, shape }) => (
+                      <g key={row.externalId}>
+                        {shape.shape === "circle" ? (
+                          <circle
+                            cx={shape.cx}
+                            cy={shape.cy}
+                            r={shape.radius}
+                            // 跟空座同一套画法（canvas-view.tsx 的 SeatNode）：
+                            // 卡片底色 + 低透明度主色描边，不是一块实心蓝。
+                            fill="var(--card)"
+                            stroke="var(--primary)"
+                            strokeOpacity={0.24}
+                            strokeWidth={1.2 / viewport.scale}
+                          />
+                        ) : (
+                          <rect
+                            x={shape.cx - shape.width / 2}
+                            y={shape.cy - shape.height / 2}
+                            width={shape.width}
+                            height={shape.height}
+                            rx={Math.min(
+                              16,
+                              Math.min(shape.width, shape.height) / 4,
+                            )}
+                            fill="var(--card)"
+                            stroke="var(--primary)"
+                            strokeOpacity={0.24}
+                            strokeWidth={1.2 / viewport.scale}
+                            transform={
+                              shape.angle
+                                ? `rotate(${shape.angle} ${shape.cx} ${shape.cy})`
+                                : undefined
+                            }
+                          />
+                        )}
+                        <text
+                          x={shape.cx}
+                          y={shape.cy}
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                          fontSize={12 / viewport.scale}
+                          fill="var(--muted-foreground)"
+                        >
+                          {row.name}
+                        </text>
+                      </g>
+                    ))}
+
                   {zoneSeats.map((seat) => {
                     const status = seatStatus?.get(seat.externalId);
                     return (

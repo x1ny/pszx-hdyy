@@ -332,7 +332,34 @@ describe("多座定位图", () => {
       { x: 40, y: 0 },
       { x: 80, y: 0 },
     ]);
+    // 没有 rows 的旧画布按「没有桌子」处理，字段仍在、只是空数组。
+    expect(map?.tables).toEqual([]);
     expect(JSON.stringify(map)).not.toContain("不得泄露");
+  });
+
+  test("桌面外框跟着 rows 一起给出，只带形状不带名称或人员", () => {
+    const withTable = {
+      ...row,
+      data: {
+        ...row.data,
+        rows: [
+          {
+            name: "1桌",
+            shape: "circle",
+            x: 40,
+            y: 0,
+            angle: 0,
+            spacing: 40,
+            aisleEvery: 0,
+            seatIds: ["a", "b", "c"],
+          },
+        ],
+      },
+    };
+    const map = buildSeatMap(withTable, ["a", "b", "c"]);
+    expect(map?.tables).toHaveLength(1);
+    expect(map?.tables[0]).toMatchObject({ shape: "circle", x: 40, y: 0 });
+    expect(JSON.stringify(map)).not.toContain("1桌");
   });
 
   test("任一本人位置缺失或已移除时降级，避免给出不完整定位", () => {

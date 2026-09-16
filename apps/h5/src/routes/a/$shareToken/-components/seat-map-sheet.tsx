@@ -153,10 +153,22 @@ export function SeatMapPlaceholder() {
  * 图本体。宽度要等 DOM 量出来才知道，所以布局是一次 layout effect 之后的事。
  */
 export type SeatMapMarker = { x: number; y: number; label: string };
+export type SeatMapTable =
+  | { shape: "circle"; x: number; y: number; radius: number }
+  | {
+      shape: "rect";
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      angle: number;
+    };
 export type SeatMapData = {
   seats: { x: number; y: number }[];
   mine: SeatMapMarker[];
   pitch: number;
+  /** 圆桌/方桌的家具外框，只有形状和位置，见 docs/h5-seat-map.md。 */
+  tables?: SeatMapTable[];
 };
 
 export function SeatMapCanvas({
@@ -227,6 +239,47 @@ export function SeatMapCanvas({
                 : `座位 ${focus.label} 在所在区域的位置示意图`
             }
           >
+            {/*
+              桌面外框先画，座位盖在上面。世界坐标和座位共用同一个 viewBox，
+              不需要另算缩放；桌子数量是"几十"这个量级，不是座位的"上万"，
+              多画几十个形状不会碰到下面那条单路径的性能红线（见
+              docs/h5-seat-map.md）。不带名称——这张图回答"哪片区域"，不是
+              "哪张桌"，且没有地方放图例区分文字和座位。
+            */}
+            {map.tables?.map((table) =>
+              table.shape === "circle" ? (
+                <circle
+                  key={`circle-${table.x}-${table.y}-${table.radius}`}
+                  cx={table.x}
+                  cy={table.y}
+                  r={table.radius}
+                  fill="none"
+                  stroke="var(--color-ink-4)"
+                  strokeOpacity={0.5}
+                  strokeWidth={1.5}
+                  vectorEffect="non-scaling-stroke"
+                />
+              ) : (
+                <rect
+                  key={`rect-${table.x}-${table.y}-${table.width}-${table.height}`}
+                  x={table.x - table.width / 2}
+                  y={table.y - table.height / 2}
+                  width={table.width}
+                  height={table.height}
+                  rx={Math.min(16, Math.min(table.width, table.height) / 4)}
+                  fill="none"
+                  stroke="var(--color-ink-4)"
+                  strokeOpacity={0.5}
+                  strokeWidth={1.5}
+                  vectorEffect="non-scaling-stroke"
+                  transform={
+                    table.angle
+                      ? `rotate(${table.angle} ${table.x} ${table.y})`
+                      : undefined
+                  }
+                />
+              ),
+            )}
             {/*
               一条 path 装下全部座位。`M x y h0` 是零长度子路径，靠
               stroke-linecap="round" 渲染成圆点，半径由描边宽度决定；

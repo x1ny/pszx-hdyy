@@ -69,13 +69,13 @@ const rowLetter = (start: string, index: number) => {
 
 function makeLabeler(params: LayoutParams) {
   let running = 0;
-  return (row: number, col: number, table?: number) => {
+  return (row: number, col: number, _table?: number) => {
     running += 1;
     switch (params.numbering) {
       case "sequential":
         return `${params.startRowLabel}${running}`;
       case "tableSeat":
-        return `${(table ?? row) + 1}桌${col + 1}号`;
+        return `${col + 1}号`;
       default:
         return `${rowLetter(params.startRowLabel, row)}${col + 1}`;
     }
@@ -119,7 +119,7 @@ export function generateLayoutRows(
           }
         : params.numbering === "tableSeat"
           ? {
-              prefix: `${rowIndex + 1}桌`,
+              prefix: "",
               suffix: "号",
               start: colOffset + 1,
               padding: 0,

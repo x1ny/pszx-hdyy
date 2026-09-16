@@ -3,6 +3,7 @@ import {
   DEFAULT_SEAT_PITCH,
   formatOrganizationSeatRanges,
   parseSeatPoints,
+  parseTableShapes,
   seatFieldPitch,
 } from "./seat-canvas";
 
@@ -162,6 +163,105 @@ describe("formatOrganizationSeatRanges —— 团体座位按排的显式顺序�
         { externalId: "b", label: "A4" },
       ]),
     ).toBe("A3、A4");
+  });
+});
+
+describe("parseTableShapes —— 桌面外框", () => {
+  const circleRow = (seatCount: number) => ({
+    name: "1桌",
+    shape: "circle",
+    x: 10,
+    y: 20,
+    angle: 0,
+    spacing: 48,
+    aisleEvery: 0,
+    seatIds: Array.from({ length: seatCount }, (_, i) => `s${i}`),
+  });
+
+  const rectRow = (sides: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+  }) => ({
+    name: "2桌",
+    shape: "rect",
+    x: 0,
+    y: 0,
+    angle: 30,
+    spacing: 48,
+    aisleEvery: 0,
+    seatIds: [],
+    sides,
+  });
+
+  test("圆桌半径比座位圈内缩，跟 apps/web 的 tableGeometry 同一份公式", () => {
+    const shapes = parseTableShapes({
+      schemaVersion: 1,
+      rows: [circleRow(6)],
+    });
+    expect(shapes).toHaveLength(1);
+    const table = shapes?.[0];
+    expect(table?.shape).toBe("circle");
+    if (table?.shape !== "circle") throw new Error("expected circle");
+    expect(table.x).toBe(10);
+    expect(table.y).toBe(20);
+    expect(table.radius).toBeGreaterThan(0);
+    expect(table.radius).toBeLessThan(48);
+  });
+
+  test("少于 2 座的圆桌不画桌面", () => {
+    expect(
+      parseTableShapes({ schemaVersion: 1, rows: [circleRow(1)] }),
+    ).toEqual([]);
+  });
+
+  test("方桌宽高按四侧跨度取大值，角度原样带出", () => {
+    const shapes = parseTableShapes({
+      schemaVersion: 1,
+      rows: [rectRow({ top: 0, right: 6, bottom: 0, left: 2 })],
+    });
+    const table = shapes?.[0];
+    expect(table?.shape).toBe("rect");
+    if (table?.shape !== "rect") throw new Error("expected rect");
+    expect(table.angle).toBe(30);
+    expect(table.height).toBe((6 - 1) * 48); // 右侧 6 座跨度最大
+    expect(table.width).toBe(48); // 上下两侧都是 0，退回最小边
+  });
+
+  test("直排不是桌，不产出外框", () => {
+    expect(
+      parseTableShapes({
+        schemaVersion: 1,
+        rows: [{ ...circleRow(6), shape: "line" }],
+      }),
+    ).toEqual([]);
+  });
+
+  test("没有 rows 字段的旧画布按「没有桌子」处理，不是整份作废", () => {
+    expect(parseTableShapes({ schemaVersion: 1, seats: [] })).toEqual([]);
+  });
+
+  test("rows 不是数组、版本不认、非对象时整份作废", () => {
+    expect(parseTableShapes({ schemaVersion: 1, rows: {} })).toBeNull();
+    expect(
+      parseTableShapes({ schemaVersion: 2, rows: [circleRow(6)] }),
+    ).toBeNull();
+    expect(parseTableShapes(null)).toBeNull();
+  });
+
+  test("单条排缺字段或方桌 sides 不合法只跳过它自己", () => {
+    const shapes = parseTableShapes({
+      schemaVersion: 1,
+      rows: [
+        { ...circleRow(6), x: Number.NaN },
+        { ...rectRow({ top: 0, right: 6, bottom: 0, left: 2 }), sides: null },
+        circleRow(8),
+      ],
+    });
+    expect(shapes).toHaveLength(1);
+    if (shapes?.[0].shape !== "circle") throw new Error("expected circle");
+    expect(shapes[0].x).toBe(10);
   });
 });
 
