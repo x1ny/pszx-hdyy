@@ -172,6 +172,9 @@ export const activityResourceRoutes = new Hono<{
       ...page
     } = c.req.valid("json");
 
+    // 默认列表只展示正常资源；作废记录仍可通过显式状态筛选查看和恢复。
+    const listStatus = status ?? "active";
+
     const keywordFilter = keyword
       ? or(
           ilike(activityResource.name, `%${keyword}%`),
@@ -197,7 +200,7 @@ export const activityResourceRoutes = new Hono<{
       transportScene
         ? eq(activityResource.transportScene, transportScene)
         : undefined,
-      status ? eq(activityResource.status, status) : undefined,
+      eq(activityResource.status, listStatus),
       keywordFilter,
       // 从需求汇总页"查看安排"点进来时带上，只看这条需求关联的资源。
       //

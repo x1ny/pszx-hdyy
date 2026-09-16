@@ -136,8 +136,8 @@ function ResourceLedgerTab() {
     useState<ResourceType | null>(search.resourceType ?? null);
   const [transportSceneDraft, setTransportSceneDraft] =
     useState<TransportScene | null>(search.transportScene ?? null);
-  const [statusDraft, setStatusDraft] = useState<ResourceStatus | null>(
-    search.status ?? null,
+  const [statusDraft, setStatusDraft] = useState<ResourceStatus>(
+    search.status ?? "active",
   );
 
   // URL 变了就把草稿拉回来对齐（后退、粘链接进来、从汇总页带 demandId 跳过来）。
@@ -145,7 +145,7 @@ function ResourceLedgerTab() {
     setKeywordDraft(search.keyword ?? "");
     setResourceTypeDraft(search.resourceType ?? null);
     setTransportSceneDraft(search.transportScene ?? null);
-    setStatusDraft(search.status ?? null);
+    setStatusDraft(search.status ?? "active");
   }, [
     search.keyword,
     search.resourceType,
@@ -274,7 +274,7 @@ function ResourceLedgerTab() {
         <StatTile
           label="已作废"
           value={stats?.voided ?? 0}
-          hint="不计入需求配置状态"
+          hint="默认不在列表展示"
         />
       </div>
 
@@ -302,7 +302,7 @@ function ResourceLedgerTab() {
               resourceTypeDraft === "transport"
                 ? (transportSceneDraft ?? undefined)
                 : undefined,
-            status: statusDraft ?? undefined,
+            status: statusDraft,
             keyword: keywordDraft.trim() || undefined,
           })
         }
@@ -362,16 +362,16 @@ function ResourceLedgerTab() {
             <Select
               items={RESOURCE_STATUS_FILTER_ITEMS}
               value={statusDraft}
-              onValueChange={(value) =>
-                setStatusDraft(value as ResourceStatus | null)
-              }
+              onValueChange={(value) => {
+                if (value) setStatusDraft(value as ResourceStatus);
+              }}
             >
               <SelectTrigger className="w-28">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {RESOURCE_STATUS_FILTER_ITEMS.map((item) => (
-                  <SelectItem key={item.value ?? "all"} value={item.value}>
+                  <SelectItem key={item.value} value={item.value}>
                     {item.label}
                   </SelectItem>
                 ))}
@@ -396,7 +396,7 @@ function ResourceLedgerTab() {
               setKeywordDraft("");
               setResourceTypeDraft(null);
               setTransportSceneDraft(null);
-              setStatusDraft(null);
+              setStatusDraft("active");
               navigate({
                 search: () => ({ page: 1, pageSize: search.pageSize }),
               });
@@ -459,11 +459,11 @@ function ResourceLedgerTab() {
                       <EmptyMedia variant="icon">
                         <PackageIcon />
                       </EmptyMedia>
-                      <EmptyTitle>还没有资源记录</EmptyTitle>
+                      <EmptyTitle>没有符合条件的资源记录</EmptyTitle>
                       <EmptyDescription>
-                        资源安排归属活动，不归属环节——一辆接站车可以同时服务
-                        多个环节。点右上角新增，或从「需求总览」页的待办直接
-                        带参过来。
+                        当前列表默认只展示正常资源；资源安排归属活动，不归属环节——
+                        一辆接站车可以同时服务多个环节。点右上角新增，或从「需求总览」
+                        页的待办直接带参过来。
                       </EmptyDescription>
                     </EmptyHeader>
                   </Empty>

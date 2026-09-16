@@ -171,8 +171,8 @@ export const RESOURCE_STATUS_VALUES = Object.keys(
   RESOURCE_STATUS_LABELS,
 ) as ResourceStatus[];
 
-export const RESOURCE_STATUS_FILTER_ITEMS = withAll(
-  "全部状态",
+// 资源台账默认只看正常记录；作废记录需要显式切换状态后才查看。
+export const RESOURCE_STATUS_FILTER_ITEMS = plain(
   RESOURCE_STATUS_VALUES,
   RESOURCE_STATUS_LABELS,
 );
