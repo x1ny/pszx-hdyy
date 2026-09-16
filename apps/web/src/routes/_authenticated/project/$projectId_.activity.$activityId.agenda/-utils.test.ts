@@ -46,6 +46,7 @@ const segment = (
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     ...overrides,
+    locationPoint: overrides.locationPoint ?? null,
   };
 };
 

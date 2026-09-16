@@ -8,6 +8,7 @@ import {
 } from "#/features/agenda/labels";
 import type { AgendaLine, Segment } from "#/features/agenda/queries";
 import { toDateTimeLocalValue } from "#/features/project/utils";
+import { BaiduLocationPicker } from "#/shared/components/baidu-location-picker";
 import { Button } from "#/shared/components/ui/button.tsx";
 import { Checkbox } from "#/shared/components/ui/checkbox.tsx";
 import {
@@ -34,6 +35,7 @@ import {
   SelectValue,
 } from "#/shared/components/ui/select.tsx";
 import { Textarea } from "#/shared/components/ui/textarea.tsx";
+import type { MapLocationPoint } from "#/shared/lib/baidu-map";
 
 // 镜像 apps/server/src/modules/agenda/validation.ts 的 SegmentFields，
 // 手抄一份的原因和边界见 supplier-form-dialog.tsx 顶部的说明。
@@ -52,6 +54,7 @@ const SegmentFormSchema = z
     startTime: z.string().min(1, "开始时间不能为空"),
     endTime: z.string().min(1, "结束时间不能为空"),
     locationText: z.string().trim().max(255, "地点过长"),
+    locationPoint: z.custom<MapLocationPoint>().nullable(),
     ownerName: z.string().trim().max(64, "负责人过长"),
     description: z.string().trim().max(2000, "说明不超过 2000 字"),
     memberEnabled: z.boolean(),
@@ -85,6 +88,7 @@ export type SegmentFormSubmitValues = {
   startTime: Date;
   endTime: Date;
   locationText?: string;
+  locationPoint?: MapLocationPoint | null;
   ownerName?: string;
   description?: string;
   memberEnabled: boolean;
@@ -178,6 +182,7 @@ function SegmentForm({
     startTime: toDateTimeLocalValue(segment?.startTime),
     endTime: toDateTimeLocalValue(segment?.endTime),
     locationText: segment?.locationText ?? "",
+    locationPoint: segment?.locationPoint ?? null,
     ownerName: segment?.ownerName ?? "",
     description: segment?.description ?? "",
     memberEnabled: segment?.memberEnabled ?? false,
@@ -199,6 +204,7 @@ function SegmentForm({
         startTime: new Date(value.startTime),
         endTime: new Date(value.endTime),
         locationText: value.locationText || undefined,
+        locationPoint: value.locationPoint,
         ownerName: value.ownerName || undefined,
         description: value.description || undefined,
         memberEnabled: value.memberEnabled,
@@ -451,6 +457,22 @@ function SegmentForm({
               </Field>
             )}
           </form.Field>
+
+          <form.Subscribe selector={(state) => state.values.locationText}>
+            {(locationText) => (
+              <div className="sm:col-span-2">
+                <form.Field name="locationPoint">
+                  {(field) => (
+                    <BaiduLocationPicker
+                      value={field.state.value}
+                      onChange={field.handleChange}
+                      searchHint={locationText}
+                    />
+                  )}
+                </form.Field>
+              </div>
+            )}
+          </form.Subscribe>
 
           <div className="flex flex-col gap-3 sm:col-span-2 sm:flex-row sm:gap-8">
             <form.Field name="memberEnabled">

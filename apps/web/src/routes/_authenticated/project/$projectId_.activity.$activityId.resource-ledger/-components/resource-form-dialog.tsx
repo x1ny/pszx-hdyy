@@ -461,23 +461,20 @@ function ResourceForm({
             )}
           </form.Field>
 
-          {/* 用车专属字段：非用车时整块不渲染，服务端也有 CHECK 兜底 */}
-          <form.Subscribe selector={(state) => state.values}>
-            {(values) =>
-              values.resourceType === "transport" || values.locationPoint ? (
-                <div className="sm:col-span-2">
-                  <form.Field name="locationPoint">
-                    {(field) => (
-                      <BaiduLocationPicker
-                        value={field.state.value}
-                        onChange={field.handleChange}
-                        searchHint={values.location}
-                      />
-                    )}
-                  </form.Field>
-                </div>
-              ) : null
-            }
+          <form.Subscribe selector={(state) => state.values.location}>
+            {(location) => (
+              <div className="sm:col-span-2">
+                <form.Field name="locationPoint">
+                  {(field) => (
+                    <BaiduLocationPicker
+                      value={field.state.value}
+                      onChange={field.handleChange}
+                      searchHint={location}
+                    />
+                  )}
+                </form.Field>
+              </div>
+            )}
           </form.Subscribe>
           <form.Subscribe selector={(state) => state.values.resourceType}>
             {(resourceType) =>

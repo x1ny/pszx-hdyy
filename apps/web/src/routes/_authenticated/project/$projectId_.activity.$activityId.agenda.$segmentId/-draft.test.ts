@@ -36,6 +36,7 @@ const config: SegmentConfig = {
     startTime: "2026-04-17T01:00:00.000Z",
     endTime: "2026-04-17T02:00:00.000Z",
     locationText: "主会场",
+    locationPoint: null,
     description: null,
     ownerName: "小周",
     status: "active",
@@ -129,6 +130,27 @@ const config: SegmentConfig = {
 };
 
 const load = () => draftFromConfig(config, "main");
+
+const segmentLocationPoint = {
+  longitude: 120.1,
+  latitude: 30.2,
+  name: "主会场东门",
+  address: "杭州市西湖区",
+  coordinateSystem: "bd09ll" as const,
+  provider: "baidu" as const,
+};
+
+it("环节定位点回显并随整页草稿保存", () => {
+  const withPoint = structuredClone(config);
+  withPoint.segment.locationPoint = segmentLocationPoint;
+
+  const reloaded = draftFromConfig(withPoint, "main");
+  expect(reloaded.base.locationPoint).toEqual(segmentLocationPoint);
+  expect(payload(reloaded).base).toMatchObject({
+    locationText: "主会场",
+    locationPoint: segmentLocationPoint,
+  });
+});
 
 it("定位点作为整组草稿保存、回显和清除，集合说明保持原值", () => {
   const original = load();

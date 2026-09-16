@@ -1,4 +1,4 @@
-import type { Car, Trip } from "./-queries";
+import type { AgendaItem, Car, Trip } from "./-queries";
 
 /* ------------------------------------------------------------------ */
 /* 日期：一律按 Asia/Shanghai 算，不用浏览器本地时区                     */
@@ -320,7 +320,7 @@ export const isScheduled = (car: Car) =>
 /* 地图导航                                                            */
 /* ------------------------------------------------------------------ */
 
-type LocationPoint = NonNullable<Car["locationPoint"]>;
+type LocationPoint = NonNullable<AgendaItem["locationPoint"]>;
 
 /**
  * 后台百度 JSAPI 保存的是 BD-09；高德 URI 则使用 GCJ-02。

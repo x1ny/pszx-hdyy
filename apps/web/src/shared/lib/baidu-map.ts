@@ -134,7 +134,7 @@ function loadBaiduMapAk() {
     .then(({ ak }) => {
       if (ak) return ak;
       throw new Error(
-        "尚未配置百度地图，请联系管理员设置 BAIDU_MAP_AK。仍可填写集合说明并保存。",
+        "尚未配置百度地图，请联系管理员设置 BAIDU_MAP_AK。仍可填写地点说明并保存。",
       );
     })
     .catch((error: unknown) => {

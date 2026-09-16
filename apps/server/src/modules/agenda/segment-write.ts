@@ -34,6 +34,7 @@ export const segmentFields = {
   startTime: activitySegment.startTime,
   endTime: activitySegment.endTime,
   locationText: activitySegment.locationText,
+  locationPoint: activitySegment.locationPoint,
   description: activitySegment.description,
   ownerName: activitySegment.ownerName,
   status: activitySegment.status,
@@ -53,6 +54,7 @@ export type SegmentRow = {
   startTime: Date;
   endTime: Date;
   locationText: string | null;
+  locationPoint: SegmentSnapshot["locationPoint"];
   description: string | null;
   ownerName: string | null;
   status: SegmentSnapshot["status"];
@@ -68,6 +70,7 @@ export const toSnapshot = (row: SegmentRow): SegmentSnapshot => ({
   startTime: row.startTime.toISOString(),
   endTime: row.endTime.toISOString(),
   locationText: row.locationText,
+  locationPoint: row.locationPoint,
   description: row.description,
   ownerName: row.ownerName,
   status: row.status,

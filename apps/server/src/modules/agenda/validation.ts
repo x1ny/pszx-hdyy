@@ -73,6 +73,8 @@ const SegmentFields = z
     endTime: z.coerce.date("结束时间不能为空"),
 
     locationText: optionalText(255),
+    // 省略表示旧客户端不修改定位；显式 null 才清除已有定位。
+    locationPoint: LocationPointSchema.nullish(),
     description: optionalText(2000),
     ownerName: optionalText(64),
 

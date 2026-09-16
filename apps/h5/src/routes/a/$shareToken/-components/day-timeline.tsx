@@ -203,16 +203,21 @@ function AgendaRow({
       <div className="min-w-0 flex-1 py-2.5">
         <h3 className="text-ink-1 text-title">{item.name}</h3>
 
-        {/* 地点只有文字，没有导航按钮 —— 全库没有任何经纬度列，编一个坐标点
-            下去会把人导到错误的地点，而人一旦跳出 App 就再也看不到提示了。 */}
-        {item.locationText && (
+        {item.locationText || item.locationPoint ? (
           <div className="mt-1 flex w-full items-center gap-1">
             <Icon name="map-pin" size={12} className="shrink-0 text-ink-3" />
             <span className="min-w-0 flex-1 truncate text-body text-ink-3">
-              {item.locationText}
+              {item.locationText || item.locationPoint?.name}
             </span>
+            {item.locationPoint && (
+              <NavigationPicker
+                point={item.locationPoint}
+                locationText={item.locationText}
+                locationLabel="环节地点"
+              />
+            )}
           </div>
-        )}
+        ) : null}
 
         {/* 只有已确认的个人排位才会给出 zone/seat（服务端已按当前人员过滤），
             所以这里展示的始终是这位嘉宾自己的真实座位。 */}
@@ -482,7 +487,7 @@ function CarBody({ car }: { car: Car }) {
         <div className="mt-1 flex min-w-0 items-center gap-1">
           <Icon name="map-pin" size={12} className="shrink-0 text-ink-3" />
           <span className="truncate text-caption text-ink-3">
-            集合：{car.location ?? car.locationPoint?.name}
+            集合：{car.location || car.locationPoint?.name}
           </span>
           {car.locationPoint && (
             <NavigationPicker

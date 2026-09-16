@@ -1,6 +1,6 @@
 import { Drawer } from "@base-ui/react/drawer";
 import { useState } from "react";
-import type { Car } from "../-queries";
+import type { AgendaItem } from "../-queries";
 import {
   buildAmapNavigationHref,
   buildAppleMapsNavigationHref,
@@ -16,10 +16,10 @@ import baiduMapIcon from "./baidu-map-icon.jpg";
 import { Icon } from "./icon";
 import { useToast } from "./toast-layer";
 
-type LocationPoint = NonNullable<Car["locationPoint"]>;
+type LocationPoint = NonNullable<AgendaItem["locationPoint"]>;
 
 /**
- * 用车集合点的地图入口。
+ * 行程地点的地图入口。议程地点和用车集合点共用这套导航选择器。
  *
  * 选择项用 HTTPS URI 而非直接塞 app scheme：安装了客户端时服务商会接手；
  * 未安装时仍能在浏览器打开路线页，因此浏览器不必也无法事先探测用户装了什么。
@@ -27,9 +27,11 @@ type LocationPoint = NonNullable<Car["locationPoint"]>;
 export function NavigationPicker({
   point,
   locationText,
+  locationLabel = "地点",
 }: {
   point: LocationPoint;
   locationText: string | null;
+  locationLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const toast = useToast();
@@ -39,7 +41,11 @@ export function NavigationPicker({
 
   const copyLocation = async () => {
     const text = [point.name, locationDescription].filter(Boolean).join("\n");
-    toast((await copyText(text)) ? "集合点已复制" : "复制失败，请长按地址复制");
+    toast(
+      (await copyText(text))
+        ? `${locationLabel}已复制`
+        : "复制失败，请长按地址复制",
+    );
   };
 
   return (
@@ -47,7 +53,7 @@ export function NavigationPicker({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label={`导航到集合点 ${point.name}`}
+        aria-label={`导航到${locationLabel} ${point.name}`}
         className="ml-auto inline-flex h-6 shrink-0 items-center gap-1 rounded-md bg-brand-soft px-2 font-bold text-caption text-brand active:bg-brand active:text-white"
       >
         <Icon name="navigation" size={11} />
@@ -98,7 +104,7 @@ export function NavigationPicker({
                 <div className="mt-3 overflow-hidden rounded-xl border border-line">
                   <MapOption
                     name="百度地图"
-                    hint="按驾车路线前往集合点"
+                    hint={`按驾车路线前往${locationLabel}`}
                     icon={baiduMapIcon}
                     href={baiduWebHref}
                     onNavigate={() =>
@@ -110,7 +116,7 @@ export function NavigationPicker({
                   />
                   <MapOption
                     name="高德地图"
-                    hint="按驾车路线前往集合点"
+                    hint={`按驾车路线前往${locationLabel}`}
                     icon={amapMapIcon}
                     href={buildAmapNavigationHref(point)}
                     bordered
@@ -118,7 +124,7 @@ export function NavigationPicker({
                   {canUseAppleMaps && (
                     <MapOption
                       name="苹果地图"
-                      hint="使用系统地图驾车前往集合点"
+                      hint={`使用系统地图驾车前往${locationLabel}`}
                       icon={appleMapsIcon}
                       href={buildAppleMapsNavigationHref(point)}
                       bordered
@@ -135,7 +141,7 @@ export function NavigationPicker({
                   className="mx-auto mt-1.5 flex h-8 items-center gap-1 rounded-md px-2 text-caption text-ink-2 active:bg-page"
                 >
                   <Icon name="map-pin" size={12} />
-                  复制集合点地址
+                  复制{locationLabel}地址
                 </button>
               </Drawer.Content>
             </Drawer.Popup>

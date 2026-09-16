@@ -28,6 +28,15 @@ const transportFields = {
   name: "机场一号车",
 };
 
+const locationPoint = {
+  longitude: 120.1,
+  latitude: 30.2,
+  name: "主会场东门",
+  address: "杭州市西湖区",
+  coordinateSystem: "bd09ll" as const,
+  provider: "baidu" as const,
+};
+
 describe("SaveSegmentConfigInput", () => {
   test("segmentId 缺省表示新建", () => {
     const parsed = SaveSegmentConfigInput.parse(baseInput);
@@ -40,6 +49,23 @@ describe("SaveSegmentConfigInput", () => {
       base: { ...baseInput.base, segmentType: "other" },
     });
     expect(result.success).toBe(true);
+  });
+
+  test("环节定位点可选、可清除，并保留旧客户端省略字段的语义", () => {
+    const omitted = SaveSegmentConfigInput.parse(baseInput);
+    expect(omitted.base.locationPoint).toBeUndefined();
+
+    const selected = SaveSegmentConfigInput.parse({
+      ...baseInput,
+      base: { ...baseInput.base, locationPoint },
+    });
+    expect(selected.base.locationPoint).toEqual(locationPoint);
+
+    const cleared = SaveSegmentConfigInput.parse({
+      ...baseInput,
+      base: { ...baseInput.base, locationPoint: null },
+    });
+    expect(cleared.base.locationPoint).toBeNull();
   });
 
   test("人员三种意图各自默认空数组，不会因为没传就崩", () => {

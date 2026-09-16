@@ -180,6 +180,7 @@ function AgendaTab() {
         startTime: values.startTime,
         endTime: values.endTime,
         locationText: values.locationText,
+        locationPoint: values.locationPoint,
         ownerName: values.ownerName,
         description: values.description,
         memberEnabled: values.memberEnabled,

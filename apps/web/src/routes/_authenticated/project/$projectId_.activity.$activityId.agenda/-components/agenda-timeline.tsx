@@ -163,7 +163,7 @@ export function AgendaTimeline({
                                 type="button"
                                 onClick={() => onSelect(segment)}
                                 aria-label={`${segment.name}，${formatTimelineBlockRange(segment, block)}${block.continuesFromPrevDay ? "，从前一天延续" : ""}`}
-                                title={`${segment.name} ${formatTimelineBlockRange(segment, block)} · ${SEGMENT_TYPE_LABELS[segment.segmentType]}${segment.locationText ? ` · ${segment.locationText}` : ""}`}
+                                title={`${segment.name} ${formatTimelineBlockRange(segment, block)} · ${SEGMENT_TYPE_LABELS[segment.segmentType]}${segment.locationText || segment.locationPoint?.name ? ` · ${segment.locationText || segment.locationPoint?.name}` : ""}`}
                                 className={cn(
                                   // min-w-2 只是给零时长/几分钟的退化数据留一个
                                   // 能点得到的宽度，量级几像素；真正让短环节可读
@@ -210,8 +210,9 @@ export function AgendaTimeline({
                                 </span>
                                 <span className="hidden truncate text-[11px] text-muted-foreground leading-[14px] @min-[5.5rem]:block">
                                   {SEGMENT_TYPE_LABELS[segment.segmentType]}
-                                  {segment.locationText &&
-                                    ` · ${segment.locationText}`}
+                                  {(segment.locationText ||
+                                    segment.locationPoint?.name) &&
+                                    ` · ${segment.locationText || segment.locationPoint?.name}`}
                                 </span>
                                 <div className="absolute bottom-1.5 left-2.5 hidden @max-[5.5rem]:left-[7px] @min-[2.5rem]:flex">
                                   <SegmentConfigIcons

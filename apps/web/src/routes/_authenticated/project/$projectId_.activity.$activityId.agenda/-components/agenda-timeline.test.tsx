@@ -21,6 +21,7 @@ const testSegment: Segment = {
   startTime: "2026-09-10T21:00:00.000Z",
   endTime: "2026-09-11T00:00:00.000Z",
   locationText: null,
+  locationPoint: null,
   description: null,
   ownerName: null,
   status: "active",

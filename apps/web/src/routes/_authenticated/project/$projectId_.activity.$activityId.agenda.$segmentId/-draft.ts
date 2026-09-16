@@ -48,6 +48,7 @@ export type BaseDraft = {
   startTime: string;
   endTime: string;
   locationText: string;
+  locationPoint: Segment["locationPoint"];
   ownerName: string;
   description: string;
   memberEnabled: boolean;
@@ -219,6 +220,7 @@ export function createEmptyDraft(defaults?: Partial<BaseDraft>): ConfigDraft {
       startTime: "",
       endTime: "",
       locationText: "",
+      locationPoint: null,
       ownerName: "",
       description: "",
       memberEnabled: false,
@@ -285,6 +287,7 @@ export function draftFromConfig(
       startTime: toDateTimeLocalValue(config.segment.startTime),
       endTime: toDateTimeLocalValue(config.segment.endTime),
       locationText: config.segment.locationText ?? "",
+      locationPoint: config.segment.locationPoint ?? null,
       ownerName: config.segment.ownerName ?? "",
       description: config.segment.description ?? "",
       memberEnabled: config.segment.memberEnabled,
@@ -898,6 +901,7 @@ export function buildSavePayload(input: {
       startTime: new Date(base.startTime).toISOString(),
       endTime: new Date(base.endTime).toISOString(),
       locationText: text(base.locationText) ?? undefined,
+      locationPoint: base.locationPoint,
       ownerName: text(base.ownerName) ?? undefined,
       description: text(base.description) ?? undefined,
       memberEnabled: base.memberEnabled,

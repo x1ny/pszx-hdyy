@@ -4,6 +4,7 @@ import {
   SEGMENT_TYPE_VALUES,
 } from "#/features/agenda/labels";
 import type { AgendaLine } from "#/features/agenda/queries";
+import { BaiduLocationPicker } from "#/shared/components/baidu-location-picker";
 import {
   Field,
   FieldDescription,
@@ -34,10 +35,7 @@ function RequiredMark() {
  * 环节基础信息。字段和旧的表单弹窗完全一致，两处变化：
  *
  * - 两个 enabled 复选框移到了各自区块的标题栏（见 SectionCard）。
- * - 地点仍然只是一个文本框：原型画了「自定义输入 / 地图选点」两个 tab，本期
- *   不做地图选点——坐标现在没有任何下游在消费（H5 行程页还是静态常量），而
- *   引地图 SDK 要连带处理 key 管理、加载失败降级和坐标系（高德 GCJ-02 和 GPS
- *   差几百米，存的时候不记清楚用的哪套，将来必然错）。
+ * - 地点说明保持自由文本，同时可选百度地图精确定位；定位点只在保存整页时写入。
  */
 export function BasicSection({
   base,
@@ -217,6 +215,11 @@ export function BasicSection({
             placeholder="例如：主会场、6号馆 A区"
             value={base.locationText}
             onChange={(event) => onChange("locationText", event.target.value)}
+          />
+          <BaiduLocationPicker
+            value={base.locationPoint}
+            onChange={(point) => onChange("locationPoint", point)}
+            searchHint={base.locationText}
           />
         </Field>
 

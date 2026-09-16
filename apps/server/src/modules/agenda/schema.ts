@@ -14,6 +14,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { user } from "../auth/schema";
 import { activity } from "../project/schema";
+import type { LocationPoint } from "../resource/location-point";
 
 // ---------------------------------------------------------------------------
 // 领域词汇表
@@ -165,8 +166,11 @@ export const activitySegment = pgTable(
     startTime: timestamp("start_time", { withTimezone: true }).notNull(),
     endTime: timestamp("end_time", { withTimezone: true }).notNull(),
 
-    // BR-DEV-031A：普通环节地点先用文本录入即可，不要求先有场地空间配置。
+    // BR-DEV-031A：普通环节地点保留自由文本，也可补充精确定位；不要求先有
+    // 场地空间配置。
     locationText: text("location_text"),
+    /** 可选的百度 BD-09 精确定位；地点说明仍保留为可自由编辑的文本。 */
+    locationPoint: jsonb("location_point").$type<LocationPoint>(),
     description: text("description"),
 
     // 负责人本期是文本（原型就是个 input）。等活动人员关系表建成后可以换成
@@ -239,6 +243,7 @@ export type SegmentSnapshot = {
   startTime: string;
   endTime: string;
   locationText: string | null;
+  locationPoint: LocationPoint | null;
   description: string | null;
   ownerName: string | null;
   status: SegmentStatus;

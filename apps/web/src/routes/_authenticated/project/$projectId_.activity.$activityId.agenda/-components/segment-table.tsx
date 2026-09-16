@@ -154,7 +154,9 @@ export function SegmentTable({
                   <TableCell className="whitespace-nowrap tabular-nums">
                     {formatSegmentRange(segment)}
                   </TableCell>
-                  <TableCell>{segment.locationText || "-"}</TableCell>
+                  <TableCell>
+                    {segment.locationText || segment.locationPoint?.name || "-"}
+                  </TableCell>
                   <TableCell>
                     {(() => {
                       const demands = demandsBySegment.get(segment.id) ?? [];

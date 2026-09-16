@@ -1,0 +1,1 @@
+ALTER TABLE "activity_segment" ADD COLUMN "location_point" jsonb;

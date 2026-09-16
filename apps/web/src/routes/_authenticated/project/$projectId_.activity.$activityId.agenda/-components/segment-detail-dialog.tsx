@@ -98,7 +98,9 @@ export function SegmentDetailDialog({
                     ? `${lineLabel(line)}${line.lineType === "parallel" ? ` · 排序 ${line.sortOrder}` : " · 主流程"}`
                     : "-"}
                 </Row>
-                <Row label="地点 / 区域">{segment.locationText || "-"}</Row>
+                <Row label="地点 / 区域">
+                  {segment.locationText || segment.locationPoint?.name || "-"}
+                </Row>
                 <Row label="环节人员">
                   {!segment.memberEnabled
                     ? "未开启"

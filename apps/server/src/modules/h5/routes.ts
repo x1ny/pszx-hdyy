@@ -58,6 +58,7 @@ export const itinerarySegmentsQuery = (activityId: number, memberId: number) =>
       startTime: activitySegment.startTime,
       endTime: activitySegment.endTime,
       locationText: activitySegment.locationText,
+      locationPoint: activitySegment.locationPoint,
       description: activitySegment.description,
     })
     .from(activitySegment)

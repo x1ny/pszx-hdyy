@@ -112,6 +112,10 @@ describe("itinerarySegmentsQuery —— 议程按 member_enabled 分流", () => 
       'order by "activity_segment"."start_time" asc, "activity_segment"."id" asc',
     );
   });
+
+  test("返回环节的后台定位点，供 H5 显示导航入口", () => {
+    expect(rendered.sql).toContain('"location_point"');
+  });
 });
 
 describe("itinerarySeatsQuery —— 座位只认已确认且仍开启排位的方案", () => {

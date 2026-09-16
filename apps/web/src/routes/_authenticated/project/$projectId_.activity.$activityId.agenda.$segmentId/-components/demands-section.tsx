@@ -507,13 +507,11 @@ function ResourceCard({
             value={resource.fields.location}
             onChange={(event) => onFieldChange("location", event.target.value)}
           />
-          {isTransport || resource.fields.locationPoint ? (
-            <BaiduLocationPicker
-              value={resource.fields.locationPoint}
-              onChange={(point) => onFieldChange("locationPoint", point)}
-              searchHint={resource.fields.location}
-            />
-          ) : null}
+          <BaiduLocationPicker
+            value={resource.fields.locationPoint}
+            onChange={(point) => onFieldChange("locationPoint", point)}
+            searchHint={resource.fields.location}
+          />
         </Field>
 
         {isTransport ? (

@@ -56,7 +56,7 @@ export function BaiduLocationPicker({
           </Button>
         ) : (
           <span className="text-muted-foreground text-xs">
-            选填，用于准确定位集合地点
+            选填，用于准确定位地点
           </span>
         )}
       </div>
@@ -70,7 +70,7 @@ export function BaiduLocationPicker({
             经度 {value.longitude.toFixed(6)}，纬度 {value.latitude.toFixed(6)}
           </p>
           <p className="mt-1 text-muted-foreground text-xs">
-            修改集合说明不会移动定位点，需要时请重新选点。
+            修改地点说明不会移动定位点，需要时请重新选点。
           </p>
         </div>
       ) : null}
@@ -80,7 +80,7 @@ export function BaiduLocationPicker({
           <DialogHeader>
             <DialogTitle>地图选点</DialogTitle>
             <DialogDescription>
-              搜索地点后选择结果，或点击地图、拖动标记微调。请尽量选在实际集合的入口。
+              搜索地点后选择结果，或点击地图、拖动标记微调。请尽量选在实际到达的地点或入口。
             </DialogDescription>
           </DialogHeader>
           {open ? (
@@ -326,7 +326,7 @@ function PickerContent({
           <div
             ref={container}
             role="img"
-            aria-label="百度地图，点击选择集合点，可拖动标记微调"
+            aria-label="百度地图，点击选择地点，可拖动标记微调"
             className="h-96 min-w-0 overflow-hidden rounded-md border bg-muted"
           />
         </div>
