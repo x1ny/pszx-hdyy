@@ -21,6 +21,7 @@ export const SEGMENT_TYPE_LABELS = {
   fashion_show: "大秀",
   forum: "论坛",
   conference: "会议",
+  other: "其他",
 } as const satisfies Record<SegmentType, string>;
 
 export const SEGMENT_TYPE_VALUES = Object.keys(
@@ -38,6 +39,7 @@ export const SEGMENT_TYPE_BADGE_CLASS = {
   fashion_show: "border-transparent bg-chart-3/10 text-chart-3",
   forum: "border-transparent bg-chart-4/10 text-chart-4",
   conference: "border-transparent bg-chart-5/10 text-chart-5",
+  other: "border-transparent bg-chart-1/10 text-chart-1",
 } as const satisfies Record<SegmentType, string>;
 
 export const SEGMENT_STATUS_LABELS = {

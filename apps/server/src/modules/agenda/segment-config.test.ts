@@ -34,6 +34,14 @@ describe("SaveSegmentConfigInput", () => {
     expect(parsed.segmentId).toBeNull();
   });
 
+  test("其他类型可以通过环节配置校验", () => {
+    const result = SaveSegmentConfigInput.safeParse({
+      ...baseInput,
+      base: { ...baseInput.base, segmentType: "other" },
+    });
+    expect(result.success).toBe(true);
+  });
+
   test("人员三种意图各自默认空数组，不会因为没传就崩", () => {
     const parsed = SaveSegmentConfigInput.parse(baseInput);
     expect(parsed.members).toEqual({

@@ -45,6 +45,7 @@ export const SEGMENT_TYPES = [
   "fashion_show",
   "forum",
   "conference",
+  "other",
 ] as const;
 export type SegmentType = (typeof SEGMENT_TYPES)[number];
 
