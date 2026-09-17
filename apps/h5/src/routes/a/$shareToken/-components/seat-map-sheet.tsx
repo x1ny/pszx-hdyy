@@ -3,14 +3,21 @@ import { useLayoutEffect, useRef, useState } from "react";
 import type { AgendaItem, SeatMap } from "../-queries";
 import { seatMapQueryOptions } from "../-queries";
 import { OverlaySheet } from "./overlay-sheet";
-import { type SeatMapLayout, seatMapLayout } from "./seat-map-layout";
+import {
+  enlargeMark,
+  MARK_VERTICAL_ADVANCE,
+  markTextColor,
+  type SeatMapLayout,
+  type SeatMapMarkShape,
+  seatMapLayout,
+} from "./seat-map-layout";
 
 /**
  * 座位定位图。
  *
  * **它回答的问题只有一个：我这个位置在这片区的哪个方位。** 不回答"邻座是谁"
- * （公众端不铺别人的名单，服务端根本不发），也不回答"哪边是舞台"——库里没有
- * 舞台和入口，推断出来的方向会指错而且没人能发现（详见 docs/h5-seat-map.md）。
+ * （公众端不铺别人的名单，服务端根本不发）。方向只靠运营在管理端画的标注
+ * （舞台、门口……），不从座位坐标推断（详见 docs/h5-seat-map.md）。
  *
  * 所以其余座位一律是同一颗灰点：没有编号、没有姓名、不分种类等级、不响应点击。
  * 正因为它们长得一模一样，一万个座位才能压进**一条 path**，DOM 节点数与座位数
@@ -169,7 +176,13 @@ export type SeatMapData = {
   pitch: number;
   /** 圆桌/方桌的家具外框，只有形状和位置，见 docs/h5-seat-map.md。 */
   tables?: SeatMapTable[];
+  /** 运营画的主题板、门口等标注：形状 + 颜色 + 文字，帮嘉宾辨认方向。 */
+  marks?: SeatMapMark[];
 };
+export type SeatMapMark = SeatMapMarkShape & { color: string };
+
+/** `text-caption` 的字号（rem）。根字号随屏宽缩放，判断放不放得下要换算成像素。 */
+const LABEL_FONT_REM = 0.6875;
 
 export function SeatMapCanvas({
   map,
@@ -201,6 +214,11 @@ export function SeatMapCanvas({
         seatMapLayout({
           seats: map.seats,
           mine: focus,
+          marks: map.marks,
+          labelFontPx:
+            Number.parseFloat(
+              getComputedStyle(document.documentElement).fontSize,
+            ) * LABEL_FONT_REM,
           pitch: map.pitch,
           viewWidth: box.clientWidth,
           // 下界：再扁的区也得有地方站定位钉。上界：面板本身最高
@@ -219,121 +237,269 @@ export function SeatMapCanvas({
 
   if (!focus) return null;
   const highlightPath = highlightsToPath(highlights);
+  const marks = map.marks ?? [];
+  const legend = legendItems(marks, layout);
 
   return (
-    <div
-      ref={boxRef}
-      className="relative w-full overflow-hidden rounded-xl bg-page"
-      style={{ height: layout ? `${layout.height}px` : "6rem" }}
-    >
-      {layout && (
-        <>
-          <svg
-            width="100%"
-            height="100%"
-            viewBox={layout.viewBox}
-            role="img"
-            aria-label={
-              highlightMode === "seats"
-                ? "团体座位在所在区域的位置示意图"
-                : `座位 ${focus.label} 在所在区域的位置示意图`
-            }
-          >
-            {/*
+    <>
+      {/*
+        写不进形状的标注在图上方按颜色列出来。放在图外，不挡座位，也不改变图的
+        尺寸；色块画成标注自己的形状，同色的方块和圆也能分开。
+      */}
+      {legend.length > 0 && (
+        <ul
+          className="mb-2 flex flex-wrap gap-x-3 gap-y-1 text-caption text-ink-2"
+          aria-label="图中标注说明"
+        >
+          {legend.map((mark) => (
+            <li
+              key={`${mark.color}-${mark.shape}-${mark.label}`}
+              className="flex items-center gap-1"
+            >
+              <MarkSwatch shape={mark.shape} color={mark.color} />
+              {mark.label.trim()}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div
+        ref={boxRef}
+        className="relative w-full overflow-hidden rounded-xl bg-page"
+        style={{ height: layout ? `${layout.height}px` : "6rem" }}
+      >
+        {layout && (
+          <>
+            <svg
+              width="100%"
+              height="100%"
+              viewBox={layout.viewBox}
+              role="img"
+              aria-label={
+                highlightMode === "seats"
+                  ? "团体座位在所在区域的位置示意图"
+                  : `座位 ${focus.label} 在所在区域的位置示意图`
+              }
+            >
+              {/*
               桌面外框先画，座位盖在上面。世界坐标和座位共用同一个 viewBox，
               不需要另算缩放；桌子数量是"几十"这个量级，不是座位的"上万"，
               多画几十个形状不会碰到下面那条单路径的性能红线（见
               docs/h5-seat-map.md）。不带名称——这张图回答"哪片区域"，不是
               "哪张桌"，且没有地方放图例区分文字和座位。
             */}
-            {map.tables?.map((table) =>
-              table.shape === "circle" ? (
-                <circle
-                  key={`circle-${table.x}-${table.y}-${table.radius}`}
-                  cx={table.x}
-                  cy={table.y}
-                  r={table.radius}
-                  fill="none"
-                  stroke="var(--color-ink-4)"
-                  strokeOpacity={0.5}
-                  strokeWidth={1.5}
-                  vectorEffect="non-scaling-stroke"
+              {map.tables?.map((table) =>
+                table.shape === "circle" ? (
+                  <circle
+                    key={`circle-${table.x}-${table.y}-${table.radius}`}
+                    cx={table.x}
+                    cy={table.y}
+                    r={table.radius}
+                    fill="none"
+                    stroke="var(--color-ink-4)"
+                    strokeOpacity={0.5}
+                    strokeWidth={1.5}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ) : (
+                  <rect
+                    key={`rect-${table.x}-${table.y}-${table.width}-${table.height}`}
+                    x={table.x - table.width / 2}
+                    y={table.y - table.height / 2}
+                    width={table.width}
+                    height={table.height}
+                    rx={Math.min(16, Math.min(table.width, table.height) / 4)}
+                    fill="none"
+                    stroke="var(--color-ink-4)"
+                    strokeOpacity={0.5}
+                    strokeWidth={1.5}
+                    vectorEffect="non-scaling-stroke"
+                    transform={
+                      table.angle
+                        ? `rotate(${table.angle} ${table.x} ${table.y})`
+                        : undefined
+                    }
+                  />
+                ),
+              )}
+              {marks.map((mark, index) => (
+                <MarkShape
+                  // biome-ignore lint/suspicious/noArrayIndexKey: 标注不带标识下发，顺序即身份
+                  key={index}
+                  mark={enlargeMark(mark, layout.scale)}
                 />
-              ) : (
-                <rect
-                  key={`rect-${table.x}-${table.y}-${table.width}-${table.height}`}
-                  x={table.x - table.width / 2}
-                  y={table.y - table.height / 2}
-                  width={table.width}
-                  height={table.height}
-                  rx={Math.min(16, Math.min(table.width, table.height) / 4)}
-                  fill="none"
-                  stroke="var(--color-ink-4)"
-                  strokeOpacity={0.5}
-                  strokeWidth={1.5}
-                  vectorEffect="non-scaling-stroke"
-                  transform={
-                    table.angle
-                      ? `rotate(${table.angle} ${table.x} ${table.y})`
-                      : undefined
-                  }
-                />
-              ),
-            )}
-            {/*
+              ))}
+              {/*
               一条 path 装下全部座位。`M x y h0` 是零长度子路径，靠
               stroke-linecap="round" 渲染成圆点，半径由描边宽度决定；
               vector-effect="non-scaling-stroke" 让描边宽度按**屏幕像素**算，
               不受 viewBox 缩放影响，于是圆点大小完全由 dotDiameter 说了算。
             */}
-            <path
-              d={layout.path}
-              fill="none"
-              stroke="var(--color-ink-4)"
-              strokeWidth={layout.dotDiameter}
-              strokeLinecap="round"
-              vectorEffect="non-scaling-stroke"
-            />
-            {highlightMode === "seats" && (
-              <>
-                <path
-                  d={highlightPath}
-                  fill="none"
-                  stroke="white"
-                  strokeWidth={layout.dotDiameter + 7}
-                  strokeLinecap="round"
-                  vectorEffect="non-scaling-stroke"
-                />
-                <path
-                  d={highlightPath}
-                  fill="none"
-                  stroke="var(--color-brand)"
-                  strokeWidth={layout.dotDiameter + 1}
-                  strokeLinecap="round"
-                  vectorEffect="non-scaling-stroke"
-                />
-              </>
-            )}
-          </svg>
+              <path
+                d={layout.path}
+                fill="none"
+                stroke="var(--color-ink-4)"
+                strokeWidth={layout.dotDiameter}
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+              />
+              {highlightMode === "seats" && (
+                <>
+                  <path
+                    d={highlightPath}
+                    fill="none"
+                    stroke="white"
+                    strokeWidth={layout.dotDiameter + 7}
+                    strokeLinecap="round"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  <path
+                    d={highlightPath}
+                    fill="none"
+                    stroke="var(--color-brand)"
+                    strokeWidth={layout.dotDiameter + 1}
+                    strokeLinecap="round"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                </>
+              )}
+            </svg>
 
-          {/*
+            {/*
+            标注文字同定位钉：固定屏幕字号、画在 SVG 外面，不加底色。只画进得去
+            形状的（横排，或瘦高形状竖排），放不下的已经列在图上方的图例里。
+          */}
+            {marks.map((mark, index) => {
+              const placement = layout.markLabels[index];
+              if (
+                placement?.mode !== "horizontal" &&
+                placement?.mode !== "vertical"
+              )
+                return null;
+              return (
+                <span
+                  // biome-ignore lint/suspicious/noArrayIndexKey: 标注不带标识下发，顺序即身份
+                  key={index}
+                  data-mark-label={placement.mode}
+                  className={
+                    placement.mode === "vertical"
+                      ? "-translate-x-1/2 -translate-y-1/2 pointer-events-none absolute text-caption [text-orientation:upright] [writing-mode:vertical-rl]"
+                      : "-translate-x-1/2 -translate-y-1/2 pointer-events-none absolute whitespace-nowrap text-caption"
+                  }
+                  style={{
+                    left: `${placement.left}px`,
+                    top: `${placement.top}px`,
+                    color: markTextColor(mark.color) ?? "var(--color-ink-2)",
+                    lineHeight: placement.mode === "vertical" ? 1 : undefined,
+                    letterSpacing:
+                      placement.mode === "vertical"
+                        ? `${MARK_VERTICAL_ADVANCE - 1}em`
+                        : undefined,
+                  }}
+                >
+                  {mark.label.trim()}
+                </span>
+              );
+            })}
+
+            {/*
             定位钉是**固定屏幕尺寸**，画在 SVG 外面。一千座的图上圆点只有两三个
             像素，红点要是跟着一起缩，"我在哪"就彻底看不见了——而那是这张图存在
             的唯一理由。位置能用一行乘法算准，靠的是 viewBox 长宽比和盒子完全
             一致（见 seat-map-layout.ts）。
           */}
-          {highlightMode === "pin" && (
-            <span
-              className="-translate-x-1/2 -translate-y-1/2 pointer-events-none absolute block h-3 w-3 rounded-full border-2 border-white bg-brand shadow-[0_0_0_0.25rem_rgba(232,68,46,0.25)]"
-              style={{
-                left: `${layout.pin.left}px`,
-                top: `${layout.pin.top}px`,
-              }}
-            />
-          )}
-        </>
+            {highlightMode === "pin" && (
+              <span
+                className="-translate-x-1/2 -translate-y-1/2 pointer-events-none absolute block h-3 w-3 rounded-full border-2 border-white bg-brand shadow-[0_0_0_0.25rem_rgba(232,68,46,0.25)]"
+                style={{
+                  left: `${layout.pin.left}px`,
+                  top: `${layout.pin.top}px`,
+                }}
+              />
+            )}
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+/** 同色、同形、同名的标注在图例里只列一次。 */
+function legendItems(
+  marks: readonly SeatMapMark[],
+  layout: SeatMapLayout | null,
+) {
+  if (!layout) return [];
+  const seen = new Set<string>();
+  return marks.filter((mark, index) => {
+    if (layout.markLabels[index]?.mode !== "legend") return false;
+    const key = `${mark.color.toUpperCase()}-${mark.shape}-${mark.label.trim()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function MarkShape({ mark }: { mark: SeatMapMark }) {
+  const paint = {
+    fill: mark.color,
+    fillOpacity: 0.14,
+    stroke: mark.color,
+    strokeWidth: 1,
+    vectorEffect: "non-scaling-stroke",
+  } as const;
+  if (mark.shape === "ellipse")
+    return (
+      <ellipse
+        cx={mark.x + mark.width / 2}
+        cy={mark.y + mark.height / 2}
+        rx={mark.width / 2}
+        ry={mark.height / 2}
+        {...paint}
+      />
+    );
+  if (mark.shape === "polygon" && mark.points)
+    return (
+      <polygon
+        points={mark.points.map((point) => `${point.x},${point.y}`).join(" ")}
+        {...paint}
+      />
+    );
+  return (
+    <rect
+      x={mark.x}
+      y={mark.y}
+      width={mark.width}
+      height={mark.height}
+      rx={Math.min(6, mark.width / 4, mark.height / 4)}
+      {...paint}
+    />
+  );
+}
+
+/** 图例色块画成标注自己的形状。 */
+function MarkSwatch({
+  shape,
+  color,
+}: {
+  shape: SeatMapMark["shape"];
+  color: string;
+}) {
+  const paint = {
+    fill: color,
+    fillOpacity: 0.18,
+    stroke: color,
+    strokeWidth: 1.5,
+  };
+  return (
+    <svg viewBox="0 0 14 14" className="size-3 shrink-0" aria-hidden="true">
+      {shape === "rect" ? (
+        <rect x={1.5} y={3} width={11} height={8} rx={1.5} {...paint} />
+      ) : shape === "ellipse" ? (
+        <circle cx={7} cy={7} r={5.5} {...paint} />
+      ) : (
+        <polygon points="7,1.5 12.5,5.5 10.5,12 3.5,12 1.5,5.5" {...paint} />
       )}
-    </div>
+    </svg>
   );
 }
 

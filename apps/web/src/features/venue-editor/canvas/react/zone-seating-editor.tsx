@@ -3,6 +3,7 @@ import {
   ArrowLeftIcon,
   HandIcon,
   LayoutTemplateIcon,
+  MapPinnedIcon,
   MousePointer2Icon,
   RedoIcon,
   Rows3Icon,
@@ -24,11 +25,18 @@ import {
   moveSeats,
   removeSeats,
 } from "../core/commands";
-import { type CanvasDoc, type CanvasZone, newId } from "../core/document";
+import {
+  type CanvasDoc,
+  type CanvasMark,
+  type CanvasZone,
+  newId,
+} from "../core/document";
 import {
   boundsOf,
   normalizeRect,
   type Point,
+  pointsToSvg,
+  type Rect,
   seatContentBounds,
   seatFieldPitch,
   toWorld,
@@ -45,13 +53,30 @@ import {
 } from "../core/history";
 import {
   EMPTY_SELECTION,
+  handleRects,
+  hitMark,
   hitSeat,
   marqueeSelect,
+  resizeRect,
   resolveSeatDragSubject,
   type SeatDragSubject,
   type SeatTool,
   type Selection,
 } from "../core/interaction";
+import {
+  addMark,
+  defaultMarkShape,
+  type MarkDrawShape,
+  markShapeFromDrag,
+  markShapeFromPoints,
+  marksBounds,
+  moveMark,
+  nextMarkColor,
+  patchMark,
+  removeMark,
+  resizeMark,
+  unionRect,
+} from "../core/marks";
 import {
   addRow,
   DEFAULT_ROW_PARAMS,
@@ -71,6 +96,8 @@ import {
   seatRenderSpec,
 } from "../seat-occupant-visual";
 import { SeatNode } from "./canvas-view";
+import { MarkPanel } from "./mark-panel";
+import { MarkLegend, MarkNode, MarkShape } from "./mark-view";
 import { RowPanel } from "./row-panel";
 import { TemplateDialog } from "./template-dialog";
 import { useViewport, type Viewport } from "./use-viewport";
@@ -89,6 +116,10 @@ import { useViewport, type Viewport } from "./use-viewport";
 
 const TAP_THRESHOLD_PX = 4;
 const SEAT_ORIGIN = { x: 0, y: 0 };
+/** 多边形点回起点这个距离以内就闭合，同区域分布画布。 */
+const CLOSE_SNAP_PX = 12;
+/** 拖出的标注小于这个屏幕尺寸当误操作忽略。 */
+const MIN_DRAW_PX = 8;
 
 /**
  * 这次选择变化是**怎么来的**。
@@ -108,6 +139,7 @@ const TOOL_ITEMS: { value: SeatTool; label: string; icon: typeof SofaIcon }[] =
     { value: "pan", label: "平移", icon: HandIcon },
     { value: "seat", label: "点放位置", icon: SofaIcon },
     { value: "row", label: "画排", icon: Rows3Icon },
+    { value: "mark", label: "标注", icon: MapPinnedIcon },
   ];
 
 export function ZoneSeatingEditor({
@@ -224,6 +256,32 @@ export function ZoneSeatingEditor({
     [state.doc.seats, zone.externalId],
   );
 
+  const [markShape, setMarkShape] = useState<MarkDrawShape>("rect");
+  const [activeMarkId, setActiveMarkId] = useState<string | null>(null);
+  const zoneMarks = useMemo(
+    () =>
+      (state.doc.marks ?? []).filter(
+        (mark) => mark.zoneExternalId === zone.externalId,
+      ),
+    [state.doc.marks, zone.externalId],
+  );
+  const activeMark = assignOnly
+    ? undefined
+    : zoneMarks.find((mark) => mark.externalId === activeMarkId);
+
+  /**
+   * 多边形标注的点击草稿。真值放 ref：连续快速点击会落进同一批 React 更新，
+   * 读 state 会拿到同一份旧顶点（区域分布画布 `canvas-editor.tsx` 踩过同一个坑）。
+   */
+  const polygonPointsRef = useRef<Point[]>([]);
+  const [polygonPoints, setPolygonPoints] = useState<Point[]>([]);
+  const [polygonCursor, setPolygonCursor] = useState<Point | null>(null);
+  const syncPolygonPoints = useCallback((next: Point[]) => {
+    polygonPointsRef.current = next;
+    setPolygonPoints(next);
+    if (next.length === 0) setPolygonCursor(null);
+  }, []);
+
   /**
    * 这片座位有多密——**整个呈现层唯一的输入量**。跟着座位集合变，
    * 不跟着缩放变，所以只在增删座位时重算一次。
@@ -233,10 +291,20 @@ export function ZoneSeatingEditor({
     () => new Map(zoneSeats.map((seat) => [seat.externalId, seat])),
     [zoneSeats],
   );
-  const contentBounds = useMemo(
-    () => seatContentBounds(zoneSeats, worldPitch),
-    [zoneSeats, worldPitch],
-  );
+  /** 座位之外还要装下标注，门口、主题板常画在座位外侧。 */
+  const contentBounds = useMemo(() => {
+    const seats = seatContentBounds(zoneSeats, worldPitch);
+    const marks = marksBounds(zoneMarks);
+    if (!marks) return seats;
+    const pad = Math.max(worldPitch, 16) / 2;
+    const padded = {
+      x: marks.x - pad,
+      y: marks.y - pad,
+      width: marks.width + pad * 2,
+      height: marks.height + pad * 2,
+    };
+    return zoneSeats.length > 0 ? unionRect(seats, padded) : padded;
+  }, [zoneSeats, zoneMarks, worldPitch]);
   const {
     viewport,
     panBy,
@@ -279,12 +347,44 @@ export function ZoneSeatingEditor({
       zones: [{ ...zone, shape: { ...zone.shape, x: 0, y: 0 } }],
       seats: zoneSeats,
       rows: zoneRows,
+      marks: zoneMarks,
     }),
-    [zone, contentBounds, zoneSeats, zoneRows],
+    [zone, contentBounds, zoneSeats, zoneRows, zoneMarks],
   );
+
+  const createMark = (shape: CanvasMark["shape"]) => {
+    if (assignOnly) return;
+    const id = newId("m");
+    onCommand((s) =>
+      execute(
+        s,
+        addMark({
+          externalId: id,
+          zoneExternalId: zone.externalId,
+          label: "",
+          color: nextMarkColor(zoneMarks),
+          shape,
+        }),
+      ),
+    );
+    syncPolygonPoints([]);
+    setActiveMarkId(id);
+    setActiveRowId(null);
+    setTool("select");
+    onSelectionChange(EMPTY_SELECTION, "clear");
+  };
+  const finishPolygon = (points: Point[]) => {
+    const shape = markShapeFromPoints(points);
+    if (shape) createMark(shape);
+    else syncPolygonPoints([]);
+  };
 
   const live = useRef({
     activeRowId,
+    activeMarkId,
+    markShape,
+    finishPolygon,
+    syncPolygonPoints,
     viewport,
     localDoc,
     selection,
@@ -298,6 +398,10 @@ export function ZoneSeatingEditor({
   });
   live.current = {
     activeRowId,
+    activeMarkId: activeMark?.externalId ?? null,
+    markShape,
+    finishPolygon,
+    syncPolygonPoints,
     viewport,
     localDoc,
     selection:
@@ -362,12 +466,28 @@ export function ZoneSeatingEditor({
           tool: t,
           forcePan,
           hitRadius: radius,
+          markShape: live.current.markShape,
+          activeMarkId: live.current.activeMarkId,
+          scale: live.current.viewport.scale,
         });
 
-        // 入座阶段不许挪座位——把"拖一个已选中座位"降级成"什么都不做"，
+        // 入座阶段不许挪座位和标注——把拖动降级成"什么都不做"，
         // tap 阈值判定照样跑，纯点击依然能选中/换选，只是拖不动它。
-        if (live.current.assignOnly && subject.kind === "moveSeats") {
+        if (
+          live.current.assignOnly &&
+          (subject.kind === "moveSeats" ||
+            subject.kind === "moveMark" ||
+            subject.kind === "resizeMark" ||
+            subject.kind === "drawMark")
+        ) {
           subject = { kind: "none" };
+        }
+        // 直接拖一个没选中的标注：拖的同时把它选上，松手就能在面板里改字。
+        if (subject.kind === "moveMark") {
+          setActiveMarkId(subject.markId);
+          setActiveRowId(null);
+        } else if (subject.kind === "moveSeats" || subject.kind === "marquee") {
+          setActiveMarkId(null);
         }
         if (
           subject.kind === "marquee" ||
@@ -444,6 +564,29 @@ export function ZoneSeatingEditor({
         }
 
         switch (finished.subject.kind) {
+          case "drawMark": {
+            const rect = normalizeRect(finished.subject.start, point);
+            const scale = live.current.viewport.scale;
+            if (
+              rect.width * scale < MIN_DRAW_PX &&
+              rect.height * scale < MIN_DRAW_PX
+            )
+              return;
+            createMark(markShapeFromDrag(finished.subject.shapeType, rect));
+            return;
+          }
+          case "moveMark": {
+            const { markId } = finished.subject;
+            onCommand((s) => execute(s, moveMark(markId, delta)));
+            return;
+          }
+          case "resizeMark": {
+            const { markId, origin, handle } = finished.subject;
+            onCommand((s) =>
+              execute(s, resizeMark(markId, resizeRect(origin, handle, delta))),
+            );
+            return;
+          }
           case "drawRow":
             createRow(
               finished.start,
@@ -498,12 +641,34 @@ export function ZoneSeatingEditor({
   }, [zoomAt]);
 
   const handleTap = (point: Point, currentTool: SeatTool) => {
-    const { localDoc: d } = live.current;
+    const { localDoc: d, viewport: vp } = live.current;
     if (currentTool === "row" && !live.current.assignOnly) {
       createRow(point, rowDefaults);
       return;
     }
     setActiveRowId(null);
+
+    if (currentTool === "mark" && !live.current.assignOnly) {
+      const shapeType = live.current.markShape;
+      if (shapeType !== "polygon") {
+        createMark(defaultMarkShape(shapeType, point, worldPitch));
+        return;
+      }
+      // 读 ref：快速连点落在同一批更新里时 state 还是旧值。
+      const points = polygonPointsRef.current;
+      const first = points[0];
+      if (
+        points.length >= 3 &&
+        first &&
+        Math.hypot(point.x - first.x, point.y - first.y) * vp.scale <=
+          CLOSE_SNAP_PX
+      ) {
+        finishPolygon(points);
+        return;
+      }
+      syncPolygonPoints([...points, point]);
+      return;
+    }
 
     // 防御性判断：assignOnly 时工具栏根本不渲染"点放位置"按钮，tool 理论上
     // 不可能是 "seat"，这里再挡一道，不依赖"UI 没渲染就等于不会发生"。
@@ -516,11 +681,33 @@ export function ZoneSeatingEditor({
     }
 
     const seatId = hitSeat(d, point, live.current.hitRadius);
+    const mark =
+      !seatId && !live.current.assignOnly
+        ? hitMark(d.marks ?? [], point)
+        : null;
+    setActiveMarkId(mark?.externalId ?? null);
     onSelectionChange(
       seatId ? { zoneIds: [], seatIds: [seatId] } : EMPTY_SELECTION,
       "tap",
     );
   };
+
+  /** 多边形标注画到一半时，指针移动要带出"下一条边"的预览。 */
+  useEffect(() => {
+    const element = svgRef.current;
+    if (!element) return;
+    const onMove = (event: PointerEvent) => {
+      if (
+        live.current.tool !== "mark" ||
+        live.current.markShape !== "polygon" ||
+        polygonPointsRef.current.length === 0
+      )
+        return;
+      setPolygonCursor(clientToWorld(event.clientX, event.clientY));
+    };
+    element.addEventListener("pointermove", onMove);
+    return () => element.removeEventListener("pointermove", onMove);
+  }, [clientToWorld]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -561,14 +748,31 @@ export function ZoneSeatingEditor({
         onCommand((s) => (event.shiftKey ? redo(s) : undo(s)));
         return;
       }
+      if (event.key === "Enter" && polygonPointsRef.current.length >= 3) {
+        event.preventDefault();
+        live.current.finishPolygon(polygonPointsRef.current);
+        return;
+      }
       if (event.key === "Escape") {
+        // 多边形画到一半时，Escape 只放弃这次草稿，工具保持不变。
+        if (polygonPointsRef.current.length > 0) {
+          live.current.syncPolygonPoints([]);
+          return;
+        }
         setDragState(null);
         setActiveRowId(null);
+        setActiveMarkId(null);
         onSelectionChange(EMPTY_SELECTION, "clear");
         setTool("select");
         return;
       }
       if (event.key === "Delete" || event.key === "Backspace") {
+        if (live.current.activeMarkId) {
+          const id = live.current.activeMarkId;
+          onCommand((s) => execute(s, removeMark(id)));
+          setActiveMarkId(null);
+          return;
+        }
         if (live.current.activeRowId) {
           const id = live.current.activeRowId;
           onCommand((s) => execute(s, removeRow(id)));
@@ -604,6 +808,29 @@ export function ZoneSeatingEditor({
     return normalizeRect(drag.subject.start, drag.current);
   }, [drag]);
 
+  /** 标注拖动/缩放/新画时的临时形状，只用于预览，松手才写入文档。 */
+  const markPreview = useMemo((): MarkPreview | null => {
+    if (!drag) return null;
+    const { subject } = drag;
+    if (subject.kind === "moveMark")
+      return { kind: "move", markId: subject.markId, offset: drag.delta };
+    if (subject.kind === "resizeMark")
+      return {
+        kind: "resize",
+        markId: subject.markId,
+        rect: resizeRect(subject.origin, subject.handle, drag.delta),
+      };
+    if (subject.kind === "drawMark")
+      return {
+        kind: "draw",
+        shape: markShapeFromDrag(
+          subject.shapeType,
+          normalizeRect(subject.start, drag.current),
+        ),
+      };
+    return null;
+  }, [drag]);
+
   const cursor =
     spaceDown || tool === "pan"
       ? drag
@@ -611,7 +838,9 @@ export function ZoneSeatingEditor({
         : "grab"
       : tool === "seat" || tool === "row"
         ? "copy"
-        : "default";
+        : tool === "mark"
+          ? "crosshair"
+          : "default";
   const selectedSeats = new Set(
     activeRow && !assignOnly ? activeRow.seatIds : selection.seatIds,
   );
@@ -663,6 +892,8 @@ export function ZoneSeatingEditor({
                 if (values.length) {
                   setTool(values[0] as SeatTool);
                   setActiveRowId(null);
+                  setActiveMarkId(null);
+                  syncPolygonPoints([]);
                 }
               }}
               size="sm"
@@ -670,7 +901,10 @@ export function ZoneSeatingEditor({
             >
               {(assignOnly
                 ? TOOL_ITEMS.filter(
-                    (item) => item.value !== "seat" && item.value !== "row",
+                    (item) =>
+                      item.value !== "seat" &&
+                      item.value !== "row" &&
+                      item.value !== "mark",
                   )
                 : TOOL_ITEMS
               ).map((item) => (
@@ -770,7 +1004,8 @@ export function ZoneSeatingEditor({
             )}
           </div>
 
-          <div className="min-h-0 flex-1 overflow-hidden rounded-lg border bg-card shadow-sm">
+          <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border bg-card shadow-sm">
+            <MarkLegend marks={zoneMarks} scale={viewport.scale} />
             <div ref={containerRef} className="h-full">
               <svg
                 ref={svgRef}
@@ -783,6 +1018,25 @@ export function ZoneSeatingEditor({
                 <g
                   transform={`translate(${viewport.x} ${viewport.y}) scale(${viewport.scale})`}
                 >
+                  {zoneMarks.map((mark) => (
+                    <MarkNode
+                      key={mark.externalId}
+                      mark={
+                        markPreview?.kind === "resize" &&
+                        markPreview.markId === mark.externalId
+                          ? resizedMark(mark, markPreview.rect)
+                          : mark
+                      }
+                      scale={viewport.scale}
+                      offset={
+                        markPreview?.kind === "move" &&
+                        markPreview.markId === mark.externalId
+                          ? markPreview.offset
+                          : null
+                      }
+                      selected={mark.externalId === activeMark?.externalId}
+                    />
+                  ))}
                   {!assignOnly && activeRow && (
                     <polyline
                       points={activeRow.seatIds
@@ -906,6 +1160,64 @@ export function ZoneSeatingEditor({
                     );
                   })}
 
+                  {markPreview?.kind === "draw" && (
+                    <MarkShape
+                      shape={markPreview.shape}
+                      fill="var(--primary)"
+                      fillOpacity={0.08}
+                      stroke="var(--primary)"
+                      strokeWidth={1.5 / viewport.scale}
+                      strokeDasharray={`${6 / viewport.scale} ${4 / viewport.scale}`}
+                      pointerEvents="none"
+                    />
+                  )}
+                  {polygonPoints.length > 0 && (
+                    <g pointerEvents="none" aria-label="多边形草稿">
+                      <polyline
+                        points={pointsToSvg(
+                          polygonCursor
+                            ? [...polygonPoints, polygonCursor]
+                            : polygonPoints,
+                        )}
+                        fill="none"
+                        stroke="var(--primary)"
+                        strokeWidth={1.5 / viewport.scale}
+                        strokeDasharray={`${6 / viewport.scale} ${4 / viewport.scale}`}
+                      />
+                      {polygonPoints.map((point, index) => (
+                        <circle
+                          // biome-ignore lint/suspicious/noArrayIndexKey: 绘制中顶点没有稳定 id，顺序即身份
+                          key={index}
+                          cx={point.x}
+                          cy={point.y}
+                          r={(index === 0 ? 6 : 4) / viewport.scale}
+                          fill={index === 0 ? "var(--primary)" : "var(--card)"}
+                          stroke="var(--primary)"
+                          strokeWidth={1.5 / viewport.scale}
+                        />
+                      ))}
+                    </g>
+                  )}
+                  {activeMark &&
+                    markPreview?.kind !== "move" &&
+                    handleRects(
+                      markPreview?.kind === "resize"
+                        ? resizedMark(activeMark, markPreview.rect)
+                        : activeMark,
+                      viewport.scale,
+                    ).map(({ handle, rect }) => (
+                      <rect
+                        key={handle}
+                        x={rect.x}
+                        y={rect.y}
+                        width={rect.width}
+                        height={rect.height}
+                        fill="var(--card)"
+                        stroke="var(--primary)"
+                        strokeWidth={1.5 / viewport.scale}
+                        pointerEvents="none"
+                      />
+                    ))}
                   {draftRect && (
                     <rect
                       x={draftRect.x}
@@ -980,7 +1292,34 @@ export function ZoneSeatingEditor({
                 onCommand((s) => execute(s, moveRowOrder(id, direction)))
               }
             />
-            {!activeRow && tool !== "row" && rightPanel}
+            <MarkPanel
+              marks={zoneMarks}
+              activeMark={activeMark}
+              drawShape={tool === "mark" ? markShape : undefined}
+              onDrawShapeChange={(shape) => {
+                setMarkShape(shape);
+                syncPolygonPoints([]);
+              }}
+              onSelect={(mark) => {
+                setActiveMarkId(mark?.externalId ?? null);
+                setActiveRowId(null);
+                setTool("select");
+                syncPolygonPoints([]);
+                onSelectionChange(EMPTY_SELECTION, "clear");
+              }}
+              onPatch={(markId, patch) =>
+                onCommand((s) => execute(s, patchMark(markId, patch)))
+              }
+              onRemove={(markId) => {
+                onCommand((s) => execute(s, removeMark(markId)));
+                setActiveMarkId(null);
+              }}
+            />
+            {!activeRow &&
+              !activeMark &&
+              tool !== "row" &&
+              tool !== "mark" &&
+              rightPanel}
           </div>
         )}
       </div>
@@ -1002,4 +1341,29 @@ export function ZoneSeatingEditor({
       )}
     </div>
   );
+}
+
+type MarkPreview =
+  | { kind: "move"; markId: string; offset: Point }
+  | { kind: "resize"; markId: string; rect: Rect }
+  | { kind: "draw"; shape: CanvasMark["shape"] };
+
+/** 缩放预览：按新包围盒临时换算形状，多边形顶点同比缩放。 */
+function resizedMark(mark: CanvasMark, rect: Rect): CanvasMark {
+  const width = Math.max(1, rect.width);
+  const height = Math.max(1, rect.height);
+  const shape =
+    mark.shape.type === "polygon"
+      ? {
+          ...mark.shape,
+          ...rect,
+          width,
+          height,
+          points: mark.shape.points.map((point) => ({
+            x: (point.x * width) / (mark.shape.width || 1),
+            y: (point.y * height) / (mark.shape.height || 1),
+          })),
+        }
+      : { ...mark.shape, ...rect, width, height };
+  return { ...mark, shape };
 }

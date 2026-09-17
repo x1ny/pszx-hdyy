@@ -338,7 +338,42 @@ describe("多座定位图", () => {
     ]);
     // 没有 rows 的旧画布按「没有桌子」处理，字段仍在、只是空数组。
     expect(map?.tables).toEqual([]);
+    // 没有 marks 的旧画布同理。
+    expect(map?.marks).toEqual([]);
     expect(JSON.stringify(map)).not.toContain("不得泄露");
+  });
+
+  test("场地标注随图下发，只有形状、颜色和运营写的文字", () => {
+    const map = buildSeatMap(
+      {
+        ...row,
+        data: {
+          ...row.data,
+          marks: [
+            {
+              externalId: "m1",
+              zoneExternalId: "z",
+              label: "主题板",
+              color: "#DC2626",
+              shape: { type: "rect", x: 0, y: -80, width: 120, height: 20 },
+            },
+          ],
+        },
+      },
+      ["a", "b", "c"],
+    );
+    expect(map?.marks).toEqual([
+      {
+        shape: "rect",
+        x: 0,
+        y: -80,
+        width: 120,
+        height: 20,
+        color: "#DC2626",
+        label: "主题板",
+      },
+    ]);
+    expect(JSON.stringify(map?.marks)).not.toContain("m1");
   });
 
   test("桌面外框跟着 rows 一起给出，只带形状不带名称或人员", () => {
@@ -519,10 +554,29 @@ test("多分区独立坐标不会叠图，H5 只返回本人涉及的分区且�
             seatIds: ["c", "c"],
           },
         ],
+        marks: [
+          {
+            zoneExternalId: "B1",
+            label: "B1 的门",
+            color: "#15803D",
+            shape: { type: "rect", x: 0, y: 0, width: 10, height: 10 },
+          },
+          {
+            zoneExternalId: "A2",
+            label: "A2 的门",
+            color: "#15803D",
+            shape: { type: "rect", x: 0, y: 0, width: 10, height: 10 },
+          },
+        ],
       },
     },
     ["a", "a2", "b", "c"],
   );
+  // 标注跟桌子一样按分区过滤，别的分区的门不会画进来。
+  expect(map?.sections?.[0].marks).toEqual([]);
+  expect(map?.sections?.[1].marks.map((mark) => mark.label)).toEqual([
+    "A2 的门",
+  ]);
   expect(map?.sections?.map((section) => section.name)).toEqual(["A1", "A2"]);
   expect(map?.sections?.[0].seats).toEqual([
     { x: 0, y: 0 },

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   DEFAULT_SEAT_PITCH,
   formatOrganizationSeatRanges,
+  parseMapMarks,
   parseSeatPoints,
   parseTableShapes,
   seatFieldPitch,
@@ -319,5 +320,104 @@ describe("seatFieldPitch —— 圆点画多大只由它决定", () => {
     const points = Array.from({ length: 10 }, () => ({ x: 3, y: 4 }));
 
     expect(seatFieldPitch(points)).toBe(DEFAULT_SEAT_PITCH);
+  });
+});
+
+describe("parseMapMarks —— 场地标注", () => {
+  const mark = (patch: Record<string, unknown> = {}) => ({
+    externalId: "m1",
+    zoneExternalId: "A1",
+    label: " 门口 ",
+    color: "#15803D",
+    shape: { type: "rect", x: -10, y: 5, width: 20, height: 40 },
+    ...patch,
+  });
+
+  test("形状、颜色、文字原样带出，多边形顶点换成绝对坐标", () => {
+    const marks = parseMapMarks({
+      schemaVersion: 1,
+      marks: [
+        mark(),
+        mark({
+          label: "",
+          shape: {
+            type: "polygon",
+            x: 100,
+            y: 50,
+            width: 10,
+            height: 10,
+            rotation: 45,
+            points: [
+              { x: 0, y: 0 },
+              { x: 10, y: 0 },
+              { x: 5, y: 10 },
+            ],
+          },
+        }),
+      ],
+    });
+    expect(marks).toEqual([
+      {
+        shape: "rect",
+        x: -10,
+        y: 5,
+        width: 20,
+        height: 40,
+        color: "#15803D",
+        label: "门口",
+      },
+      {
+        shape: "polygon",
+        x: 100,
+        y: 50,
+        width: 10,
+        height: 10,
+        points: [
+          { x: 100, y: 50 },
+          { x: 110, y: 50 },
+          { x: 105, y: 60 },
+        ],
+        color: "#15803D",
+        label: "",
+      },
+    ]);
+  });
+
+  test("旧画布没有 marks 是空数组；结构坏了返回 null", () => {
+    expect(parseMapMarks({ schemaVersion: 1 })).toEqual([]);
+    expect(parseMapMarks({ schemaVersion: 1, marks: {} })).toBeNull();
+    expect(parseMapMarks({ schemaVersion: 2, marks: [] })).toBeNull();
+  });
+
+  test("单条不合法只跳过它自己；按分区过滤", () => {
+    const marks = parseMapMarks(
+      {
+        schemaVersion: 1,
+        marks: [
+          mark({ color: "red" }),
+          mark({ shape: { type: "star", x: 0, y: 0, width: 1, height: 1 } }),
+          mark({ shape: { type: "rect", x: 0, y: 0, width: 0, height: 1 } }),
+          mark({
+            shape: {
+              type: "polygon",
+              x: 0,
+              y: 0,
+              width: 1,
+              height: 1,
+              points: [
+                { x: 0, y: 0 },
+                { x: 1, y: Number.NaN },
+                { x: 0, y: 1 },
+              ],
+            },
+          }),
+          mark({ label: 42 }),
+          mark({ zoneExternalId: "A2", label: "舞台" }),
+          mark({ label: "保留" }),
+        ],
+      },
+      "A1",
+    );
+    expect(marks?.map((item) => item.label)).toEqual(["保留"]);
   });
 });

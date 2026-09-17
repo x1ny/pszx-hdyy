@@ -157,6 +157,78 @@ export function parseTableShapes(
   return shapes;
 }
 
+/**
+ * 运营画的场地标注（主题板、门口、舞台……）：一个形状、一种颜色、一段文字。
+ *
+ * 文字和颜色是场地信息，不属于任何嘉宾，所以可以随座位图下发；方向由运营显式
+ * 画出，不从座位坐标推断。管理端存的多边形顶点是相对包围盒的，这里换成绝对
+ * 坐标，H5 直接画。标注不旋转（管理端解析时同样丢掉 `rotation`）。
+ *
+ * 缺字段、尺寸或颜色非法的单条跳过，道理同 `parseTableShapes`。
+ */
+export type MapMark = {
+  shape: "rect" | "ellipse" | "polygon";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** 仅多边形：绝对坐标顶点。 */
+  points?: { x: number; y: number }[];
+  /** `#rrggbb` */
+  color: string;
+  /** 可能为空：只画形状、不写字。 */
+  label: string;
+};
+
+const MARK_LABEL_MAX = 32;
+const HEX_COLOR = /^#[\da-f]{6}$/i;
+
+export function parseMapMarks(
+  data: unknown,
+  zoneExternalId?: string,
+): MapMark[] | null {
+  if (!isRecord(data)) return null;
+  if (data.schemaVersion !== 1) return null;
+  if (data.marks === undefined) return [];
+  if (!Array.isArray(data.marks)) return null;
+
+  const marks: MapMark[] = [];
+  for (const raw of data.marks) {
+    if (!isRecord(raw) || !isRecord(raw.shape)) continue;
+    if (zoneExternalId !== undefined && raw.zoneExternalId !== zoneExternalId)
+      continue;
+    const { color, label } = raw;
+    const { type, x, y, width, height } = raw.shape;
+    if (type !== "rect" && type !== "ellipse" && type !== "polygon") continue;
+    if (!isFiniteNumber(x) || !isFiniteNumber(y)) continue;
+    if (!isFiniteNumber(width) || !isFiniteNumber(height)) continue;
+    if (width <= 0 || height <= 0) continue;
+    if (typeof color !== "string" || !HEX_COLOR.test(color)) continue;
+    if (typeof label !== "string") continue;
+    const mark: MapMark = {
+      shape: type,
+      x,
+      y,
+      width,
+      height,
+      color,
+      label: label.trim().slice(0, MARK_LABEL_MAX),
+    };
+    if (type === "polygon") {
+      const points = Array.isArray(raw.shape.points) ? raw.shape.points : [];
+      const absolute = points.flatMap((point) =>
+        isRecord(point) && isFiniteNumber(point.x) && isFiniteNumber(point.y)
+          ? [{ x: x + point.x, y: y + point.y }]
+          : [],
+      );
+      if (absolute.length < 3 || absolute.length !== points.length) continue;
+      mark.points = absolute;
+    }
+    marks.push(mark);
+  }
+  return marks;
+}
+
 type SeatReference = { externalId: string; label: string };
 
 type NumberedLabel = {

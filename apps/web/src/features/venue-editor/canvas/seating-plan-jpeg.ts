@@ -1,5 +1,20 @@
-import type { CanvasDoc, CanvasRow, CanvasSeat } from "./core/document";
-import { seatContentBounds, seatFieldPitch } from "./core/geometry";
+import type {
+  CanvasDoc,
+  CanvasMark,
+  CanvasRow,
+  CanvasSeat,
+  ZoneShape,
+} from "./core/document";
+import { type Rect, seatContentBounds, seatFieldPitch } from "./core/geometry";
+import {
+  MARK_LABEL_FONT_PX,
+  MARK_VERTICAL_ADVANCE,
+  markLabelLayout,
+  markPoints,
+  marksBounds,
+  markTextColor,
+  unionRect,
+} from "./core/marks";
 import { tableGeometry } from "./core/rows";
 import {
   DEFAULT_OCCUPIED_EXPORT_COLOR,
@@ -123,8 +138,10 @@ type LegendItem = {
   label: string;
   fill: string;
   stroke: string;
-  kind: "empty" | "occupied" | "vip" | "disabled" | "organization";
+  kind: "empty" | "occupied" | "vip" | "disabled" | "organization" | "mark";
   organizationId?: number;
+  /** 标注图例按标注自己的形状画色块。 */
+  shapeType?: ZoneShape["type"];
 };
 
 export function escapeXml(value: string): string {
@@ -275,9 +292,81 @@ function renderTable(
   </g>`;
 }
 
+function markShapeSvg(shape: ZoneShape, paint: string): string {
+  switch (shape.type) {
+    case "rect":
+      return `<rect x="${finiteNumber(shape.x)}" y="${finiteNumber(shape.y)}" width="${finiteNumber(shape.width)}" height="${finiteNumber(shape.height)}" rx="${finiteNumber(Math.min(6, shape.width / 4, shape.height / 4))}" ${paint}/>`;
+    case "ellipse":
+      return `<ellipse cx="${finiteNumber(shape.x + shape.width / 2)}" cy="${finiteNumber(shape.y + shape.height / 2)}" rx="${finiteNumber(shape.width / 2)}" ry="${finiteNumber(shape.height / 2)}" ${paint}/>`;
+    case "polygon":
+      return `<polygon points="${markPoints(shape)
+        .map((point) => `${finiteNumber(point.x)},${finiteNumber(point.y)}`)
+        .join(" ")}" ${paint}/>`;
+    default:
+      return "";
+  }
+}
+
+/** 跟画布 `MarkNode` 同一套规则：形状随图缩放，文字按纸面像素，放不下的进图例。 */
+function renderMark(mark: CanvasMark, planScale: number): string {
+  const px = (value: number) => value / planScale;
+  const color = exportColor(mark.color, EXPORT_COLORS.mutedForeground);
+  const layout = markLabelLayout(mark.shape, mark.label, planScale);
+  const text = mark.label.trim();
+  const fontSize = px(MARK_LABEL_FONT_PX);
+  const textFill = markTextColor(color) ?? EXPORT_COLORS.foreground;
+  const textAttrs = `text-anchor="middle" dominant-baseline="central" font-size="${finiteNumber(fontSize)}" font-weight="600" fill="${textFill}"`;
+  const chars = [...text];
+  const label =
+    layout.mode === "horizontal"
+      ? `<text x="${finiteNumber(layout.x)}" y="${finiteNumber(layout.y)}" ${textAttrs}>${escapeXml(text)}</text>`
+      : layout.mode === "vertical"
+        ? `<text ${textAttrs}>${chars
+            .map(
+              (char, index) =>
+                `<tspan x="${finiteNumber(layout.x)}" y="${finiteNumber(layout.y + (index - (chars.length - 1) / 2) * fontSize * MARK_VERTICAL_ADVANCE)}">${escapeXml(char)}</tspan>`,
+            )
+            .join("")}</text>`
+        : "";
+  const paint = `fill="${color}" fill-opacity="0.12" stroke="${color}" stroke-width="${finiteNumber(px(1.5))}"`;
+  return `<g data-export-mark-id="${escapeXml(mark.externalId)}" data-export-mark-label-mode="${layout.mode}">${markShapeSvg(mark.shape, paint)}${label}</g>`;
+}
+
+function padRect(rect: Rect, pad: number): Rect {
+  return {
+    x: rect.x - pad,
+    y: rect.y - pad,
+    width: rect.width + pad * 2,
+    height: rect.height + pad * 2,
+  };
+}
+
 function legendItems(
   organizations: readonly OrganizationSeatLegendItem[],
+  marks: readonly { mark: CanvasMark; planScale: number }[],
 ): LegendItem[] {
+  const seen = new Set<string>();
+  const markItems = marks.flatMap(({ mark, planScale }) => {
+    const label = mark.label.trim();
+    const key = `mark-${mark.color.toUpperCase()}-${mark.shape.type}-${label}`;
+    if (
+      markLabelLayout(mark.shape, mark.label, planScale).mode !== "legend" ||
+      seen.has(key)
+    )
+      return [];
+    seen.add(key);
+    const color = exportColor(mark.color, EXPORT_COLORS.mutedForeground);
+    return [
+      {
+        key,
+        label,
+        fill: color,
+        stroke: color,
+        kind: "mark" as const,
+        shapeType: mark.shape.type,
+      },
+    ];
+  });
   return [
     {
       key: "empty",
@@ -315,6 +404,7 @@ function legendItems(
       kind: "organization" as const,
       organizationId: organization.organizationId,
     })),
+    ...markItems,
   ];
 }
 
@@ -340,6 +430,30 @@ function layoutLegend(items: readonly LegendItem[], width: number) {
 function renderLegendSwatch(item: LegendItem, x: number, y: number): string {
   const centerX = x + LEGEND_SWATCH_SIZE / 2;
   const centerY = y + LEGEND_SWATCH_SIZE / 2;
+  if (item.kind === "mark") {
+    const paint = `fill="${item.fill}" fill-opacity="0.18" stroke="${item.stroke}" stroke-width="1.5"`;
+    const swatch =
+      item.shapeType === "rect"
+        ? `<rect x="${finiteNumber(x)}" y="${finiteNumber(y + 2)}" width="${LEGEND_SWATCH_SIZE}" height="${LEGEND_SWATCH_SIZE - 4}" rx="2" ${paint}/>`
+        : item.shapeType === "ellipse"
+          ? `<circle cx="${finiteNumber(centerX)}" cy="${finiteNumber(centerY)}" r="${finiteNumber(LEGEND_SWATCH_SIZE / 2 - 0.75)}" ${paint}/>`
+          : `<polygon points="${[
+              [0.5, 0.08],
+              [0.94, 0.4],
+              [0.77, 0.92],
+              [0.23, 0.92],
+              [0.06, 0.4],
+            ]
+              .map(
+                ([px, py]) =>
+                  `${finiteNumber(x + px * LEGEND_SWATCH_SIZE)},${finiteNumber(y + py * LEGEND_SWATCH_SIZE)}`,
+              )
+              .join(" ")}" ${paint}/>`;
+    return `<g data-export-legend-mark="true">
+    ${swatch}
+    <text x="${finiteNumber(x + LEGEND_SWATCH_SIZE + 8)}" y="${finiteNumber(y + 11.5)}" font-size="12" fill="${EXPORT_COLORS.mutedForeground}">${escapeXml(item.label)}</text>
+  </g>`;
+  }
   const slash =
     item.kind === "disabled"
       ? `<line x1="${finiteNumber(x)}" y1="${finiteNumber(y + LEGEND_SWATCH_SIZE)}" x2="${finiteNumber(x + LEGEND_SWATCH_SIZE)}" y2="${finiteNumber(y)}" stroke="${EXPORT_COLORS.mutedForeground}" stroke-width="1.5"/>`
@@ -372,12 +486,28 @@ export function buildSeatingPlanSvg(
     else rowsByZone.set(row.zoneExternalId, [row]);
   }
 
+  const marksByZone = new Map<string, CanvasMark[]>();
+  for (const mark of input.doc.marks ?? []) {
+    const list = marksByZone.get(mark.zoneExternalId);
+    if (list) list.push(mark);
+    else marksByZone.set(mark.zoneExternalId, [mark]);
+  }
+
   // 每个区域的座位独立排布。即使旧快照仍带有外层 world/shape，也不参与范围计算。
   const sections = input.doc.zones.map((zone) => {
     const seats = byZone.get(zone.externalId) ?? [];
+    const marks = marksByZone.get(zone.externalId) ?? [];
     const pitch = seatFieldPitch(seats);
     const planScale = Math.max(1, scaleForPitch(pitch, NAME_READABLE_PITCH_PX));
-    const bounds = seatContentBounds(seats, pitch);
+    // 画在座位外侧的标注（门口、主题板）也要装进图里。
+    const markBox = marksBounds(marks);
+    const paddedMarks = markBox
+      ? padRect(markBox, Math.max(pitch, 16) / 2)
+      : null;
+    const bounds =
+      seats.length > 0 || !paddedMarks
+        ? unionRect(seatContentBounds(seats, pitch), paddedMarks)
+        : paddedMarks;
     const tables = (rowsByZone.get(zone.externalId) ?? []).flatMap((row) => {
       const shape = tableGeometry(row, row.seatIds.length);
       return shape ? [{ row, shape }] : [];
@@ -385,6 +515,7 @@ export function buildSeatingPlanSvg(
     return {
       zone,
       seats,
+      marks,
       tables,
       bounds,
       planScale,
@@ -399,7 +530,7 @@ export function buildSeatingPlanSvg(
   const logicalWidth = contentWidth + PAGE_PADDING * 2;
   let sectionY = PAGE_PADDING + (showTitle || subtitleText ? HEADER_HEIGHT : 0);
   const content = sections
-    .map(({ zone, seats, tables, bounds, planScale, spec }) => {
+    .map(({ zone, seats, marks, tables, bounds, planScale, spec }) => {
       const name = showZoneNames
         ? `<text x="${PAGE_PADDING}" y="${finiteNumber(sectionY + 18)}" font-size="14" font-weight="650" fill="${EXPORT_COLORS.foreground}">${escapeXml(zone.name)}</text>`
         : "";
@@ -407,6 +538,9 @@ export function buildSeatingPlanSvg(
       const x = PAGE_PADDING + (contentWidth - bounds.width * planScale) / 2;
       const y = sectionY;
       sectionY += bounds.height * planScale + LEGEND_GAP;
+      const markNodes = marks
+        .map((mark) => renderMark(mark, planScale))
+        .join("\n");
       const tableNodes = tables
         .map(({ row, shape }) => renderTable(row, shape))
         .join("\n");
@@ -424,7 +558,7 @@ export function buildSeatingPlanSvg(
       ${name}
       <g transform="translate(${finiteNumber(x)} ${finiteNumber(y)})">
         <g data-export-plan-scale="${finiteNumber(planScale)}" transform="scale(${finiteNumber(planScale)})">
-          <g transform="translate(${finiteNumber(-bounds.x)} ${finiteNumber(-bounds.y)})">${tableNodes}${nodes}</g>
+          <g transform="translate(${finiteNumber(-bounds.x)} ${finiteNumber(-bounds.y)})">${markNodes}${tableNodes}${nodes}</g>
         </g>
       </g>
     </g>`;
@@ -435,7 +569,15 @@ export function buildSeatingPlanSvg(
       ? [...input.seatStatus.values()].map((status) => status.occupant)
       : [],
   );
-  const legendRows = layoutLegend(legendItems(organizations), contentWidth);
+  const legendRows = layoutLegend(
+    legendItems(
+      organizations,
+      sections.flatMap(({ marks, planScale }) =>
+        marks.map((mark) => ({ mark, planScale })),
+      ),
+    ),
+    contentWidth,
+  );
   const legendY = sectionY;
   const logicalHeight =
     legendY +

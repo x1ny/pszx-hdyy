@@ -216,6 +216,10 @@ export const removeZones = (zoneIds: string[]): Command => ({
     );
     if (draft.rows)
       draft.rows = draft.rows.filter((row) => !targets.has(row.zoneExternalId));
+    if (draft.marks)
+      draft.marks = draft.marks.filter(
+        (mark) => !targets.has(mark.zoneExternalId),
+      );
   },
 });
 

@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { SEAT_MAP, type SeatPoint, seatMapLayout } from "./seat-map-layout";
+import {
+  enlargeMark,
+  MIN_MARK_PX,
+  markLabelPlacement,
+  markTextColor,
+  SEAT_MAP,
+  type SeatPoint,
+  seatMapLayout,
+} from "./seat-map-layout";
 
 /**
  * 这里每一条测的都是**不会报错的故障**：图变形、内容跑出框、圆点消失、定位钉指
@@ -240,5 +248,122 @@ describe("坏数据不产出坏图", () => {
     });
 
     expect(result).toBeNull();
+  });
+});
+
+describe("场地标注", () => {
+  const board = {
+    shape: "rect" as const,
+    x: 100,
+    y: -300,
+    width: 240,
+    height: 48,
+    label: "主题板",
+  };
+  const door = {
+    shape: "rect" as const,
+    x: -200,
+    y: 0,
+    width: 44,
+    height: 128,
+    label: "门口",
+  };
+
+  test("座位外侧的标注也装进图里，文字位置在盒子之内", () => {
+    const seats = theater(6, 10);
+    const result = seatMapLayout({
+      seats,
+      mine: seats[0],
+      marks: [board, door],
+      pitch: SEAT_GAP,
+      ...VIEW,
+    });
+    if (!result) throw new Error("layout");
+    const [x, y, width, height] = result.viewBox.split(" ").map(Number);
+    expect(x).toBeLessThanOrEqual(door.x);
+    expect(y).toBeLessThanOrEqual(board.y);
+    expect(x + width).toBeGreaterThanOrEqual(seats.at(-1)?.x ?? 0);
+    expect(y + height).toBeGreaterThanOrEqual(seats.at(-1)?.y ?? 0);
+    for (const label of result.markLabels) {
+      expect(label.left).toBeGreaterThan(0);
+      expect(label.left).toBeLessThan(VIEW.viewWidth);
+      expect(label.top).toBeGreaterThan(0);
+      expect(label.top).toBeLessThan(result.height);
+    }
+  });
+
+  test("主题板横排写得下，窄门竖排，更小的只进图例，没字的不排", () => {
+    const seats = theater(6, 10);
+    const result = seatMapLayout({
+      seats,
+      mine: seats[0],
+      marks: [
+        board,
+        door,
+        { ...door, x: -150, width: 12, height: 20 },
+        { ...board, label: "" },
+      ],
+      labelFontPx: 11,
+      pitch: SEAT_GAP,
+      ...VIEW,
+    });
+    expect(result?.markLabels.map((label) => label.mode)).toEqual([
+      "horizontal",
+      "vertical",
+      "legend",
+      "none",
+    ]);
+  });
+
+  test("多边形文字落在形心，字号越大越早进图例", () => {
+    const triangle = {
+      shape: "polygon" as const,
+      x: 0,
+      y: 0,
+      width: 300,
+      height: 300,
+      points: [
+        { x: 0, y: 0 },
+        { x: 300, y: 0 },
+        { x: 0, y: 300 },
+      ],
+      label: "吧台",
+    };
+    expect(markLabelPlacement(triangle, 1, 11)).toMatchObject({
+      mode: "horizontal",
+      x: 100,
+      y: 100,
+    });
+    expect(markLabelPlacement(triangle, 0.4, 11).mode).toBe("horizontal");
+    expect(markLabelPlacement(triangle, 0.4, 40).mode).toBe("legend");
+  });
+
+  test("太小的标注绕中心放大到最小显示尺寸，够大的原样返回", () => {
+    const tiny = {
+      shape: "polygon" as const,
+      x: 0,
+      y: 0,
+      width: 20,
+      height: 40,
+      points: [
+        { x: 0, y: 0 },
+        { x: 20, y: 0 },
+        { x: 10, y: 40 },
+      ],
+      label: "洗手间",
+    };
+    const scale = 0.1; // 20×40 → 屏幕上 2×4px
+    const shown = enlargeMark(tiny, scale);
+    expect(shown.width * scale).toBeCloseTo(MIN_MARK_PX);
+    expect(shown.height * scale).toBeCloseTo(MIN_MARK_PX);
+    expect(shown.x + shown.width / 2).toBeCloseTo(10);
+    expect(shown.y + shown.height / 2).toBeCloseTo(20);
+    expect(shown.points?.[2]).toEqual({ x: 10, y: 70 });
+    expect(enlargeMark(board, 1)).toBe(board);
+  });
+
+  test("浅色标注的文字改用正文色", () => {
+    expect(markTextColor("#15803D")).toBe("#15803D");
+    expect(markTextColor("#FDE68A")).toBeNull();
   });
 });

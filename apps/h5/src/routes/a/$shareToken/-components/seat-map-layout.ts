@@ -21,9 +21,35 @@
  */
 
 export type SeatPoint = { x: number; y: number };
+/**
+ * 运营画的场地标注（主题板、门口等），画布坐标。多边形顶点已是绝对坐标。
+ * 形状由服务端 `parseMapMarks` 下发。
+ */
+export type SeatMapMarkShape = {
+  shape: "rect" | "ellipse" | "polygon";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  points?: SeatPoint[];
+  label: string;
+};
+
+/**
+ * 标注文字怎么画：`horizontal`/`vertical` 写在形状里，`legend` 放不下、改由图上方
+ * 的颜色图例说明，`none` 是没写字的标注。
+ */
+export type MarkLabelMode = "none" | "horizontal" | "vertical" | "legend";
+export type MarkLabelPlacement = {
+  mode: MarkLabelMode;
+  /** 文字中心的屏幕坐标，相对盒子左上角。 */
+  left: number;
+  top: number;
+};
 
 export type SeatMapLayout = {
-  /** 盒子高度，屏幕 px。 */
+  /** 盒子宽高，屏幕 px。宽度即测量值，高度由内容长宽比推出。 */
+  width: number;
   height: number;
   /** SVG viewBox，长宽比**恰好等于**盒子的长宽比，所以不会有 letterbox 偏移。 */
   viewBox: string;
@@ -33,6 +59,10 @@ export type SeatMapLayout = {
   dotDiameter: number;
   /** 定位钉的屏幕坐标，相对盒子左上角。 */
   pin: { left: number; top: number };
+  /** 与输入 `marks` 一一对应的文字位置。 */
+  markLabels: MarkLabelPlacement[];
+  /** 屏幕像素 ÷ 画布单位。 */
+  scale: number;
 };
 
 export const SEAT_MAP = {
@@ -70,6 +100,10 @@ const isFiniteNumber = (value: number) => Number.isFinite(value);
 export function seatMapLayout(input: {
   seats: readonly SeatPoint[];
   mine: SeatPoint;
+  /** 场地标注：要完整装进图里，不参与座距和圆点。 */
+  marks?: readonly SeatMapMarkShape[];
+  /** 标注文字的实际屏幕字号（根字号等比缩放后的像素值）。 */
+  labelFontPx?: number;
   /** 典型座距，服务端算好发下来（`seatFieldPitch`）。 */
   pitch: number;
   /** 盒子宽度，屏幕 px。测量出来之前传 0，函数返回 null。 */
@@ -110,6 +144,16 @@ export function seatMapLayout(input: {
     if (seat.x > maxX) maxX = seat.x;
     if (seat.y > maxY) maxY = seat.y;
   }
+  // 标注在座位外侧时（门口、主题板），包围盒要把它们也装进来，否则会被裁掉。
+  const marks = (input.marks ?? []).filter((box) =>
+    [box.x, box.y, box.width, box.height].every(isFiniteNumber),
+  );
+  for (const box of marks) {
+    minX = Math.min(minX, box.x);
+    minY = Math.min(minY, box.y);
+    maxX = Math.max(maxX, box.x + box.width);
+    maxY = Math.max(maxY, box.y + box.height);
+  }
   const contentWidth = maxX - minX + pad * 2;
   const contentHeight = maxY - minY + pad * 2;
 
@@ -140,6 +184,7 @@ export function seatMapLayout(input: {
   );
 
   return {
+    width: viewWidth,
     height,
     /**
      * **不要在这里四舍五入。** path 上的压缩是给上千个点省字符串用的，viewBox
@@ -154,7 +199,207 @@ export function seatMapLayout(input: {
       left: (mine.x - boxX) * scale,
       top: (mine.y - boxY) * scale,
     },
+    scale,
+    markLabels: (input.marks ?? []).map((mark) => {
+      const placement = markLabelPlacement(
+        mark,
+        scale,
+        input.labelFontPx ?? DEFAULT_LABEL_FONT_PX,
+      );
+      return {
+        mode: placement.mode,
+        left: (placement.x - boxX) * scale,
+        top: (placement.y - boxY) * scale,
+      };
+    }),
   };
+}
+
+/**
+ * 标注形状在屏幕上的最小边长。大场里的门、洗手间缩下来只有几个像素，图例
+ * 按颜色指过去也找不到；小于这个尺寸时绕中心放大到它，位置不变。
+ */
+export const MIN_MARK_PX = 10;
+
+export function enlargeMark<T extends SeatMapMarkShape>(
+  mark: T,
+  scale: number,
+): T {
+  const min = MIN_MARK_PX / scale;
+  if (!Number.isFinite(min) || (mark.width >= min && mark.height >= min))
+    return mark;
+  const width = Math.max(mark.width, min);
+  const height = Math.max(mark.height, min);
+  const cx = mark.x + mark.width / 2;
+  const cy = mark.y + mark.height / 2;
+  const sx = mark.width > 0 ? width / mark.width : 1;
+  const sy = mark.height > 0 ? height / mark.height : 1;
+  return {
+    ...mark,
+    x: cx - width / 2,
+    y: cy - height / 2,
+    width,
+    height,
+    points: mark.points?.map((point) => ({
+      x: cx + (point.x - cx) * sx,
+      y: cy + (point.y - cy) * sy,
+    })),
+  };
+}
+
+/** `text-caption` 在根字号 16px 时的像素值，测不到根字号时兜底。 */
+const DEFAULT_LABEL_FONT_PX = 11;
+/** 椭圆内接矩形约占包围盒的比例；多边形量不出实际跨度时保守取一半。 */
+const MARK_ELLIPSE_RATIO = 0.7;
+const MARK_POLYGON_FALLBACK_RATIO = 0.5;
+/** 多边形量出的跨度再留一点余量，斜边附近写字不贴边。 */
+const MARK_POLYGON_SPAN_RATIO = 0.85;
+const MARK_LABEL_PADDING_PX = 3;
+/** 横排时字高允许超出形状的像素。 */
+const MARK_OVERFLOW_PX = 2;
+/** 竖排相邻两字的中心距，按字号倍数。 */
+export const MARK_VERTICAL_ADVANCE = 1.05;
+
+/** 中日韩和全角字符按 1em，其余按 0.6em 估宽——只用来判断放不放得下。 */
+function labelWidthEm(label: string) {
+  let width = 0;
+  for (const char of label) {
+    const code = char.codePointAt(0) ?? 0;
+    width += code >= 0x2e80 && code <= 0xffef ? 1 : 0.6;
+  }
+  return width;
+}
+
+/**
+ * 过 `center` 的横线（`axis: "x"`）或竖线与多边形相交，取包含 `center` 的那一段
+ * 长度。凹多边形也按实际可写的那一段算；量不出来返回 null。
+ */
+function spanThrough(
+  points: readonly SeatPoint[],
+  center: SeatPoint,
+  axis: "x" | "y",
+): number | null {
+  const along = axis === "x" ? "x" : "y";
+  const across = axis === "x" ? "y" : "x";
+  const hits: number[] = [];
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const a = points[j];
+    const b = points[i];
+    if (a[across] > center[across] === b[across] > center[across]) continue;
+    hits.push(
+      a[along] +
+        ((center[across] - a[across]) * (b[along] - a[along])) /
+          (b[across] - a[across]),
+    );
+  }
+  hits.sort((left, right) => left - right);
+  for (let k = 0; k + 1 < hits.length; k += 2) {
+    if (hits[k] <= center[along] && center[along] <= hits[k + 1])
+      return hits[k + 1] - hits[k];
+  }
+  return null;
+}
+
+/** 以 `center` 为中心能写字的宽高（画布单位）。 */
+function writableSize(mark: SeatMapMarkShape, center: SeatPoint) {
+  if (mark.shape === "rect") return { width: mark.width, height: mark.height };
+  if (mark.shape === "ellipse" || !mark.points)
+    return {
+      width:
+        mark.width *
+        (mark.shape === "ellipse"
+          ? MARK_ELLIPSE_RATIO
+          : MARK_POLYGON_FALLBACK_RATIO),
+      height:
+        mark.height *
+        (mark.shape === "ellipse"
+          ? MARK_ELLIPSE_RATIO
+          : MARK_POLYGON_FALLBACK_RATIO),
+    };
+  const width = spanThrough(mark.points, center, "x");
+  const height = spanThrough(mark.points, center, "y");
+  return {
+    width:
+      width === null
+        ? mark.width * MARK_POLYGON_FALLBACK_RATIO
+        : width * MARK_POLYGON_SPAN_RATIO,
+    height:
+      height === null
+        ? mark.height * MARK_POLYGON_FALLBACK_RATIO
+        : height * MARK_POLYGON_SPAN_RATIO,
+  };
+}
+
+function polygonCentroid(points: readonly SeatPoint[]): SeatPoint | null {
+  let area = 0;
+  let x = 0;
+  let y = 0;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const cross = points[j].x * points[i].y - points[i].x * points[j].y;
+    area += cross;
+    x += (points[j].x + points[i].x) * cross;
+    y += (points[j].y + points[i].y) * cross;
+  }
+  if (Math.abs(area) < Number.EPSILON) return null;
+  return { x: x / (3 * area), y: y / (3 * area) };
+}
+
+/**
+ * 标注文字放不放得进形状。**与管理端 `core/marks.ts` 的 `markLabelLayout` 同一
+ * 算法**（两个前端不共享代码）：形状跟着图缩放、文字固定屏幕字号，先试横排，
+ * 形状瘦高再试竖排（门、柱子），都不行就交给图例。
+ */
+export function markLabelPlacement(
+  mark: SeatMapMarkShape,
+  scale: number,
+  fontPx: number,
+): { mode: MarkLabelMode; x: number; y: number } {
+  const center = (mark.shape === "polygon" &&
+    mark.points &&
+    polygonCentroid(mark.points)) || {
+    x: mark.x + mark.width / 2,
+    y: mark.y + mark.height / 2,
+  };
+  const text = mark.label.trim();
+  if (!text) return { mode: "none", ...center };
+
+  const writable = writableSize(mark, center);
+  const innerWidth = writable.width * scale - MARK_LABEL_PADDING_PX * 2;
+  const innerHeight = writable.height * scale - MARK_LABEL_PADDING_PX * 2;
+  // 横排：宽度留边距；高度只要求字高不超出形状 2px——扁长的主题板、背景板
+  // 缩小后只有十来像素高，字压在上面照样读得清，比挪进图例直观。
+  if (
+    labelWidthEm(text) * fontPx <= innerWidth &&
+    fontPx <= writable.height * scale + MARK_OVERFLOW_PX
+  )
+    return { mode: "horizontal", ...center };
+
+  // 竖排一列只占一个字宽，两侧各留 1px 即可；门这类窄条靠它把字留在形状里。
+  const columnWidth = writable.width * scale - 2;
+  const chars = [...text].length;
+  if (
+    chars > 1 &&
+    innerHeight > innerWidth &&
+    fontPx <= columnWidth &&
+    chars * fontPx * MARK_VERTICAL_ADVANCE <= innerHeight
+  )
+    return { mode: "vertical", ...center };
+
+  return { mode: "legend", ...center };
+}
+
+/**
+ * 自定义颜色可能很浅，直接当文字色就看不清：相对亮度过高时返回 null，
+ * 调用方改用正文色。阈值对应白底约 4.5:1。
+ */
+export function markTextColor(hex: string): string | null {
+  const match = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex);
+  if (!match) return null;
+  const [r, g, b] = match
+    .slice(1)
+    .map((part) => Number.parseInt(part, 16) / 255)
+    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.18 ? null : hex;
 }
 
 /**

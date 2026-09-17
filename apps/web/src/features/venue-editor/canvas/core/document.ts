@@ -111,7 +111,28 @@ export type CanvasDoc = {
   seats: CanvasSeat[];
   /** 显式有序的排；旧文档没有此字段，不从坐标或编号推断。 */
   rows?: CanvasRow[];
+  /** 分区内的场地标注（主题板、门口……）；旧文档没有此字段。 */
+  marks?: CanvasMark[];
 };
+
+/**
+ * 场地标注：运营画出来帮人认方向的形状加文字，**不参与排座**——不投影、不进
+ * 核心表，只随画布 blob 保存，跟桌面图形一样只用于渲染和导出。
+ *
+ * 坐标与座位同属分区自己的座位坐标系。形状复用区域的三种分支，但标注不旋转：
+ * 解析时丢掉 `rotation`，渲染、命中和 H5 都按未旋转处理。
+ */
+export type CanvasMark = {
+  externalId: string;
+  zoneExternalId: string;
+  /** 允许为空：只画形状、不写字。 */
+  label: string;
+  /** `#rrggbb`。形状描边、淡色填充和图例色块共用这一个值。 */
+  color: string;
+  shape: ZoneShape;
+};
+
+export const MARK_LABEL_MAX = 32;
 
 export type CanvasRow = {
   externalId: string;
@@ -181,7 +202,7 @@ export const emptyCanvasDoc = (): CanvasDoc => ({
  * 元素标识。只要求"同一份文档内唯一 + 保存前后稳定"——它是服务端归并的键，
  * 不承担跨编辑器的语义（底层设计 §4）。
  */
-export const newId = (prefix: "z" | "s" | "r") =>
+export const newId = (prefix: "z" | "s" | "r" | "m") =>
   `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 /**
@@ -460,12 +481,53 @@ export function parseCanvasDoc(raw: unknown): CanvasDoc | null {
     }
   }
 
+  const marks: CanvasMark[] = [];
+  if (raw.marks !== undefined) {
+    if (!Array.isArray(raw.marks)) return null;
+    const markIds = new Set<string>();
+    for (const item of raw.marks) {
+      const mark = parseMark(item);
+      if (
+        !mark ||
+        markIds.has(mark.externalId) ||
+        !byId.has(mark.zoneExternalId) ||
+        byId.get(mark.zoneExternalId)?.isGroup
+      )
+        return null;
+      markIds.add(mark.externalId);
+      marks.push(mark);
+    }
+  }
+
   return {
     schemaVersion: 1,
     world: { width: world.width, height: world.height },
     zones,
     seats,
     ...(raw.rows !== undefined ? { rows } : {}),
+    ...(raw.marks !== undefined ? { marks } : {}),
+  };
+}
+
+const isHexColor = (value: unknown): value is string =>
+  typeof value === "string" && /^#[\da-f]{6}$/i.test(value);
+
+function parseMark(raw: unknown): CanvasMark | null {
+  if (!isRecord(raw)) return null;
+  if (!isText(raw.externalId, 128)) return null;
+  if (!isText(raw.zoneExternalId, 128)) return null;
+  if (typeof raw.label !== "string" || raw.label.length > MARK_LABEL_MAX)
+    return null;
+  if (!isHexColor(raw.color)) return null;
+  const parsed = parseShape(raw.shape);
+  if (!parsed || parsed.width <= 0 || parsed.height <= 0) return null;
+  const { rotation: _rotation, ...shape } = parsed;
+  return {
+    externalId: raw.externalId,
+    zoneExternalId: raw.zoneExternalId,
+    label: raw.label,
+    color: raw.color,
+    shape,
   };
 }
 

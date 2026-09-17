@@ -1,5 +1,6 @@
 import {
   type CanvasDoc,
+  type CanvasMark,
   type CanvasRow,
   type CanvasZone,
   type ZoneShapeType,
@@ -17,6 +18,7 @@ import {
   toAbsolutePoints,
   unrotatePoint,
 } from "./geometry";
+import type { MarkDrawShape } from "./marks";
 import { tableGeometry } from "./rows";
 
 /**
@@ -95,20 +97,26 @@ export const SEAT_HIT_RADIUS = 13;
 /** 缩放手柄的边长（屏幕像素，用时要除以 scale 换算到世界坐标）。 */
 export const HANDLE_SIZE = 9;
 
-export const zoneRect = (zone: CanvasZone): Rect => ({
+/**
+ * 只读形状的对象：区域和场地标注共用下面这组几何函数（包围盒、手柄、命中）。
+ * 标注不旋转，`zoneRotation` 对它恒为 0。
+ */
+export type ShapeOwner = Pick<CanvasZone, "shape">;
+
+export const zoneRect = (zone: ShapeOwner): Rect => ({
   x: zone.shape.x,
   y: zone.shape.y,
   width: zone.shape.width,
   height: zone.shape.height,
 });
 
-export const zoneCenter = (zone: CanvasZone): Point => ({
+export const zoneCenter = (zone: ShapeOwner): Point => ({
   x: zone.shape.x + zone.shape.width / 2,
   y: zone.shape.y + zone.shape.height / 2,
 });
 
 /** 区域的绝对顶点——只有多边形有意义，其余形状用不到。返回渲染后的顶点。 */
-export const zonePolygonPoints = (zone: CanvasZone): Point[] =>
+export const zonePolygonPoints = (zone: ShapeOwner): Point[] =>
   zone.shape.type === "polygon"
     ? toAbsolutePoints(
         { x: zone.shape.x, y: zone.shape.y },
@@ -131,7 +139,7 @@ export function seatWorldPoint(doc: CanvasDoc, seatId: string): Point | null {
 
 /** 四个角的手柄矩形，按包围盒给——跟具体形状无关。`scale` 保证手柄屏幕大小恒定。 */
 export function handleRects(
-  zone: CanvasZone,
+  zone: ShapeOwner,
   scale: number,
 ): { handle: ResizeHandle; rect: Rect }[] {
   const size = HANDLE_SIZE / Math.max(scale, 0.05);
@@ -162,7 +170,7 @@ export function handleRects(
 }
 
 /** 一个点是否落在某块区域内，按未旋转坐标系做几何测试。 */
-export function zoneContains(zone: CanvasZone, point: Point): boolean {
+export function zoneContains(zone: ShapeOwner, point: Point): boolean {
   const localPoint = unrotatePoint(
     point,
     zoneCenter(zone),
@@ -309,8 +317,8 @@ export function resizeRect(
 // 进入区域之后：排位画布
 // ---------------------------------------------------------------------------
 
-/** 排位画布只操作座位和视野，不编辑外层区域形状。 */
-export const SEAT_TOOLS = ["select", "seat", "row", "pan"] as const;
+/** 排位画布操作座位、场地标注和视野，不编辑外层区域形状。 */
+export const SEAT_TOOLS = ["select", "seat", "row", "mark", "pan"] as const;
 export type SeatTool = (typeof SEAT_TOOLS)[number];
 
 export type SeatDragSubject =
@@ -318,7 +326,30 @@ export type SeatDragSubject =
   | { kind: "none" }
   | { kind: "pan" }
   | { kind: "moveSeats"; seatIds: string[] }
-  | { kind: "marquee"; start: Point };
+  | { kind: "marquee"; start: Point }
+  | {
+      kind: "drawMark";
+      shapeType: Exclude<MarkDrawShape, "polygon">;
+      start: Point;
+    }
+  | { kind: "moveMark"; markId: string }
+  | {
+      kind: "resizeMark";
+      markId: string;
+      handle: ResizeHandle;
+      origin: Rect;
+    };
+
+/** 场地标注的命中：后画的在上层，所以倒序找。 */
+export function hitMark(
+  marks: readonly CanvasMark[],
+  point: Point,
+): CanvasMark | null {
+  for (let index = marks.length - 1; index >= 0; index -= 1) {
+    if (zoneContains(marks[index], point)) return marks[index];
+  }
+  return null;
+}
 
 /**
  * 命中座位，取**最近**的那个。
@@ -436,12 +467,41 @@ export function resolveSeatDragSubject(input: {
   forcePan?: boolean;
   /** 当前密度下的命中半径（世界坐标）。不传按兜底常量。 */
   hitRadius?: number;
+  /** 标注工具当前画哪种形状；多边形靠逐点点击，不走拖拽。 */
+  markShape?: MarkDrawShape;
+  /** 选中的标注才有缩放手柄。 */
+  activeMarkId?: string | null;
+  /** 屏幕像素 ÷ 世界单位，用于换算手柄大小。 */
+  scale?: number;
 }): SeatDragSubject {
   const { point, doc, selection, tool, forcePan, hitRadius } = input;
 
   if (forcePan || tool === "pan") return { kind: "pan" };
   if (tool === "seat") return { kind: "none" };
   if (tool === "row") return { kind: "drawRow", start: point };
+  if (tool === "mark") {
+    const shapeType = input.markShape ?? "rect";
+    return shapeType === "polygon"
+      ? { kind: "none" }
+      : { kind: "drawMark", shapeType, start: point };
+  }
+
+  const marks = doc.marks ?? [];
+  const activeMark = marks.find(
+    (mark) => mark.externalId === input.activeMarkId,
+  );
+  if (activeMark) {
+    const handle = handleRects(activeMark, input.scale ?? 1).find((item) =>
+      rectContains(item.rect, point),
+    );
+    if (handle)
+      return {
+        kind: "resizeMark",
+        markId: activeMark.externalId,
+        handle: handle.handle,
+        origin: zoneRect(activeMark),
+      };
+  }
 
   const seatId = hitSeat(doc, point, hitRadius);
   if (seatId) {
@@ -458,6 +518,10 @@ export function resolveSeatDragSubject(input: {
 
   const table = hitTable(doc, point);
   if (table) return { kind: "moveSeats", seatIds: table.seatIds };
+
+  // 标注画在桌椅下层，座位和桌面都没命中才轮到它。
+  const mark = hitMark(marks, point);
+  if (mark) return { kind: "moveMark", markId: mark.externalId };
 
   return { kind: "marquee", start: point };
 }

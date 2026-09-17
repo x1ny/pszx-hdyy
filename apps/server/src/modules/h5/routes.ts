@@ -4,6 +4,7 @@ import { db } from "../../infra/db";
 import { err, ok } from "../../shared/result";
 import {
   formatOrganizationSeatRanges,
+  parseMapMarks,
   parseSeatPoints,
   parseSeatSections,
   parseTableShapes,
@@ -750,6 +751,7 @@ export function buildSeatMap(
               pitch: seatFieldPitch(sectionSeats),
               // 按分区过滤，避免把别的分区的桌子混进这个分区的坐标系。
               tables: parseTableShapes(row.data, section.externalId) ?? [],
+              marks: parseMapMarks(row.data, section.externalId) ?? [],
             },
           ];
         })
@@ -773,5 +775,7 @@ export function buildSeatMap(
      * `seats` 同一套兜底逻辑。
      */
     tables: maps[0]?.tables ?? parseTableShapes(row.data) ?? [],
+    // 运营画的主题板、门口等标注，跟桌子一样只作参照，解析失败不影响整张图。
+    marks: maps[0]?.marks ?? parseMapMarks(row.data) ?? [],
   };
 }

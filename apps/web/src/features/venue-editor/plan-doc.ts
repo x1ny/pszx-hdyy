@@ -71,6 +71,7 @@ export function buildPlanDoc(input: {
       zones: sections.map((zone) => ({ ...zone, parentExternalId: null })),
       seats: source.seats.filter((seat) => ids.has(seat.zoneExternalId)),
       rows: source.rows?.filter((row) => ids.has(row.zoneExternalId)),
+      marks: source.marks?.filter((mark) => ids.has(mark.zoneExternalId)),
     };
     return {
       doc,
@@ -110,6 +111,14 @@ export function buildPlanDoc(input: {
       ? {
           rows: source.rows.filter(
             (row) => row.zoneExternalId === input.zoneExternalId,
+          ),
+        }
+      : {}),
+    // 标注随区域进入方案快照，之后同样与上游隔离。
+    ...(source?.marks
+      ? {
+          marks: source.marks.filter(
+            (mark) => mark.zoneExternalId === input.zoneExternalId,
           ),
         }
       : {}),
