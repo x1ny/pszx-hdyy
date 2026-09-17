@@ -169,6 +169,137 @@ export function findInvalidAssignments(
 }
 
 /**
+ * 用于校验严格占位模式的最小快照。它故意不依赖数据库行类型，方便写入前先
+ * 构造“如果撤掉这些旧分配、再放入新分配，结果会怎样”的内存投影。
+ */
+export type OccupancyAssignmentSnapshot = {
+  seatId: number;
+  seatLabel: string;
+  occupantType: "person" | "organization";
+  segmentMemberId: number | null;
+  organizationId: number | null;
+  occupantName: string;
+};
+
+export type OccupancyOrganizationSnapshot = {
+  organizationId: number;
+  organizationName: string;
+  totalMembers: number;
+};
+
+export type SingleOccupancyConflict =
+  | {
+      kind: "person";
+      segmentMemberId: number;
+      occupantName: string;
+      seatLabels: string[];
+    }
+  | {
+      kind: "organization";
+      organizationId: number;
+      organizationName: string;
+      totalMembers: number;
+      assignedPersonCount: number;
+      organizationSeatCount: number;
+      overBy: number;
+    };
+
+/**
+ * 检查“一人最多一个位置”和“团体个人排座 + 团体占位不超过团体人数”两条规则。
+ *
+ * 团体占位本身不是具体成员，所以这里只按占位行计数；个人排座按 distinct 的
+ * 环节人员计数。两个冲突都返回，切换模式时前端可以一次性告诉运营人员需要
+ * 处理哪些地方，而不是修完一个再撞下一个。
+ */
+export function findSingleOccupancyConflicts(
+  assignments: readonly OccupancyAssignmentSnapshot[],
+  organizations: readonly OccupancyOrganizationSnapshot[],
+): SingleOccupancyConflict[] {
+  const personSeats = new Map<
+    number,
+    { occupantName: string; seatLabels: string[] }
+  >();
+
+  for (const assignment of assignments) {
+    if (
+      assignment.occupantType !== "person" ||
+      assignment.segmentMemberId === null
+    ) {
+      continue;
+    }
+
+    const current = personSeats.get(assignment.segmentMemberId);
+    if (current) {
+      current.seatLabels.push(assignment.seatLabel);
+    } else {
+      personSeats.set(assignment.segmentMemberId, {
+        occupantName: assignment.occupantName,
+        seatLabels: [assignment.seatLabel],
+      });
+    }
+  }
+
+  const conflicts: SingleOccupancyConflict[] = [];
+  for (const [segmentMemberId, person] of personSeats) {
+    if (person.seatLabels.length <= 1) continue;
+    conflicts.push({
+      kind: "person",
+      segmentMemberId,
+      occupantName: person.occupantName,
+      seatLabels: person.seatLabels,
+    });
+  }
+
+  const organizationById = new Map(
+    organizations.map((item) => [item.organizationId, item]),
+  );
+  const organizationCounts = new Map<
+    number,
+    { assignedPersonIds: Set<number>; organizationSeatCount: number }
+  >();
+
+  for (const assignment of assignments) {
+    if (assignment.organizationId === null) continue;
+
+    let current = organizationCounts.get(assignment.organizationId);
+    if (!current) {
+      current = { assignedPersonIds: new Set(), organizationSeatCount: 0 };
+      organizationCounts.set(assignment.organizationId, current);
+    }
+
+    if (
+      assignment.occupantType === "person" &&
+      assignment.segmentMemberId !== null
+    ) {
+      current.assignedPersonIds.add(assignment.segmentMemberId);
+    } else if (assignment.occupantType === "organization") {
+      current.organizationSeatCount += 1;
+    }
+  }
+
+  for (const [organizationId, counts] of organizationCounts) {
+    const organization = organizationById.get(organizationId);
+    const totalMembers = organization?.totalMembers ?? 0;
+    const assignedPersonCount = counts.assignedPersonIds.size;
+    const coveredCount = assignedPersonCount + counts.organizationSeatCount;
+    if (coveredCount <= totalMembers) continue;
+
+    conflicts.push({
+      kind: "organization",
+      organizationId,
+      organizationName:
+        organization?.organizationName ?? `团体 #${organizationId}`,
+      totalMembers,
+      assignedPersonCount,
+      organizationSeatCount: counts.organizationSeatCount,
+      overBy: coveredCount - totalMembers,
+    });
+  }
+
+  return conflicts;
+}
+
+/**
  * 对调时只移动位置，完整保留占用对象字段。调用方已先保证 rows 只属于两个目标
  * 座位；只有一边有占用时，结果自然退化为把它移动到另一边。
  *

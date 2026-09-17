@@ -56,12 +56,14 @@ import {
  * 进入画布勾选时带过去的上下文。
  *
  * **没有目标数量、也没有选座方式**——两者都被画布上的自由勾选取代了。
- * `suggestedCount` 只是提示条上那句"该团体还有 N 人未安排座位"，不构成任何校验。
+ * `suggestedCount` 在允许多占模式下只是提示；严格模式下它同时是本次选座的
+ * 上限，服务端仍会在提交事务里按最新统计再次校验。
  */
 export type OrganizationSeatBatchSelectionDraft = {
   organizationId: number;
   organizationName: string;
   suggestedCount: number;
+  allowMultipleOccupancy: boolean;
 };
 
 /**
@@ -77,6 +79,7 @@ export function OrganizationSeatBatchDialog({
   open,
   planId,
   readOnly,
+  allowMultipleOccupancy,
   onOpenChange,
   onStartSeatSelection,
   onApplied,
@@ -84,6 +87,7 @@ export function OrganizationSeatBatchDialog({
   open: boolean;
   planId: number;
   readOnly: boolean;
+  allowMultipleOccupancy: boolean;
   onOpenChange: (open: boolean) => void;
   /** 选定团体后关闭弹窗，进入画布的团体占位勾选模式。 */
   onStartSeatSelection?: (draft: OrganizationSeatBatchSelectionDraft) => void;
@@ -162,6 +166,7 @@ export function OrganizationSeatBatchDialog({
       organizationId: selectedStat.organizationId,
       organizationName: selectedStat.name,
       suggestedCount: selectedStat.remainingMemberCount,
+      allowMultipleOccupancy,
     });
     // 走 onOpenChange 而不是 handleOpenChange：不清掉这里选中的团体，下次打开
     // 还停在同一个上面。勾选模式退出后不再回弹窗，这就是唯一的“接着来一次”路径。
@@ -328,7 +333,10 @@ export function OrganizationSeatBatchDialog({
                     <span className="font-medium text-foreground">
                       点座位勾选或取消，从空白处拖拽可框选一片
                     </span>
-                    。勾中的位置带虚线圈，数量由你定——不排满也能直接提交。
+                    。勾中的位置带虚线圈，
+                    {allowMultipleOccupancy
+                      ? "数量由你定——不排满也能直接提交。"
+                      : "最多可再占到剩余人数，不排满也能直接提交。"}
                   </p>
                 </section>
               ) : null}
@@ -357,7 +365,11 @@ export function OrganizationSeatBatchDialog({
               <Button
                 type="button"
                 disabled={
-                  releaseMutation.isPending || readOnly || !selectedStat
+                  releaseMutation.isPending ||
+                  readOnly ||
+                  !selectedStat ||
+                  (!allowMultipleOccupancy &&
+                    selectedStat.remainingMemberCount === 0)
                 }
                 onClick={startSeatSelection}
               >

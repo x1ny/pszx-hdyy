@@ -58,6 +58,7 @@ export const SEATING_ACTIONS = [
   "assign",
   "unassign",
   "swap",
+  "setOccupancyMode",
   "confirm",
   "reject",
   "void",
@@ -95,6 +96,17 @@ export const segmentSeatingPlan = pgTable(
       .default([]),
 
     status: text("status").$type<PlanStatus>().notNull().default("pending"),
+
+    /**
+     * 是否允许同一方案内多占位置。
+     *
+     * 新方案默认严格模式；迁移会把已有方案回填为 true，保留旧版本已经
+     * 产生的多座数据。这个开关属于方案而不是全局配置，避免不同环节互相
+     * 改规则。
+     */
+    allowMultipleOccupancy: boolean("allow_multiple_occupancy")
+      .notNull()
+      .default(false),
 
     /**
      * 第几次**确认发布**，confirm 时 +1。
@@ -290,7 +302,7 @@ export const seatAssignment = pgTable(
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
   },
   (table) => [
-    /** 每个座位最多一个有效占用对象，个人与团体都可占多个座位。 */
+    /** 每个座位最多一个有效占用对象；是否允许同一对象多座由方案开关决定。 */
     uniqueIndex("uk_seat_assignment_seat")
       .on(table.segmentSeatId)
       .where(sql`${table.revokedAt} is null`),

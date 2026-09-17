@@ -234,6 +234,12 @@ export const SetSeatEnabledInput = z.object({
   enabled: z.boolean(),
 });
 
+/** 方案级占位规则。新方案默认 false，切换到严格模式时由服务端复核现有数据。 */
+export const SetOccupancyModeInput = z.object({
+  planId: id,
+  allowMultipleOccupancy: z.boolean(),
+});
+
 // ---------------------------------------------------------------------------
 // 状态流转
 // ---------------------------------------------------------------------------

@@ -136,6 +136,19 @@ export type SavePlanLayoutInput = InferRequestType<
   typeof api.api.seating.saveLayout.$post
 >["json"];
 
+export type SetOccupancyModeInput = InferRequestType<
+  typeof api.api.seating.setOccupancyMode.$post
+>["json"];
+
+export type SeatingOccupancyModeResult = ApiData<
+  InferResponseType<typeof api.api.seating.setOccupancyMode.$post>
+>;
+
+export type SeatingOccupancyModeConflict = Extract<
+  SeatingOccupancyModeResult,
+  { conflicts: unknown[] }
+>["conflicts"][number];
+
 export const seatingKeys = {
   all: ["seating"] as const,
   plans: (activityId: number, segmentId?: number) =>
@@ -224,6 +237,9 @@ export const createSeatingPlan = (input: CreatePlanInput) =>
 
 export const saveSeatingLayout = (input: SavePlanLayoutInput) =>
   unwrap(api.api.seating.saveLayout.$post({ json: input }));
+
+export const setSeatingOccupancyMode = (input: SetOccupancyModeInput) =>
+  unwrap(api.api.seating.setOccupancyMode.$post({ json: input }));
 
 export const assignSeat = (
   planId: number,

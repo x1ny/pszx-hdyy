@@ -66,6 +66,7 @@ function renderDialog(
         open
         planId={1}
         readOnly={false}
+        allowMultipleOccupancy={true}
         onOpenChange={onOpenChange}
         onStartSeatSelection={onStartSeatSelection}
         onApplied={onApplied}
@@ -104,6 +105,7 @@ describe("OrganizationSeatBatchDialog", () => {
       organizationId: 7,
       organizationName: "协会甲",
       suggestedCount: 2,
+      allowMultipleOccupancy: true,
     });
     expect(onOpenChange).toHaveBeenCalledWith(false);
     // 进画布不清掉选中的团体：勾选模式退出后不回弹窗，再来一次时它还在。

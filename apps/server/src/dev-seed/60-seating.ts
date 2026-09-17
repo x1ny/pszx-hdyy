@@ -110,6 +110,8 @@ export const seed: SeedFn = async (db, { userId }) => {
     // 可以改、可以驳回，只是多点一步。
     sections: [],
     status: "confirmed",
+    // 这份演示数据专门覆盖历史的“一人多座 / 团体多占”读模型，显式保留旧行为。
+    allowMultipleOccupancy: true,
     version: 0,
     savedBy: userId,
     savedAt: new Date("2026-08-31T10:00:00+08:00"),

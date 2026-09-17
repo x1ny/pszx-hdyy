@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   findInvalidAssignments,
+  findSingleOccupancyConflicts,
   isWritable,
   ORGANIZATION_COLOR_PALETTE_SIZE,
   organizationColorIndex,
@@ -182,6 +183,84 @@ describe("findInvalidAssignments", () => {
     );
     expect(invalid).toHaveLength(1);
     expect(invalid[0]?.label).toBe("#99");
+  });
+});
+
+describe("findSingleOccupancyConflicts", () => {
+  test("严格模式放行一人一座且团体覆盖不超人数", () => {
+    expect(
+      findSingleOccupancyConflicts(
+        [
+          {
+            seatId: 1,
+            seatLabel: "A1",
+            occupantType: "person",
+            segmentMemberId: 11,
+            organizationId: 7,
+            occupantName: "张三",
+          },
+          {
+            seatId: 2,
+            seatLabel: "A2",
+            occupantType: "organization",
+            segmentMemberId: null,
+            organizationId: 7,
+            occupantName: "团体：协会甲",
+          },
+        ],
+        [{ organizationId: 7, organizationName: "协会甲", totalMembers: 2 }],
+      ),
+    ).toEqual([]);
+  });
+
+  test("同时报告个人重复占座和团体覆盖超额", () => {
+    expect(
+      findSingleOccupancyConflicts(
+        [
+          {
+            seatId: 1,
+            seatLabel: "A1",
+            occupantType: "person",
+            segmentMemberId: 11,
+            organizationId: 7,
+            occupantName: "张三",
+          },
+          {
+            seatId: 2,
+            seatLabel: "A2",
+            occupantType: "person",
+            segmentMemberId: 11,
+            organizationId: 7,
+            occupantName: "张三",
+          },
+          {
+            seatId: 3,
+            seatLabel: "A3",
+            occupantType: "organization",
+            segmentMemberId: null,
+            organizationId: 7,
+            occupantName: "团体：协会甲",
+          },
+        ],
+        [{ organizationId: 7, organizationName: "协会甲", totalMembers: 1 }],
+      ),
+    ).toEqual([
+      {
+        kind: "person",
+        segmentMemberId: 11,
+        occupantName: "张三",
+        seatLabels: ["A1", "A2"],
+      },
+      {
+        kind: "organization",
+        organizationId: 7,
+        organizationName: "协会甲",
+        totalMembers: 1,
+        assignedPersonCount: 1,
+        organizationSeatCount: 1,
+        overBy: 1,
+      },
+    ]);
   });
 });
 

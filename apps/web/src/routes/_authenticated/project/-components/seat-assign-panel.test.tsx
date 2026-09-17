@@ -75,6 +75,7 @@ function renderPanel(
         seat={seat}
         assignment={null}
         readOnly={false}
+        allowMultipleOccupancy={true}
         pending={false}
         organizationSeatInfoById={
           new Map([[7, { name: "外语志愿者团", seatLabels: ["D2", "D4"] }]])

@@ -6,6 +6,7 @@ import {
   ListPlansInput,
   OrganizationSeatBatchInput,
   SavePlanLayoutInput,
+  SetOccupancyModeInput,
   UnassignOrganizationInput,
 } from "./validation";
 
@@ -71,6 +72,23 @@ describe("seat assignment validation", () => {
         planId: 1,
         segmentSeatId: 2,
         organizationId: 0,
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("occupancy mode validation", () => {
+  test("只接受方案 id 和布尔多占开关", () => {
+    expect(
+      SetOccupancyModeInput.parse({
+        planId: 1,
+        allowMultipleOccupancy: false,
+      }),
+    ).toEqual({ planId: 1, allowMultipleOccupancy: false });
+    expect(
+      SetOccupancyModeInput.safeParse({
+        planId: 1,
+        allowMultipleOccupancy: "false",
       }).success,
     ).toBe(false);
   });

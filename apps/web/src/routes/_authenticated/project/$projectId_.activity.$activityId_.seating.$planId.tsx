@@ -38,9 +38,23 @@ import {
 import { downloadSeatingPlanJpeg } from "#/features/venue-editor/canvas/seating-plan-jpeg";
 import { downloadSeatingPlanSvg } from "#/features/venue-editor/canvas/seating-plan-svg";
 import { SpaceMap } from "#/features/venue-editor/space-map";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "#/shared/components/ui/alert-dialog.tsx";
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
 import { Skeleton } from "#/shared/components/ui/skeleton.tsx";
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from "#/shared/components/ui/toggle-group.tsx";
 import { cn } from "#/shared/lib/utils.ts";
 import { formatDateTime } from "../venue/-utils";
 import {
@@ -56,9 +70,11 @@ import {
   assignOrganizationSeatBatch,
   assignSeat,
   organizationSeatingStatsQueryOptions,
+  type SeatingOccupancyModeConflict,
   seatingKeys,
   seatingPlanQueryOptions,
   setSeatEnabled,
+  setSeatingOccupancyMode,
   swapSeats,
   unassignSeat,
 } from "./-venue-queries";
@@ -125,6 +141,13 @@ function SeatingCanvasPage() {
     OrganizationSeatSelectionSkip[]
   >([]);
   const [isExporting, setIsExporting] = useState(false);
+  const [occupancyModeConfirmOpen, setOccupancyModeConfirmOpen] =
+    useState(false);
+  const [occupancyModeConflictOpen, setOccupancyModeConflictOpen] =
+    useState(false);
+  const [occupancyModeConflicts, setOccupancyModeConflicts] = useState<
+    SeatingOccupancyModeConflict[]
+  >([]);
 
   /**
    * 对调模式：记住"从哪个座位发起的"，下一次点中座位就是目标。
@@ -291,6 +314,47 @@ function SeatingCanvasPage() {
     queryClient.invalidateQueries({ queryKey: seatingKeys.all });
   };
 
+  const occupancyModeMutation = useMutation({
+    mutationFn: (allowMultipleOccupancy: boolean) =>
+      setSeatingOccupancyMode({ planId, allowMultipleOccupancy }),
+    onSuccess: (result) => {
+      setOccupancyModeConfirmOpen(false);
+      if (!result.applied) {
+        if (result.conflicts.length) {
+          setOccupancyModeConflicts(result.conflicts);
+          setOccupancyModeConflictOpen(true);
+        }
+        return;
+      }
+      toast.success(
+        result.allowMultipleOccupancy
+          ? "已切换为允许多占模式"
+          : "已切换为不可多占模式",
+      );
+      if (result.wasConfirmed) {
+        toast.warning("这份排位已经确认发布过，改动后需要重新确认");
+      }
+      invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const requestOccupancyModeChange = (allowMultipleOccupancy: boolean) => {
+    if (
+      !bundle ||
+      allowMultipleOccupancy === bundle.plan.allowMultipleOccupancy ||
+      occupancyModeMutation.isPending ||
+      organizationSelectionSession
+    ) {
+      return;
+    }
+    if (!allowMultipleOccupancy) {
+      setOccupancyModeConfirmOpen(true);
+      return;
+    }
+    occupancyModeMutation.mutate(true);
+  };
+
   const assignMutation = useMutation({
     mutationFn: (input: { seatId: number; segmentMemberId: number }) =>
       assignSeat(planId, input.seatId, input.segmentMemberId),
@@ -376,7 +440,14 @@ function SeatingCanvasPage() {
       toast.warning(
         `${result.dropped.length} 个已勾选的位置被占用或停用，已从本次选择中移出`,
       );
-      return { zoneIds: [], seatIds: result.selectedExternalIds };
+      const selectedExternalIds =
+        organizationSelectionSession.allowMultipleOccupancy
+          ? result.selectedExternalIds
+          : result.selectedExternalIds.slice(
+              0,
+              organizationSelectionSession.suggestedCount,
+            );
+      return { zoneIds: [], seatIds: selectedExternalIds };
     });
   }, [
     organizationSelectionSession,
@@ -401,6 +472,13 @@ function SeatingCanvasPage() {
       }),
     onSuccess: (result, input) => {
       if (!result.applied) {
+        if (result.reason === "occupancyLimit") {
+          toast.error(
+            `当前团体最多还能占 ${result.maxCount} 个位置，请减少勾选后重试`,
+          );
+          invalidate();
+          return;
+        }
         // 勾选之后被别的操作者抢走了位置。刷新画布让占用色显示出来，勾选集由
         // 上面的 sync 自动剔除失效项，用户补勾几个就能再提交。
         toast.error("部分位置已被占用，已刷新画布，请补选后重新提交");
@@ -467,7 +545,22 @@ function SeatingCanvasPage() {
         currentExternalIds: selection.seatIds,
         candidates: organizationSelectionCandidates,
       });
-      setSelection({ zoneIds: [], seatIds: result.selectedExternalIds });
+      const selectedExternalIds =
+        organizationSelectionSession.allowMultipleOccupancy
+          ? result.selectedExternalIds
+          : result.selectedExternalIds.slice(
+              0,
+              organizationSelectionSession.suggestedCount,
+            );
+      if (
+        !organizationSelectionSession.allowMultipleOccupancy &&
+        selectedExternalIds.length < result.selectedExternalIds.length
+      ) {
+        toast.warning(
+          `不可多占模式下最多只能再占 ${organizationSelectionSession.suggestedCount} 个位置`,
+        );
+      }
+      setSelection({ zoneIds: [], seatIds: selectedExternalIds });
       setOrganizationPickSkipped(result.rejected);
       return;
     }
@@ -602,6 +695,32 @@ function SeatingCanvasPage() {
       </div>
     ) : null;
 
+  const occupancyModeControl = (
+    <OccupancyModeControl
+      allowMultipleOccupancy={bundle.plan.allowMultipleOccupancy}
+      disabled={
+        readOnly ||
+        occupancyModeMutation.isPending ||
+        organizationSelectionSession !== null
+      }
+      onChange={requestOccupancyModeChange}
+    />
+  );
+  const occupancyModeDialogs = (
+    <OccupancyModeDialogs
+      confirmOpen={occupancyModeConfirmOpen}
+      conflictOpen={occupancyModeConflictOpen}
+      conflicts={occupancyModeConflicts}
+      pending={occupancyModeMutation.isPending}
+      onConfirmOpenChange={setOccupancyModeConfirmOpen}
+      onConflictOpenChange={(open) => {
+        setOccupancyModeConflictOpen(open);
+        if (!open) setOccupancyModeConflicts([]);
+      }}
+      onConfirm={() => occupancyModeMutation.mutate(false)}
+    />
+  );
+
   if (!doc || !zone || !state) {
     // blob 解不出来（换过渲染器、或者数据坏了）。核心表里的位置还在，所以这里
     // 给一个能看的降级说明而不是白屏——底层设计 §9 那条降级视图的最低要求。
@@ -622,64 +741,70 @@ function SeatingCanvasPage() {
 
   if (grouped && !activeSectionId)
     return (
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="font-semibold text-lg">
-              {bundle.plan.segmentName} · {bundle.plan.zoneName}
-            </h2>
-            <p className="text-muted-foreground text-sm">
-              {doc.zones.length} 个分区 · {bundle.seats.length} 个位置 · 已占{" "}
-              {bundle.assignments.length} 个位置
-            </p>
+      <>
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-semibold text-lg">
+                {bundle.plan.segmentName} · {bundle.plan.zoneName}
+              </h2>
+              <p className="text-muted-foreground text-sm">
+                {doc.zones.length} 个分区 · {bundle.seats.length} 个位置 · 已占{" "}
+                {bundle.assignments.length} 个位置
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              {occupancyModeControl}
+              <Button variant="outline" onClick={goBack}>
+                返回排位列表
+              </Button>
+            </div>
           </div>
-          <Button variant="outline" onClick={goBack}>
-            返回排位列表
-          </Button>
+          <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
+            <div className="h-[560px] rounded-lg border bg-card">
+              <SpaceMap
+                doc={doc}
+                zones={doc.zones.map((section) => ({
+                  externalId: section.externalId,
+                  name: section.name,
+                  caption: `${
+                    doc.seats.filter(
+                      (seat) => seat.zoneExternalId === section.externalId,
+                    ).length
+                  } 座`,
+                  disabled: false,
+                }))}
+                onSelect={setActiveSectionId}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              {doc.zones.map((section) => {
+                const seats = bundle.seats.filter(
+                  (seat) => seat.zoneExternalId === section.externalId,
+                );
+                return (
+                  <Button
+                    key={section.externalId}
+                    variant="outline"
+                    className="h-auto justify-between py-4"
+                    onClick={() => setActiveSectionId(section.externalId)}
+                  >
+                    <span>{section.name}</span>
+                    <span>
+                      {
+                        seats.filter((seat) => assignmentBySeatId.has(seat.id))
+                          .length
+                      }{" "}
+                      / {seats.length} 已占
+                    </span>
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
         </div>
-        <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
-          <div className="h-[560px] rounded-lg border bg-card">
-            <SpaceMap
-              doc={doc}
-              zones={doc.zones.map((section) => ({
-                externalId: section.externalId,
-                name: section.name,
-                caption: `${
-                  doc.seats.filter(
-                    (seat) => seat.zoneExternalId === section.externalId,
-                  ).length
-                } 座`,
-                disabled: false,
-              }))}
-              onSelect={setActiveSectionId}
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            {doc.zones.map((section) => {
-              const seats = bundle.seats.filter(
-                (seat) => seat.zoneExternalId === section.externalId,
-              );
-              return (
-                <Button
-                  key={section.externalId}
-                  variant="outline"
-                  className="h-auto justify-between py-4"
-                  onClick={() => setActiveSectionId(section.externalId)}
-                >
-                  <span>{section.name}</span>
-                  <span>
-                    {
-                      seats.filter((seat) => assignmentBySeatId.has(seat.id))
-                        .length
-                    }{" "}
-                    / {seats.length} 已占
-                  </span>
-                </Button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+        {occupancyModeDialogs}
+      </>
     );
 
   return (
@@ -704,6 +829,7 @@ function SeatingCanvasPage() {
             个位置
           </p>
         </div>
+        {occupancyModeControl}
       </div>
 
       {/**
@@ -857,6 +983,7 @@ function SeatingCanvasPage() {
                   open={organizationBatchOpen}
                   planId={planId}
                   readOnly={readOnly}
+                  allowMultipleOccupancy={bundle.plan.allowMultipleOccupancy}
                   onOpenChange={setOrganizationBatchOpen}
                   onStartSeatSelection={startOrganizationSeatSelection}
                   onApplied={() => {
@@ -899,6 +1026,7 @@ function SeatingCanvasPage() {
                   seat={selectedSeat}
                   assignment={selectedAssignment}
                   readOnly={readOnly}
+                  allowMultipleOccupancy={bundle.plan.allowMultipleOccupancy}
                   pending={
                     assignMutation.isPending || unassignMutation.isPending
                   }
@@ -958,6 +1086,7 @@ function SeatingCanvasPage() {
           </div>
         }
       />
+      {occupancyModeDialogs}
     </div>
   );
 }
@@ -970,9 +1099,8 @@ const ORGANIZATION_SELECTION_SKIP_LABELS = {
 /**
  * 团体占位模式的操作条。
  *
- * 这里的数字是**参考不是门槛**：勾少于剩余人数照样能提交（现场常见的做法就是
- * 先圈一片，人到齐了再补），勾多了也不拦——多出来的位置是不是要留，操作者比
- * 系统清楚。所以只呈现对比，不做校验。
+ * 允许多占模式下，剩余人数是参考值；严格模式下它是本次团体占位的上限。前端
+ * 会在勾选时先拦一次，服务端提交时再按最新快照复核，避免多人同时操作造成超额。
  */
 function OrganizationSeatSelectionNotice({
   draft,
@@ -1009,12 +1137,18 @@ function OrganizationSeatSelectionNotice({
           >
             已勾选 {pickedCount}
           </Badge>
+          <Badge variant="outline">
+            {draft.allowMultipleOccupancy ? "允许多占" : "不可多占"}
+          </Badge>
           <span className="text-muted-foreground text-xs tabular-nums">
             该团体还有 {remaining} 人未安排座位
           </span>
         </div>
         <p className="mt-1 text-muted-foreground text-xs">
-          点座位勾选或取消，从空白处拖拽可框选一片并入；不排满也可以直接提交。
+          点座位勾选或取消，从空白处拖拽可框选一片并入；
+          {draft.allowMultipleOccupancy
+            ? "不排满也可以直接提交，超过剩余人数也会保留。"
+            : "最多勾选剩余人数，不排满也可以直接提交。"}
         </p>
         {skipped.length ? (
           <p className="mt-1 text-muted-foreground text-xs">
@@ -1034,7 +1168,7 @@ function OrganizationSeatSelectionNotice({
             比剩余人数少 {gap} 个，提交后仍可再来一次补上。
           </p>
         ) : null}
-        {gap < 0 ? (
+        {draft.allowMultipleOccupancy && gap < 0 ? (
           <p className="mt-1 text-warning-foreground text-xs tabular-nums">
             比剩余人数多 {-gap} 个位置，确认是有意多留的再提交。
           </p>
@@ -1053,7 +1187,11 @@ function OrganizationSeatSelectionNotice({
         <Button
           type="button"
           size="sm"
-          disabled={submitting || pickedCount === 0}
+          disabled={
+            submitting ||
+            pickedCount === 0 ||
+            (!draft.allowMultipleOccupancy && pickedCount > remaining)
+          }
           onClick={onComplete}
         >
           {submitting ? <Loader2Icon className="animate-spin" /> : null}
@@ -1061,6 +1199,143 @@ function OrganizationSeatSelectionNotice({
         </Button>
       </div>
     </section>
+  );
+}
+
+function OccupancyModeControl({
+  allowMultipleOccupancy,
+  disabled,
+  onChange,
+}: {
+  allowMultipleOccupancy: boolean;
+  disabled: boolean;
+  onChange: (allowMultipleOccupancy: boolean) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <span className="font-medium text-sm">占位规则</span>
+      <ToggleGroup
+        value={[allowMultipleOccupancy ? "multiple" : "single"]}
+        onValueChange={(values) => {
+          const next = values[0];
+          if (next === "multiple") onChange(true);
+          if (next === "single") onChange(false);
+        }}
+        variant="outline"
+        size="sm"
+        spacing={0}
+        disabled={disabled}
+        aria-label="排位方案占位规则"
+      >
+        <ToggleGroupItem
+          type="button"
+          value="single"
+          className="aria-pressed:bg-primary aria-pressed:text-primary-foreground"
+        >
+          不可多占
+        </ToggleGroupItem>
+        <ToggleGroupItem
+          type="button"
+          value="multiple"
+          className="aria-pressed:bg-primary aria-pressed:text-primary-foreground"
+        >
+          允许多占
+        </ToggleGroupItem>
+      </ToggleGroup>
+    </div>
+  );
+}
+
+function OccupancyModeDialogs({
+  confirmOpen,
+  conflictOpen,
+  conflicts,
+  pending,
+  onConfirmOpenChange,
+  onConflictOpenChange,
+  onConfirm,
+}: {
+  confirmOpen: boolean;
+  conflictOpen: boolean;
+  conflicts: readonly SeatingOccupancyModeConflict[];
+  pending: boolean;
+  onConfirmOpenChange: (open: boolean) => void;
+  onConflictOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <>
+      <AlertDialog open={confirmOpen} onOpenChange={onConfirmOpenChange}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>切换为不可多占？</AlertDialogTitle>
+            <AlertDialogDescription>
+              切换后，同一人最多占一个位置；团体的个人排座和团体占位合计不能超过
+              团体人数。系统会先检查当前排位，发现冲突时不会自动删除任何位置。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>取消</AlertDialogCancel>
+            <AlertDialogAction disabled={pending} onClick={onConfirm}>
+              {pending ? <Loader2Icon className="animate-spin" /> : null}
+              确认切换
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={conflictOpen} onOpenChange={onConflictOpenChange}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>暂不能切换为不可多占</AlertDialogTitle>
+            <AlertDialogDescription>
+              当前方案存在以下冲突。请先解除或移动多余排位，再重新切换；这次操作没有
+              删除任何已有位置。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <ul className="max-h-60 space-y-2 overflow-y-auto rounded-md border bg-muted/30 p-3 text-sm">
+            {conflicts.slice(0, 20).map((conflict) => (
+              <li
+                key={
+                  conflict.kind === "person"
+                    ? ["person", conflict.segmentMemberId].join("-")
+                    : ["organization", conflict.organizationId].join("-")
+                }
+              >
+                {conflict.kind === "person" ? (
+                  <>
+                    <span className="font-medium">
+                      人员「{conflict.occupantName}」
+                    </span>
+                    ：占用了 {conflict.seatLabels.join("、")}
+                  </>
+                ) : (
+                  <>
+                    <span className="font-medium">
+                      团体「{conflict.organizationName}」
+                    </span>
+                    ：已覆盖{" "}
+                    {conflict.assignedPersonCount +
+                      conflict.organizationSeatCount}{" "}
+                    个名额，超过总人数 {conflict.totalMembers} 人
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+          {conflicts.length > 20 ? (
+            <p className="text-muted-foreground text-xs">
+              共发现 {conflicts.length} 项冲突，列表仅展示前 20 项。
+            </p>
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => onConflictOpenChange(false)}>
+              知道了
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 

@@ -18,11 +18,15 @@ import {
 } from "../venue/schema";
 import {
   findInvalidAssignments,
+  findSingleOccupancyConflicts,
   isWritable,
+  type OccupancyAssignmentSnapshot,
+  type OccupancyOrganizationSnapshot,
   organizationColorIndex,
   type PlanSeatRow,
   planOrganizationSeatAssignments,
   planSeatMerge,
+  type SingleOccupancyConflict,
   swapAssignmentSeats,
 } from "./plan";
 import { personSeatLabels } from "./read-model";
@@ -48,6 +52,7 @@ import {
   PlanIdInput,
   RejectPlanInput,
   SavePlanLayoutInput,
+  SetOccupancyModeInput,
   SetSeatEnabledInput,
   SwapInput,
   UnassignInput,
@@ -70,6 +75,7 @@ const planFields = {
   activityVenueZoneId: segmentSeatingPlan.activityVenueZoneId,
   sections: segmentSeatingPlan.sections,
   status: segmentSeatingPlan.status,
+  allowMultipleOccupancy: segmentSeatingPlan.allowMultipleOccupancy,
   version: segmentSeatingPlan.version,
   rejectedReason: segmentSeatingPlan.rejectedReason,
   savedAt: segmentSeatingPlan.savedAt,
@@ -240,8 +246,8 @@ type OrganizationSeatingStatRow = {
 /**
  * 剩余人数是还没有被个人排座或团体占位覆盖的名额。
  *
- * 团体占位允许超过团体人数，所以超额时只显示 0，不把它变成负数；这只是展示
- * 口径，不是批量占位的服务端限制。
+ * 允许多占模式下团体占位可以超过团体人数，所以超额时只显示 0，不把它变成
+ * 负数；严格模式下这个数字同时是新增团体占位的服务端上限。
  */
 export function calculateOrganizationRemainingMemberCount(
   totalMembers: number,
@@ -334,14 +340,19 @@ async function listOrganizationSeatAvailability(
 async function organizationSeatPreview(
   tx: Tx,
   input: OrganizationSeatBatchPayload,
+  options: { lockPlan?: boolean } = {},
 ) {
-  const [plan] = await tx
+  const planQuery = tx
     .select({
       segmentId: segmentSeatingPlan.segmentId,
       status: segmentSeatingPlan.status,
+      allowMultipleOccupancy: segmentSeatingPlan.allowMultipleOccupancy,
     })
     .from(segmentSeatingPlan)
     .where(eq(segmentSeatingPlan.id, input.planId));
+  const [plan] = options.lockPlan
+    ? await planQuery.for("update")
+    : await planQuery;
   if (!plan) return { kind: "notFound" as const };
   if (!isWritable(plan.status)) {
     return { kind: "invalid" as const, error: "方案已作废，不能再修改" };
@@ -373,6 +384,20 @@ async function organizationSeatPreview(
     input,
     stats.remainingMemberCount,
   );
+
+  if (
+    !plan.allowMultipleOccupancy &&
+    targetCount > stats.remainingMemberCount
+  ) {
+    return {
+      kind: "overLimit" as const,
+      plan,
+      stats,
+      targetCount,
+      maxCount: stats.remainingMemberCount,
+    };
+  }
+
   const availability = await listOrganizationSeatAvailability(
     tx,
     input.planId,
@@ -451,6 +476,100 @@ async function occupiedSeats(tx: Tx, planId: number) {
     .where(and(eq(seatAssignment.planId, planId), liveAssignment));
 
   return new Map(rows.map((row) => [row.seatId, row.name]));
+}
+
+/**
+ * 读取一份方案当前有效占位的轻量快照。
+ *
+ * 严格模式的规则同时涉及个人去重和团体覆盖人数，单靠某一条 count 很容易
+ * 漏掉“同一人重复占位”或“个人排座 + 团体占位”的组合情况。写入前在已锁住
+ * 方案行的事务里构造假设结果，再交给 plan.ts 的纯函数检查，规则和切换检查
+ * 共用一套实现。
+ */
+async function listPlanOccupancy(
+  tx: Tx,
+  planId: number,
+  segmentId: number,
+): Promise<{
+  assignments: OccupancyAssignmentSnapshot[];
+  organizations: OccupancyOrganizationSnapshot[];
+}> {
+  const [assignments, segmentMembers] = await Promise.all([
+    tx
+      .select({
+        seatId: seatAssignment.segmentSeatId,
+        seatLabel: segmentSeat.label,
+        occupantType: seatAssignment.occupantType,
+        segmentMemberId: seatAssignment.segmentMemberId,
+        organizationId: sql<number | null>`coalesce(
+          ${seatAssignment.organizationId},
+          ${segmentMember.organizationId}
+        )`
+          .mapWith(segmentMember.organizationId)
+          .as("organization_id"),
+        occupantName: sql<string>`case
+          when ${seatAssignment.occupantType} = 'organization'
+            then concat('团体：', ${organization.name})
+          else ${member.name}
+        end`.as("occupant_name"),
+      })
+      .from(seatAssignment)
+      .innerJoin(segmentSeat, eq(segmentSeat.id, seatAssignment.segmentSeatId))
+      .leftJoin(
+        segmentMember,
+        eq(segmentMember.id, seatAssignment.segmentMemberId),
+      )
+      .leftJoin(member, eq(member.id, segmentMember.memberId))
+      .leftJoin(
+        organization,
+        eq(
+          organization.id,
+          sql`coalesce(${seatAssignment.organizationId}, ${segmentMember.organizationId})`,
+        ),
+      )
+      .where(and(eq(seatAssignment.planId, planId), liveAssignment)),
+    tx
+      .select({
+        organizationId: segmentMember.organizationId,
+        organizationName: organization.name,
+      })
+      .from(segmentMember)
+      .leftJoin(organization, eq(organization.id, segmentMember.organizationId))
+      .where(eq(segmentMember.segmentId, segmentId)),
+  ]);
+
+  const organizationById = new Map<number, OccupancyOrganizationSnapshot>();
+  for (const row of segmentMembers) {
+    if (row.organizationId === null) continue;
+    const current = organizationById.get(row.organizationId);
+    if (current) {
+      current.totalMembers += 1;
+      continue;
+    }
+    organizationById.set(row.organizationId, {
+      organizationId: row.organizationId,
+      organizationName: row.organizationName ?? `团体 #${row.organizationId}`,
+      totalMembers: 1,
+    });
+  }
+
+  return {
+    assignments,
+    organizations: Array.from(organizationById.values()),
+  };
+}
+
+function formatOccupancyConflict(conflict: SingleOccupancyConflict): string {
+  if (conflict.kind === "person") {
+    return `人员「${conflict.occupantName}」已有多个位置（${conflict.seatLabels.join("、")}）`;
+  }
+  return `团体「${conflict.organizationName}」已覆盖 ${conflict.assignedPersonCount + conflict.organizationSeatCount} 个名额，超过总人数 ${conflict.totalMembers} 人（多 ${conflict.overBy} 个）`;
+}
+
+function formatOccupancyConflicts(
+  conflicts: readonly SingleOccupancyConflict[],
+) {
+  return conflicts.map(formatOccupancyConflict).join("；");
 }
 
 export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
@@ -719,6 +838,105 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
   })
 
   /**
+   * 切换当前方案的占位规则。
+   *
+   * 放宽到允许多占可以立即生效；切到严格模式前必须在同一事务里锁住方案并
+   * 检查现有有效分配。发现冲突时返回结构化清单，不自动撤座，避免运营人员
+   * 只是切了一个开关却悄悄丢掉历史排位。
+   */
+  .post("/setOccupancyMode", jsonBody(SetOccupancyModeInput), async (c) => {
+    const input = c.req.valid("json");
+    const userId = c.get("authedUser").id;
+
+    const result = await db.transaction(async (tx) => {
+      const [plan] = await tx
+        .select({
+          segmentId: segmentSeatingPlan.segmentId,
+          status: segmentSeatingPlan.status,
+          allowMultipleOccupancy: segmentSeatingPlan.allowMultipleOccupancy,
+        })
+        .from(segmentSeatingPlan)
+        .where(eq(segmentSeatingPlan.id, input.planId))
+        .for("update");
+      if (!plan) return { kind: "notFound" as const };
+      if (!isWritable(plan.status)) {
+        return { kind: "invalid" as const, error: "方案已作废，不能再修改" };
+      }
+
+      if (plan.allowMultipleOccupancy === input.allowMultipleOccupancy) {
+        return {
+          kind: "unchanged" as const,
+          allowMultipleOccupancy: plan.allowMultipleOccupancy,
+        };
+      }
+
+      if (!input.allowMultipleOccupancy) {
+        const occupancy = await listPlanOccupancy(
+          tx,
+          input.planId,
+          plan.segmentId,
+        );
+        const conflicts = findSingleOccupancyConflicts(
+          occupancy.assignments,
+          occupancy.organizations,
+        );
+        if (conflicts.length) {
+          return {
+            kind: "blocked" as const,
+            allowMultipleOccupancy: plan.allowMultipleOccupancy,
+            conflicts,
+          };
+        }
+      }
+
+      const { wasConfirmed } = await touchPlan(tx, input.planId, userId);
+      await tx
+        .update(segmentSeatingPlan)
+        .set({ allowMultipleOccupancy: input.allowMultipleOccupancy })
+        .where(eq(segmentSeatingPlan.id, input.planId));
+      await writeLog(tx, input.planId, "setOccupancyMode", userId, {
+        allowMultipleOccupancy: input.allowMultipleOccupancy,
+        previousAllowMultipleOccupancy: plan.allowMultipleOccupancy,
+      });
+
+      return {
+        kind: "ok" as const,
+        allowMultipleOccupancy: input.allowMultipleOccupancy,
+        wasConfirmed,
+      };
+    });
+
+    if (result.kind === "notFound") return c.json(notFound());
+    if (result.kind === "invalid") return c.json(invalid(result.error));
+    if (result.kind === "blocked") {
+      return c.json(
+        ok({
+          applied: false as const,
+          allowMultipleOccupancy: result.allowMultipleOccupancy,
+          conflicts: result.conflicts,
+        }),
+      );
+    }
+    if (result.kind === "unchanged") {
+      return c.json(
+        ok({
+          applied: false as const,
+          allowMultipleOccupancy: result.allowMultipleOccupancy,
+          conflicts: [],
+        }),
+      );
+    }
+    return c.json(
+      ok({
+        applied: true as const,
+        allowMultipleOccupancy: result.allowMultipleOccupancy,
+        conflicts: [],
+        wasConfirmed: result.wasConfirmed,
+      }),
+    );
+  })
+
+  /**
    * 建方案。第一次保存直接建 `pending` 的行，没有草稿态（BR-DEV-010）。
    *
    * 座位由前端投影好传进来——活动区域的座位在那份不透明 blob 里，只有前端的
@@ -829,6 +1047,8 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
           activityVenueZoneId: input.activityVenueZoneId,
           sections: children,
           status: "pending",
+          // 新建方案采用严格模式；历史方案由迁移显式保留允许多占。
+          allowMultipleOccupancy: false,
           savedBy: userId,
           savedAt: new Date(),
         })
@@ -1000,7 +1220,7 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
     );
   })
 
-  /** 将环节人员分配到指定座位，保留其其他座位；契约见 docs/seating-assignment.md。 */
+  /** 将环节人员分配到指定座位；两种模式的移动/保留语义见 docs/seating-assignment.md。 */
   .post("/assign", jsonBody(AssignInput), async (c) => {
     const input = c.req.valid("json");
     const userId = c.get("authedUser").id;
@@ -1022,7 +1242,7 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
    * 将当前方案环节范围内的一个团体占到某个位置。
    *
    * 团体是位置的占用对象，不会补建或伪造任何 segment_member；同一团体可占多
-   * 个位置，个人也可以在保留原座位的基础上继续占位。
+   * 个位置；不可多占模式会按团体人数上限校验，个人再次排座则移动原座位。
    */
   .post("/assignOrganization", jsonBody(AssignOrganizationInput), async (c) => {
     const input = c.req.valid("json");
@@ -1039,7 +1259,7 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
   /**
    * 按传入的有序位置 id 预览团体批量占位。只报告可用、跳过和不足，**绝不写库**；
    * `targetMode: remaining` 使用尚未被个人排座或团体占位覆盖的人数，`custom` 则使用
-   * 操作者明确指定的目标。
+   * 操作者明确指定的目标；严格模式下自定义目标不能超过团体剩余人数。
    */
   .post(
     "/previewOrganizationBatch",
@@ -1053,6 +1273,17 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
 
       if (result.kind === "notFound") return c.json(notFound());
       if (result.kind === "invalid") return c.json(invalid(result.error));
+      if (result.kind === "overLimit") {
+        return c.json(
+          ok({
+            applied: false as const,
+            reason: "occupancyLimit" as const,
+            organization: result.stats,
+            targetCount: result.targetCount,
+            maxCount: result.maxCount,
+          }),
+        );
+      }
       return c.json(
         ok({
           organization: result.stats,
@@ -1091,6 +1322,12 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
             preview: ReturnType<typeof planOrganizationSeatAssignments>;
           }
         | {
+            kind: "overLimit";
+            stats: ReturnType<typeof withOrganizationSeatingStats>[number];
+            targetCount: number;
+            maxCount: number;
+          }
+        | {
             kind: "ok";
             organization: ReturnType<
               typeof withOrganizationSeatingStats
@@ -1102,8 +1339,13 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
 
       try {
         result = await db.transaction(async (tx) => {
-          const checked = await organizationSeatPreview(tx, input);
-          if (checked.kind !== "ok") return checked;
+          const checked = await organizationSeatPreview(tx, input, {
+            lockPlan: true,
+          });
+          if (checked.kind === "notFound" || checked.kind === "invalid") {
+            return checked;
+          }
+          if (checked.kind === "overLimit") return checked;
 
           if (checked.preview.insufficient > 0) {
             return {
@@ -1171,9 +1413,21 @@ export const seatingRoutes = new Hono<{ Variables: AuthedVariables }>()
         return c.json(
           ok({
             applied: false as const,
+            reason: "insufficientSeats" as const,
             organization: result.organization,
             targetCount: result.targetCount,
             preview: result.preview,
+          }),
+        );
+      }
+      if (result.kind === "overLimit") {
+        return c.json(
+          ok({
+            applied: false as const,
+            reason: "occupancyLimit" as const,
+            organization: result.stats,
+            targetCount: result.targetCount,
+            maxCount: result.maxCount,
           }),
         );
       }
@@ -1878,8 +2132,9 @@ type SeatOccupantInput =
     };
 
 /**
- * 两种占用对象共用的落库路径，均允许多座，只替换目标位置上的旧占用。
- * 范围校验放在插入前，避免把数据库外键异常暴露成 500。
+ * 两种占用对象共用的落库路径。方案行先加锁，严格模式下个人再次排座是“移动”
+ * 语义（撤掉这个人的旧位置再放新位置），允许多占模式则只替换目标位置。
+ * 范围校验和严格占位校验都放在插入前，避免把数据库约束异常暴露成 500。
  */
 async function assignOccupant(
   tx: Tx,
@@ -1893,9 +2148,11 @@ async function assignOccupant(
     .select({
       segmentId: segmentSeatingPlan.segmentId,
       status: segmentSeatingPlan.status,
+      allowMultipleOccupancy: segmentSeatingPlan.allowMultipleOccupancy,
     })
     .from(segmentSeatingPlan)
-    .where(eq(segmentSeatingPlan.id, input.planId));
+    .where(eq(segmentSeatingPlan.id, input.planId))
+    .for("update");
   if (!plan) return { ok: false as const, error: "排位方案不存在" };
   if (!isWritable(plan.status)) {
     return { ok: false as const, error: "方案已作废，不能再修改" };
@@ -1922,10 +2179,19 @@ async function assignOccupant(
     return { ok: false as const, error: `位置 ${seat.label} 本环节已停用` };
   }
 
+  let personName: string | null = null;
+  let personOrganizationId: number | null = null;
+  let organizationName: string | null = null;
+
   if (input.occupantType === "person") {
     const [segmentPerson] = await tx
-      .select({ id: segmentMember.id })
+      .select({
+        id: segmentMember.id,
+        organizationId: segmentMember.organizationId,
+        name: member.name,
+      })
       .from(segmentMember)
+      .innerJoin(member, eq(member.id, segmentMember.memberId))
       .where(
         and(
           eq(segmentMember.id, input.segmentMemberId),
@@ -1935,25 +2201,88 @@ async function assignOccupant(
     if (!segmentPerson) {
       return { ok: false as const, error: "该人员不在当前环节范围内" };
     }
+    personName = segmentPerson.name;
+    personOrganizationId = segmentPerson.organizationId;
   } else {
-    const [segmentOrganization] = await organizationInSegmentScopeQuery(
-      tx,
-      plan.segmentId,
-      input.organizationId,
-    );
+    const [segmentOrganization] = await tx
+      .select({
+        id: segmentMember.id,
+        name: organization.name,
+      })
+      .from(segmentMember)
+      .innerJoin(
+        organization,
+        eq(organization.id, segmentMember.organizationId),
+      )
+      .where(
+        and(
+          eq(segmentMember.segmentId, plan.segmentId),
+          eq(segmentMember.organizationId, input.organizationId),
+        ),
+      )
+      .limit(1);
     if (!segmentOrganization) {
       return { ok: false as const, error: "该团体不在当前环节范围内" };
     }
+    organizationName = segmentOrganization.name;
   }
 
-  // 只撤掉目标位置的旧占用，保留同一占用对象在其他位置上的分配。
+  const occupancy = plan.allowMultipleOccupancy
+    ? null
+    : await listPlanOccupancy(tx, input.planId, plan.segmentId);
+  const revokedSeatIds = new Set([input.segmentSeatId]);
+
+  // 严格模式下个人再次排座是移动，不会在新位置之外留下旧的有效分配。
+  if (
+    occupancy &&
+    input.occupantType === "person" &&
+    !plan.allowMultipleOccupancy
+  ) {
+    for (const assignment of occupancy.assignments) {
+      if (assignment.segmentMemberId === input.segmentMemberId) {
+        revokedSeatIds.add(assignment.seatId);
+      }
+    }
+  }
+
+  if (occupancy) {
+    const nextAssignments = occupancy.assignments.filter(
+      (assignment) => !revokedSeatIds.has(assignment.seatId),
+    );
+    nextAssignments.push({
+      seatId: input.segmentSeatId,
+      seatLabel: seat.label,
+      occupantType: input.occupantType,
+      segmentMemberId: input.segmentMemberId,
+      organizationId:
+        input.occupantType === "person"
+          ? personOrganizationId
+          : input.organizationId,
+      occupantName:
+        input.occupantType === "person"
+          ? (personName ?? "人员")
+          : `团体：${organizationName ?? `#${input.organizationId}`}`,
+    });
+    const conflicts = findSingleOccupancyConflicts(
+      nextAssignments,
+      occupancy.organizations,
+    );
+    if (conflicts.length) {
+      return {
+        ok: false as const,
+        error: `严格模式不允许这次排位：${formatOccupancyConflicts(conflicts)}`,
+      };
+    }
+  }
+
+  // 允许多占模式只撤掉目标位置；严格模式额外撤掉同一人的旧位置。
   await tx
     .update(seatAssignment)
     .set({ revokedBy: input.userId, revokedAt: new Date() })
     .where(
       and(
         eq(seatAssignment.planId, input.planId),
-        eq(seatAssignment.segmentSeatId, input.segmentSeatId),
+        inArray(seatAssignment.segmentSeatId, Array.from(revokedSeatIds)),
         liveAssignment,
       ),
     );

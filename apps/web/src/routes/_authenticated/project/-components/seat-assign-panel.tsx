@@ -44,6 +44,7 @@ export function SeatAssignPanel({
   seat,
   assignment,
   readOnly,
+  allowMultipleOccupancy,
   pending,
   organizationSeatInfoById,
   onAssign,
@@ -53,6 +54,7 @@ export function SeatAssignPanel({
   seat: PlanSeatRow | null;
   assignment: PlanAssignmentRow | null;
   readOnly: boolean;
+  allowMultipleOccupancy: boolean;
   pending: boolean;
   organizationSeatInfoById: ReadonlyMap<number, OrganizationSeatInfo>;
   onAssign: (segmentMemberId: number) => void;
@@ -219,7 +221,10 @@ export function SeatAssignPanel({
             </ToggleGroupItem>
           </ToggleGroup>
           <p className="text-muted-foreground text-xs">
-            同一人可占多个座位，点击后保留其已有座位。解除只影响当前座位。
+            {allowMultipleOccupancy
+              ? "同一人可占多个座位，点击后保留其已有座位。"
+              : "同一人最多占一个座位，选择其他位置会移动原座位。"}{" "}
+            解除只影响当前座位。
           </p>
 
           {candidatesQuery.isLoading ? (
@@ -281,7 +286,7 @@ export function SeatAssignPanel({
                             {person.companyPosition || person.mobile || "—"}
                           </p>
                         </div>
-                        {/* 已排人员仍可选择，继续占位时保留其其他座位。 */}
+                        {/* 严格模式下再次选择会移动该人员；允许多占时会保留其他座位。 */}
                         {isHere ? (
                           <span className="shrink-0 text-xs">当前</span>
                         ) : seatStatus ? (
