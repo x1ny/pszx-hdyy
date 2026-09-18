@@ -229,6 +229,7 @@ function AgendaRow({
           <div className="mt-1.5 flex items-center gap-2.5">
             <PillTag variant="outline">
               <span>{item.zone}</span>
+              {item.section && <span>{item.section}</span>}
               {!item.hideSeatDetails && (
                 <span className="tabular-nums">{item.seat}</span>
               )}
@@ -282,6 +283,9 @@ function AgendaRow({
           <div className="mt-1.5 flex items-center gap-2.5">
             <PillTag variant="outline">
               <span>{item.organizationSeat.zone}</span>
+              {item.organizationSeat.section && (
+                <span>{item.organizationSeat.section}</span>
+              )}
               {!item.hideSeatDetails && (
                 <span className="tabular-nums">
                   {item.organizationSeat.seat}

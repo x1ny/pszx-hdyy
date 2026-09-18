@@ -47,6 +47,27 @@ const toParagraphs = (text: string | null) =>
     .filter((line) => line.length > 0);
 
 /**
+ * 把已分配座位所属的排位分区（如 B2）按方案顺序整理成展示文字。
+ *
+ * `activityVenueZone.name` 是外层场地区域（如「T台座位」），而运营在排位页看到的
+ * B2 来自方案的 `sections` 快照。两层含义不同，隐藏具体座位号时仍需保留后者，
+ * 让嘉宾知道应前往哪个分区。
+ */
+export const formatAssignedSeatSections = (
+  sections: { externalId: string; name: string }[],
+  seatZoneExternalIds: (string | null)[],
+) => {
+  const assignedSectionIds = new Set(
+    seatZoneExternalIds.filter((id): id is string => Boolean(id)),
+  );
+  const names = sections.flatMap((section) => {
+    const name = section.name.trim();
+    return assignedSectionIds.has(section.externalId) && name ? [name] : [];
+  });
+  return names.length > 0 ? names.join("、") : null;
+};
+
+/**
  * 这个人的议程 —— 口径由 `activity_segment.member_enabled` 本身决定：
  *
  *   member_enabled = false → 这个环节不做人员管理 = **全员参加**，一律显示
@@ -109,6 +130,12 @@ export const itinerarySeatsQuery = (activityId: number, memberId: number) =>
       seat: sql<string>`string_agg(${segmentSeat.label}, '、' order by ${segmentSeat.ordinal}, ${segmentSeat.id})`.as(
         "seat",
       ),
+      sectionZoneExternalIds: sql<
+        (string | null)[]
+      >`array_agg(distinct ${segmentSeat.zoneExternalId})`.as(
+        "section_zone_external_ids",
+      ),
+      sections: segmentSeatingPlan.sections,
       zone: activityVenueZone.name,
       venueName: activityVenue.name,
       /**
@@ -167,6 +194,7 @@ export const itinerarySeatsQuery = (activityId: number, memberId: number) =>
       segmentMember.segmentId,
       activityVenueZone.name,
       activityVenue.name,
+      segmentSeatingPlan.sections,
       segmentSeatingLayout.rendererKind,
     );
 
@@ -189,10 +217,17 @@ export const itineraryOrganizationSeatsQuery = (
   db
     .select({
       segmentId: segmentMember.segmentId,
-      seats: sql<{ label: string; externalId: string }[]>`json_agg(
-        json_build_object('label', ${segmentSeat.label}, 'externalId', ${segmentSeat.externalId})
+      seats: sql<
+        { label: string; externalId: string; zoneExternalId: string | null }[]
+      >`json_agg(
+        json_build_object(
+          'label', ${segmentSeat.label},
+          'externalId', ${segmentSeat.externalId},
+          'zoneExternalId', ${segmentSeat.zoneExternalId}
+        )
         order by ${segmentSeat.ordinal}, ${segmentSeat.id}
       )`.as("seats"),
+      sections: segmentSeatingPlan.sections,
       zone: activityVenueZone.name,
       venueName: activityVenue.name,
       rendererKind: segmentSeatingLayout.rendererKind,
@@ -239,6 +274,7 @@ export const itineraryOrganizationSeatsQuery = (
       segmentMember.segmentId,
       activityVenueZone.name,
       activityVenue.name,
+      segmentSeatingPlan.sections,
       segmentSeatingLayout.rendererKind,
       segmentSeatingLayout.data,
     );
@@ -647,6 +683,10 @@ export const h5Routes = new Hono<{ Variables: H5Variables }>()
           const organizationSeat = organizationAssigned
             ? {
                 zone: organizationAssigned.zone,
+                section: formatAssignedSeatSections(
+                  organizationAssigned.sections,
+                  organizationAssigned.seats.map((seat) => seat.zoneExternalId),
+                ),
                 venueName: organizationAssigned.venueName,
                 seat: formatOrganizationSeatRanges(
                   organizationAssigned.data,
@@ -660,6 +700,12 @@ export const h5Routes = new Hono<{ Variables: H5Variables }>()
           return {
             ...segment,
             zone: assigned?.zone ?? null,
+            section: assigned
+              ? formatAssignedSeatSections(
+                  assigned.sections,
+                  assigned.sectionZoneExternalIds,
+                )
+              : null,
             venueName: assigned?.venueName ?? null,
             seat: assigned?.seat ?? null,
             /**

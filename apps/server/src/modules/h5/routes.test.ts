@@ -6,6 +6,7 @@ import {
 } from "./auth";
 import {
   buildSeatMap,
+  formatAssignedSeatSections,
   itineraryCarSegmentLinksQuery,
   itineraryCarsQuery,
   itineraryContactQuery,
@@ -134,6 +135,13 @@ describe("itinerarySeatsQuery —— 座位只认已确认且仍开启排位的�
     expect(rendered.sql).toContain('group by "segment_member"."segment_id"');
   });
 
+  test("同时返回座位所属排位分区，供隐藏具体座位号时展示", () => {
+    expect(rendered.sql).toContain(
+      'array_agg(distinct "segment_seat"."zone_external_id")',
+    );
+    expect(rendered.sql).toContain('"segment_seating_plan"."sections"');
+  });
+
   test("返回座位方案关联的场馆快照名称，并按场馆分组", () => {
     expect(rendered.sql).toContain('inner join "activity_venue"');
     expect(rendered.sql).toContain('"activity_venue"."name"');
@@ -188,6 +196,28 @@ describe("itinerarySeatsQuery —— 座位只认已确认且仍开启排位的�
     // 退化成 inner join 的话，没画图的方案会连座位号一起消失 —— 嘉宾丢的不是
     // 一张示意图，是他照着坐的那个编号。
     expect(rendered.sql).toContain('left join "segment_seating_layout"');
+  });
+});
+
+describe("formatAssignedSeatSections —— 排位分区展示", () => {
+  const sections = [
+    { externalId: "section-b1", name: "B1" },
+    { externalId: "section-b2", name: "B2" },
+    { externalId: "section-b3", name: "B3" },
+  ];
+
+  test("按方案顺序显示已分配座位所属分区，并忽略重复座位", () => {
+    expect(
+      formatAssignedSeatSections(sections, [
+        "section-b3",
+        "section-b2",
+        "section-b2",
+      ]),
+    ).toBe("B2、B3");
+  });
+
+  test("普通区域没有分区快照时不额外显示名称", () => {
+    expect(formatAssignedSeatSections([], ["venue-zone"])).toBeNull();
   });
 });
 
