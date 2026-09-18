@@ -43,6 +43,7 @@ const config: SegmentConfig = {
     memberEnabled: true,
     seatingEnabled: true,
     hideSeatDetails: false,
+    hideEndTimeInH5: false,
     createdAt: "2026-04-01T00:00:00.000Z",
     updatedAt: "2026-04-01T00:00:00.000Z",
   },
@@ -589,5 +590,27 @@ describe("新建环节", () => {
 
     expect(result.newLineName).toBe("分论坛 A");
     expect(result.base.agendaLineId).toBe(null);
+  });
+
+  it("把 H5 隐藏结束时间配置写入环节基础信息", () => {
+    const draft = createEmptyDraft();
+    const result = buildSavePayload({
+      draft: {
+        ...draft,
+        base: {
+          ...draft.base,
+          name: "闭门交流",
+          startTime: "2026-04-17T09:00",
+          endTime: "2026-04-17T10:00",
+          hideEndTimeInH5: true,
+        },
+      },
+      activityId: 1,
+      segmentId: null,
+      mainLineId: 5,
+      cascadeSeats: false,
+    });
+
+    expect(result.base.hideEndTimeInH5).toBe(true);
   });
 });

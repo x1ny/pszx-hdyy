@@ -48,6 +48,7 @@ const segment = (
     updatedAt: new Date().toISOString(),
     ...overrides,
     locationPoint: overrides.locationPoint ?? null,
+    hideEndTimeInH5: overrides.hideEndTimeInH5 ?? false,
   };
 };
 

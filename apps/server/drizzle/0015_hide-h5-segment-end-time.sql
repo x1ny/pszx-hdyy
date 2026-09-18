@@ -1,0 +1,1 @@
+ALTER TABLE "activity_segment" ADD COLUMN "hide_end_time_in_h5" boolean DEFAULT false NOT NULL;

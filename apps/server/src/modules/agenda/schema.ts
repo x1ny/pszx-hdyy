@@ -185,6 +185,7 @@ export const activitySegment = pgTable(
     memberEnabled: boolean("member_enabled").notNull().default(false),
     seatingEnabled: boolean("seating_enabled").notNull().default(false),
     hideSeatDetails: boolean("hide_seat_details").notNull().default(false),
+    hideEndTimeInH5: boolean("hide_end_time_in_h5").notNull().default(false),
 
     createdBy: text("created_by").references(() => user.id, {
       onDelete: "set null",
@@ -251,6 +252,7 @@ export type SegmentSnapshot = {
   memberEnabled: boolean;
   seatingEnabled: boolean;
   hideSeatDetails: boolean;
+  hideEndTimeInH5: boolean;
 };
 
 /**

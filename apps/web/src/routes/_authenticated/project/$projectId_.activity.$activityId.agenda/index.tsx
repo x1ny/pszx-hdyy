@@ -186,6 +186,7 @@ function AgendaTab() {
         memberEnabled: values.memberEnabled,
         seatingEnabled: values.seatingEnabled,
         hideSeatDetails: values.hideSeatDetails,
+        hideEndTimeInH5: values.hideEndTimeInH5,
       };
 
       return editing

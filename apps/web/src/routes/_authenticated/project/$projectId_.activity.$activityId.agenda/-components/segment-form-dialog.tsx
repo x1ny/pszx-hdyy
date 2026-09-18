@@ -60,6 +60,7 @@ const SegmentFormSchema = z
     memberEnabled: z.boolean(),
     seatingEnabled: z.boolean(),
     hideSeatDetails: z.boolean(),
+    hideEndTimeInH5: z.boolean(),
   })
   // `<=` 而不是 `<`：允许零时长的瞬时环节（签到、剪彩），和服务端一致。
   .refine(
@@ -95,6 +96,7 @@ export type SegmentFormSubmitValues = {
   memberEnabled: boolean;
   seatingEnabled: boolean;
   hideSeatDetails: boolean;
+  hideEndTimeInH5: boolean;
 };
 
 function RequiredMark() {
@@ -190,6 +192,7 @@ function SegmentForm({
     memberEnabled: segment?.memberEnabled ?? false,
     seatingEnabled: segment?.seatingEnabled ?? false,
     hideSeatDetails: segment?.hideSeatDetails ?? false,
+    hideEndTimeInH5: segment?.hideEndTimeInH5 ?? false,
   };
 
   const form = useForm({
@@ -213,6 +216,7 @@ function SegmentForm({
         memberEnabled: value.memberEnabled,
         seatingEnabled: value.seatingEnabled,
         hideSeatDetails: value.hideSeatDetails,
+        hideEndTimeInH5: value.hideEndTimeInH5,
       }),
   });
 
@@ -426,6 +430,27 @@ function SegmentForm({
                     field.state.meta.isTouched ? field.state.meta.errors : []
                   }
                 />
+              </Field>
+            )}
+          </form.Field>
+
+          <form.Field name="hideEndTimeInH5">
+            {(field) => (
+              <Field className="sm:col-start-2">
+                <label
+                  htmlFor={field.name}
+                  className="flex cursor-pointer items-center gap-2 text-sm"
+                >
+                  <Checkbox
+                    id={field.name}
+                    checked={field.state.value}
+                    onCheckedChange={(checked) => field.handleChange(!!checked)}
+                  />
+                  在 H5 个人行程隐藏结束时间
+                </label>
+                <FieldDescription>
+                  仅隐藏嘉宾端展示，排程、冲突判断和进行状态仍使用真实结束时间。
+                </FieldDescription>
               </Field>
             )}
           </form.Field>

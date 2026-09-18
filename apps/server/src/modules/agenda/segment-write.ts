@@ -41,6 +41,7 @@ export const segmentFields = {
   memberEnabled: activitySegment.memberEnabled,
   seatingEnabled: activitySegment.seatingEnabled,
   hideSeatDetails: activitySegment.hideSeatDetails,
+  hideEndTimeInH5: activitySegment.hideEndTimeInH5,
   createdAt: activitySegment.createdAt,
   updatedAt: activitySegment.updatedAt,
 };
@@ -62,6 +63,7 @@ export type SegmentRow = {
   memberEnabled: boolean;
   seatingEnabled: boolean;
   hideSeatDetails: boolean;
+  hideEndTimeInH5: boolean;
 };
 
 export const toSnapshot = (row: SegmentRow): SegmentSnapshot => ({
@@ -79,6 +81,7 @@ export const toSnapshot = (row: SegmentRow): SegmentSnapshot => ({
   memberEnabled: row.memberEnabled,
   seatingEnabled: row.seatingEnabled,
   hideSeatDetails: row.hideSeatDetails,
+  hideEndTimeInH5: row.hideEndTimeInH5,
 });
 
 /**

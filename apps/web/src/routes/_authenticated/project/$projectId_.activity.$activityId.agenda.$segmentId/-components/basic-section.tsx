@@ -5,6 +5,7 @@ import {
 } from "#/features/agenda/labels";
 import type { AgendaLine } from "#/features/agenda/queries";
 import { BaiduLocationPicker } from "#/shared/components/baidu-location-picker";
+import { Checkbox } from "#/shared/components/ui/checkbox.tsx";
 import {
   Field,
   FieldDescription,
@@ -199,6 +200,25 @@ export function BasicSection({
           {errors.endTime ? (
             <p className="text-destructive text-sm">{errors.endTime}</p>
           ) : null}
+        </Field>
+
+        <Field className="sm:col-start-2">
+          <label
+            htmlFor="segment-hide-end-time-in-h5"
+            className="flex cursor-pointer items-center gap-2 text-sm"
+          >
+            <Checkbox
+              id="segment-hide-end-time-in-h5"
+              checked={base.hideEndTimeInH5}
+              onCheckedChange={(checked) =>
+                onChange("hideEndTimeInH5", !!checked)
+              }
+            />
+            在 H5 个人行程隐藏结束时间
+          </label>
+          <FieldDescription>
+            仅隐藏嘉宾端展示，排程、冲突判断和进行状态仍使用真实结束时间。
+          </FieldDescription>
         </Field>
 
         {/* 超出活动时间范围只提示不阻断——C-016：本期业务冲突允许保存但提示 */}

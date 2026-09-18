@@ -199,7 +199,7 @@ function AgendaRow({
     <Row index={index} isLast={isLast}>
       <TimeRail
         top={startTime}
-        bottom={endTime}
+        bottom={item.hideEndTimeInH5 ? undefined : endTime}
         isLast={isLast}
         finished={status === "finished"}
       />

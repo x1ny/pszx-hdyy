@@ -88,6 +88,7 @@ export const itinerarySegmentsQuery = (activityId: number, memberId: number) =>
       locationPoint: activitySegment.locationPoint,
       description: activitySegment.description,
       hideSeatDetails: activitySegment.hideSeatDetails,
+      hideEndTimeInH5: activitySegment.hideEndTimeInH5,
     })
     .from(activitySegment)
     .where(
