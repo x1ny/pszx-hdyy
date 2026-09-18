@@ -15,7 +15,12 @@ import { jsonBody } from "../../shared/validate";
 import { activitySegment } from "../agenda/schema";
 import { activityMember, segmentMember } from "../member/schema";
 import { activity, activityMedia } from "../project/schema";
-import { activityResource, resourceMemberBinding } from "../resource/schema";
+import {
+  activityResource,
+  resourceDemandLink,
+  resourceMemberBinding,
+  segmentResourceDemand,
+} from "../resource/schema";
 import {
   seatAssignment,
   segmentSeat,
@@ -441,6 +446,64 @@ export const itineraryCarsQuery = (activityMemberId: number) =>
     .orderBy(asc(activityResource.startTime), asc(activityResource.id));
 
 /**
+ * 本人的用车关联到了哪些议程环节。
+ *
+ * 资源仍然是活动级主档，不能把 segmentId 塞回 activity_resource；这里沿已有的
+ * 需求关联链读取。查询同样从本人绑定收口，避免把活动里其他车辆的环节关系发到
+ * 公众端。前端只会消费本人可见议程中的 id，关联到不可见环节时不会泄露名称或
+ * 时间，而是让车辆退回独立行程展示。
+ */
+export const itineraryCarSegmentLinksQuery = (
+  activityMemberId: number,
+  memberId: number,
+) =>
+  db
+    .select({
+      resourceId: activityResource.id,
+      segmentId: segmentResourceDemand.segmentId,
+    })
+    .from(activityResource)
+    .innerJoin(
+      resourceMemberBinding,
+      eq(resourceMemberBinding.resourceId, activityResource.id),
+    )
+    .innerJoin(
+      resourceDemandLink,
+      eq(resourceDemandLink.resourceId, activityResource.id),
+    )
+    .innerJoin(
+      segmentResourceDemand,
+      eq(segmentResourceDemand.id, resourceDemandLink.demandId),
+    )
+    .innerJoin(
+      activitySegment,
+      eq(activitySegment.id, segmentResourceDemand.segmentId),
+    )
+    .where(
+      and(
+        eq(resourceMemberBinding.activityMemberId, activityMemberId),
+        eq(activityResource.resourceType, "transport"),
+        eq(activityResource.status, "active"),
+        eq(activitySegment.status, "active"),
+        or(
+          eq(activitySegment.memberEnabled, false),
+          exists(
+            db
+              .select({ one: sql`1` })
+              .from(segmentMember)
+              .where(
+                and(
+                  eq(segmentMember.segmentId, activitySegment.id),
+                  eq(segmentMember.memberId, memberId),
+                ),
+              ),
+          ),
+        ),
+      ),
+    )
+    .orderBy(asc(activityResource.id), asc(segmentResourceDemand.segmentId));
+
+/**
  * 现场联系人：这个嘉宾在**这场活动**里的对接人，从 `activity_member.owner_name`
  * / `owner_phone` 直接取。
  *
@@ -515,13 +578,14 @@ export const h5Routes = new Hono<{ Variables: H5Variables }>()
       return c.json(err({ code: "NOT_FOUND", message: "活动不存在" }));
     }
 
-    // 七个查询互不依赖，并发发出去省掉六个往返。
+    // 八个查询互不依赖，并发发出去省掉七个往返。
     const [
       segments,
       seatRows,
       organizationSeatRows,
       trips,
       cars,
+      carSegmentLinks,
       heroRows,
       contactRows,
     ] = await Promise.all([
@@ -530,6 +594,7 @@ export const h5Routes = new Hono<{ Variables: H5Variables }>()
       itineraryOrganizationSeatsQuery(activityId, me.memberId),
       itineraryTripsQuery(me.activityMemberId),
       itineraryCarsQuery(me.activityMemberId),
+      itineraryCarSegmentLinksQuery(me.activityMemberId, me.memberId),
       itineraryHeroQuery(activityId),
       itineraryContactQuery(me.activityMemberId),
     ]);
@@ -538,6 +603,12 @@ export const h5Routes = new Hono<{ Variables: H5Variables }>()
     const organizationSeatBySegment = new Map(
       organizationSeatRows.map((row) => [row.segmentId, row]),
     );
+    const segmentIdsByCar = new Map<number, number[]>();
+    for (const link of carSegmentLinks) {
+      const segmentIds = segmentIdsByCar.get(link.resourceId) ?? [];
+      segmentIds.push(link.segmentId);
+      segmentIdsByCar.set(link.resourceId, segmentIds);
+    }
 
     // ownerPhone 为空/空白时整块不给：前端拿到 null 就不渲染联系人卡，而不是
     // 渲染一张没有电话可拨的卡片。
@@ -603,7 +674,10 @@ export const h5Routes = new Hono<{ Variables: H5Variables }>()
           };
         }),
         trips,
-        cars,
+        cars: cars.map((car) => ({
+          ...car,
+          segmentIds: segmentIdsByCar.get(car.id) ?? [],
+        })),
       }),
     );
   })

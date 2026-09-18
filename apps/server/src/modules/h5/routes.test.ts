@@ -6,6 +6,7 @@ import {
 } from "./auth";
 import {
   buildSeatMap,
+  itineraryCarSegmentLinksQuery,
   itineraryCarsQuery,
   itineraryContactQuery,
   itineraryHeroQuery,
@@ -466,6 +467,26 @@ describe("交通两个来源各自的范围", () => {
 
   test("用车走 inner join，没绑人的资源不会漏给所有人", () => {
     expect(itineraryCarsQuery(9).toSQL().sql).not.toContain("left join");
+  });
+
+  test("用车环节关联沿需求关联链读取，并且仍然只取绑到本人的有效车辆", () => {
+    const rendered = itineraryCarSegmentLinksQuery(9, 42).toSQL();
+
+    expect(rendered.sql).toContain('inner join "resource_demand_link"');
+    expect(rendered.sql).toContain('inner join "segment_resource_demand"');
+    expect(rendered.sql).toContain('inner join "activity_segment"');
+    expect(rendered.sql).toContain(
+      '"resource_member_binding"."activity_member_id" =',
+    );
+    expect(rendered.sql).toContain('"activity_resource"."resource_type" =');
+    expect(rendered.sql).toContain('"activity_resource"."status" =');
+    expect(rendered.sql).toContain('"activity_segment"."status" =');
+    expect(rendered.sql).toContain('or exists (select 1 from "segment_member"');
+    expect(rendered.sql).toContain('"segment_member"."member_id" =');
+    expect(rendered.params).toContain(9);
+    expect(rendered.params).toContain(42);
+    expect(rendered.params).toContain("transport");
+    expect(rendered.params).toContain("active");
   });
 });
 

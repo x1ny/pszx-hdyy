@@ -42,12 +42,20 @@ export function ScheduleList({
   onOpenSeatMap: (item: AgendaItem) => void;
   onOpenOrganizationSeatMap: (item: AgendaItem) => void;
 }) {
-  // `activity_resource.start_time` 可空。没有时间的用车不进任何日期，统一放到
-  // 页尾的「待定安排」卡片里，避免猜日期或时间顺序。
-  const scheduledCars = useMemo(() => cars.filter(isScheduled), [cars]);
+  const { carsBySegment, standaloneCars } = useMemo(
+    () => associateCarsWithVisibleAgenda(agenda, cars),
+    [agenda, cars],
+  );
+
+  // 关联到当前可见环节的用车随环节展示，不再单独占一条时间轴。剩余车辆仍按
+  // 自己的发车时间归档；没有时间的才放页尾「待定安排」，不猜日期或时间顺序。
+  const scheduledCars = useMemo(
+    () => standaloneCars.filter(isScheduled),
+    [standaloneCars],
+  );
   const undatedCars = useMemo(
-    () => cars.filter((car) => !isScheduled(car)),
-    [cars],
+    () => standaloneCars.filter((car) => !isScheduled(car)),
+    [standaloneCars],
   );
 
   const agendaDays = useMemo(
@@ -94,7 +102,10 @@ export function ScheduleList({
     };
 
     for (const item of agenda) {
-      for (const part of splitTimeRangeByDay(item.startTime, item.endTime)) {
+      for (const [partIndex, part] of splitTimeRangeByDay(
+        item.startTime,
+        item.endTime,
+      ).entries()) {
         push(part.dayKey, {
           kind: "agenda",
           key: `agenda-${item.id}-${part.dayKey}`,
@@ -102,6 +113,8 @@ export function ScheduleList({
           startTime: part.startTime,
           endTime: part.endTime,
           item,
+          // 跨天环节只在首段展示一次用车，避免同一辆车在每个自然日重复出现。
+          cars: partIndex === 0 ? (carsBySegment.get(item.id) ?? []) : [],
         });
       }
     }
@@ -134,7 +147,7 @@ export function ScheduleList({
       list.sort((a, b) => a.time.localeCompare(b.time));
     }
     return map;
-  }, [agenda, trips, scheduledCars, currentDay]);
+  }, [agenda, trips, scheduledCars, currentDay, carsBySegment]);
 
   const pendingEntries = useMemo<DayEntry[]>(
     () =>
@@ -148,7 +161,8 @@ export function ScheduleList({
     [undatedCars],
   );
 
-  const total = agenda.length + trips.length + cars.length;
+  // 挂在环节里的用车是该环节的服务信息，不再作为一条独立日程重复计数。
+  const total = agenda.length + trips.length + standaloneCars.length;
 
   return (
     <section aria-label="我的行程" className="px-4">
@@ -220,6 +234,40 @@ export function ScheduleList({
       )}
     </section>
   );
+}
+
+/**
+ * 把用车挂到当前嘉宾实际可见的议程上。
+ *
+ * 不能只看 segmentIds 是否非空：一辆车可能关联到嘉宾不参加的环节。那种情形
+ * 下页面没有可承载它的议程行，必须退回独立展示，也不能通过车辆泄露环节资料。
+ */
+export function associateCarsWithVisibleAgenda(
+  agenda: Pick<AgendaItem, "id">[],
+  cars: Car[],
+) {
+  const visibleSegmentIds = new Set(agenda.map((item) => item.id));
+  const carsBySegment = new Map<number, Car[]>();
+  const standaloneCars: Car[] = [];
+
+  for (const car of cars) {
+    const linkedVisibleSegments = [
+      ...new Set(car.segmentIds.filter((id) => visibleSegmentIds.has(id))),
+    ];
+
+    if (linkedVisibleSegments.length === 0) {
+      standaloneCars.push(car);
+      continue;
+    }
+
+    for (const segmentId of linkedVisibleSegments) {
+      const linkedCars = carsBySegment.get(segmentId) ?? [];
+      linkedCars.push(car);
+      carsBySegment.set(segmentId, linkedCars);
+    }
+  }
+
+  return { carsBySegment, standaloneCars };
 }
 
 /**
