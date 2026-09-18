@@ -955,7 +955,7 @@ function ActivityMembersPage() {
                 <TableHead className="min-w-44">人员</TableHead>
                 <TableHead className="min-w-36">所属团体</TableHead>
                 <TableHead className="min-w-24">负责人</TableHead>
-                <TableHead className="min-w-28">录入渠道</TableHead>
+                <TableHead className="min-w-32">手机号码</TableHead>
                 <TableHead className="min-w-52">参与环节</TableHead>
                 <TableHead className="min-w-32">备注</TableHead>
                 <TableHead className="min-w-48 text-center">操作</TableHead>
@@ -1049,9 +1049,7 @@ function ActivityMembersPage() {
                           <TableCell>
                             <div className="font-medium">{row.name}</div>
                             <div className="text-muted-foreground text-xs">
-                              {[row.companyPosition, row.mobile]
-                                .filter(Boolean)
-                                .join(" · ") || "-"}
+                              {row.companyPosition || "-"}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -1059,9 +1057,7 @@ function ActivityMembersPage() {
                           </TableCell>
                           <TableCell>{row.ownerName || "-"}</TableCell>
                           <TableCell>
-                            <Badge variant="secondary" className="font-normal">
-                              {RELATION_ORIGIN_LABELS[row.originType]}
-                            </Badge>
+                            {row.mobile || "-"}
                           </TableCell>
                           <TableCell>
                             {row.segments.length > 0 ? (
