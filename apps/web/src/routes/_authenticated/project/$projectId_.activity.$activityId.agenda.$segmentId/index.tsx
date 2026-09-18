@@ -390,12 +390,19 @@ function SegmentConfigPage() {
 
       <SeatingSection
         enabled={draft.base.seatingEnabled}
+        hideSeatDetails={draft.base.hideSeatDetails}
         segmentId={segmentId}
         activityId={params.activityId}
         onToggle={(checked) =>
           update({
             ...draft,
             base: { ...draft.base, seatingEnabled: checked },
+          })
+        }
+        onHideSeatDetailsChange={(checked) =>
+          update({
+            ...draft,
+            base: { ...draft.base, hideSeatDetails: checked },
           })
         }
         onNavigate={({ planId }) =>

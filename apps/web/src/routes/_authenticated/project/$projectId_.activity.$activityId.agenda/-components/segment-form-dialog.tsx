@@ -59,6 +59,7 @@ const SegmentFormSchema = z
     description: z.string().trim().max(2000, "说明不超过 2000 字"),
     memberEnabled: z.boolean(),
     seatingEnabled: z.boolean(),
+    hideSeatDetails: z.boolean(),
   })
   // `<=` 而不是 `<`：允许零时长的瞬时环节（签到、剪彩），和服务端一致。
   .refine(
@@ -93,6 +94,7 @@ export type SegmentFormSubmitValues = {
   description?: string;
   memberEnabled: boolean;
   seatingEnabled: boolean;
+  hideSeatDetails: boolean;
 };
 
 function RequiredMark() {
@@ -187,6 +189,7 @@ function SegmentForm({
     description: segment?.description ?? "",
     memberEnabled: segment?.memberEnabled ?? false,
     seatingEnabled: segment?.seatingEnabled ?? false,
+    hideSeatDetails: segment?.hideSeatDetails ?? false,
   };
 
   const form = useForm({
@@ -209,6 +212,7 @@ function SegmentForm({
         description: value.description || undefined,
         memberEnabled: value.memberEnabled,
         seatingEnabled: value.seatingEnabled,
+        hideSeatDetails: value.hideSeatDetails,
       }),
   });
 

@@ -80,6 +80,7 @@ const SegmentFields = z
 
     memberEnabled: z.boolean().default(false),
     seatingEnabled: z.boolean().default(false),
+    hideSeatDetails: z.boolean().default(false),
   })
   // `<=` 而不是 `<`：允许零时长的瞬时环节（签到、剪彩），和表上的 CHECK 一致。
   .refine((value) => value.startTime <= value.endTime, {

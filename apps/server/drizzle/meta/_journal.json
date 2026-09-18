@@ -99,6 +99,13 @@
       "when": 1789636746059,
       "tag": "0013_hot_newton_destine",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1789726594918,
+      "tag": "0014_hide-seat-details",
+      "breakpoints": true
     }
   ]
 }

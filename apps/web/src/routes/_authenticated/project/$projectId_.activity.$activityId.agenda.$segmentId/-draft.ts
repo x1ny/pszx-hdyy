@@ -53,6 +53,7 @@ export type BaseDraft = {
   description: string;
   memberEnabled: boolean;
   seatingEnabled: boolean;
+  hideSeatDetails: boolean;
 };
 
 /** 环节身份。"" 是选择器里的「请选择」，服务端会收敛成 null。 */
@@ -225,6 +226,7 @@ export function createEmptyDraft(defaults?: Partial<BaseDraft>): ConfigDraft {
       description: "",
       memberEnabled: false,
       seatingEnabled: false,
+      hideSeatDetails: false,
       ...defaults,
     },
     members: [],
@@ -292,6 +294,7 @@ export function draftFromConfig(
       description: config.segment.description ?? "",
       memberEnabled: config.segment.memberEnabled,
       seatingEnabled: config.segment.seatingEnabled,
+      hideSeatDetails: config.segment.hideSeatDetails,
     },
     members: config.members.map(toMemberDraft),
     memberAddsByOrganization: [],
@@ -906,6 +909,7 @@ export function buildSavePayload(input: {
       description: text(base.description) ?? undefined,
       memberEnabled: base.memberEnabled,
       seatingEnabled: base.seatingEnabled,
+      hideSeatDetails: base.hideSeatDetails,
     },
     newLineName: base.lineKey === "new" ? base.newLineName.trim() : undefined,
     members: {

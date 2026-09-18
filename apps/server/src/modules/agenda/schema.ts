@@ -179,11 +179,12 @@ export const activitySegment = pgTable(
 
     status: text("status").$type<SegmentStatus>().notNull().default("active"),
 
-    // 两个开关都是环节自身字段：memberEnabled 决定人员范围，seatingEnabled 决定
+    // 这些开关都是环节自身字段：memberEnabled 决定人员范围，seatingEnabled 决定
     // 是否开启排位。BR-DEV-031A：开启排位仅生成"排位未配置"状态和入口，不要求先
     // 完成场地/排位配置；关闭排位后，H5 行程也不再展示历史已确认的座位信息。
     memberEnabled: boolean("member_enabled").notNull().default(false),
     seatingEnabled: boolean("seating_enabled").notNull().default(false),
+    hideSeatDetails: boolean("hide_seat_details").notNull().default(false),
 
     createdBy: text("created_by").references(() => user.id, {
       onDelete: "set null",
@@ -249,6 +250,7 @@ export type SegmentSnapshot = {
   status: SegmentStatus;
   memberEnabled: boolean;
   seatingEnabled: boolean;
+  hideSeatDetails: boolean;
 };
 
 /**

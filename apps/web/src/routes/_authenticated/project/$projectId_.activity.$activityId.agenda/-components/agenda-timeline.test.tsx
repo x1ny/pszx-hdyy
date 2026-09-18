@@ -27,6 +27,7 @@ const testSegment: Segment = {
   status: "active",
   memberEnabled: false,
   seatingEnabled: false,
+  hideSeatDetails: false,
   createdAt: "2026-09-01T00:00:00.000Z",
   updatedAt: "2026-09-01T00:00:00.000Z",
 };

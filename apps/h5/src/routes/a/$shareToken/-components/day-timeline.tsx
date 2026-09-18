@@ -221,11 +221,13 @@ function AgendaRow({
 
         {/* 只有已确认的个人排位才会给出 zone/seat（服务端已按当前人员过滤），
             所以这里展示的始终是这位嘉宾自己的真实座位。 */}
-        {item.zone && item.seat && (
+        {item.zone && (item.seat || item.hideSeatDetails) && (
           <div className="mt-1.5 flex items-center gap-2.5">
             <PillTag variant="outline">
               <span>{item.zone}</span>
-              <span className="tabular-nums">{item.seat}</span>
+              {!item.hideSeatDetails && (
+                <span className="tabular-nums">{item.seat}</span>
+              )}
             </PillTag>
 
             {/*
@@ -236,7 +238,7 @@ function AgendaRow({
               这里不是「座位胶囊整颗可点」：那颗胶囊在没有图的时候也存在，做成
               可点的话就有一半的场次点了没反应。
             */}
-            {item.hasSeatMap && (
+            {!item.hideSeatDetails && item.hasSeatMap && (
               <button
                 type="button"
                 onClick={() => onOpenSeatMap(item)}
@@ -259,7 +261,7 @@ function AgendaRow({
         )}
 
         {/* 有个人排座时，团体范围是文字补充，和参考稿一样不做成第二个座位图入口。 */}
-        {item.seat && item.organizationSeat && (
+        {!item.hideSeatDetails && item.seat && item.organizationSeat && (
           <div className="mt-1.5 flex items-start gap-1 text-caption text-ink-3">
             <Icon
               name="users-round"
@@ -276,9 +278,13 @@ function AgendaRow({
           <div className="mt-1.5 flex items-center gap-2.5">
             <PillTag variant="outline">
               <span>{item.organizationSeat.zone}</span>
-              <span className="tabular-nums">{item.organizationSeat.seat}</span>
+              {!item.hideSeatDetails && (
+                <span className="tabular-nums">
+                  {item.organizationSeat.seat}
+                </span>
+              )}
             </PillTag>
-            {item.organizationSeat.hasSeatMap && (
+            {!item.hideSeatDetails && item.organizationSeat.hasSeatMap && (
               <button
                 type="button"
                 onClick={() => onOpenOrganizationSeatMap(item)}

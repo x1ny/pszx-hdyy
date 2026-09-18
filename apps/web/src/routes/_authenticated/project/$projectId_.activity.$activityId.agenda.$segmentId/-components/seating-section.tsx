@@ -6,6 +6,7 @@ import { buildPlanSeatStatus } from "#/features/venue-editor/canvas/seat-occupan
 import { buildSeatingPlanSvg } from "#/features/venue-editor/canvas/seating-plan-jpeg";
 import { Badge } from "#/shared/components/ui/badge.tsx";
 import { Button } from "#/shared/components/ui/button.tsx";
+import { Checkbox } from "#/shared/components/ui/checkbox.tsx";
 import {
   Empty,
   EmptyDescription,
@@ -34,16 +35,20 @@ import { SectionCard } from "./section-card";
  */
 export function SeatingSection({
   enabled,
+  hideSeatDetails,
   segmentId,
   activityId,
   onToggle,
+  onHideSeatDetailsChange,
   onNavigate,
 }: {
   enabled: boolean;
+  hideSeatDetails: boolean;
   /** 新建环节时还没有 id，这一块只能显示占位。 */
   segmentId: number | null;
   activityId: string;
   onToggle: (checked: boolean) => void;
+  onHideSeatDetailsChange: (checked: boolean) => void;
   onNavigate: (to: { planId: number | null }) => void;
 }) {
   const plansQuery = useQuery({
@@ -102,17 +107,34 @@ export function SeatingSection({
         ) : undefined
       }
       actions={
-        segmentId === null ? null : (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => onNavigate({ planId })}
-          >
-            <ExternalLinkIcon />
-            {planId === null ? "去配置排位" : "去修改"}
-          </Button>
-        )
+        <div className="flex flex-wrap items-center gap-3">
+          {segmentId === null ? null : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onNavigate({ planId })}
+            >
+              <ExternalLinkIcon />
+              {planId === null ? "去配置排位" : "去修改"}
+            </Button>
+          )}
+          {enabled ? (
+            <label
+              htmlFor="section-seating-hide-seat-details"
+              className="flex cursor-pointer items-center gap-2 text-sm"
+            >
+              <Checkbox
+                id="section-seating-hide-seat-details"
+                checked={hideSeatDetails}
+                onCheckedChange={(checked) =>
+                  onHideSeatDetailsChange(!!checked)
+                }
+              />
+              隐藏具体座位号
+            </label>
+          ) : null}
+        </div>
       }
     >
       {segmentId === null ? (

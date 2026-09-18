@@ -42,6 +42,7 @@ const config: SegmentConfig = {
     status: "active",
     memberEnabled: true,
     seatingEnabled: true,
+    hideSeatDetails: false,
     createdAt: "2026-04-01T00:00:00.000Z",
     updatedAt: "2026-04-01T00:00:00.000Z",
   },

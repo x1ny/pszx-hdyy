@@ -116,6 +116,10 @@ describe("itinerarySegmentsQuery —— 议程按 member_enabled 分流", () => 
   test("返回环节的后台定位点，供 H5 显示导航入口", () => {
     expect(rendered.sql).toContain('"location_point"');
   });
+
+  test("返回 H5 隐藏具体座位号的开关", () => {
+    expect(rendered.sql).toContain('"hide_seat_details"');
+  });
 });
 
 describe("itinerarySeatsQuery —— 座位只认已确认且仍开启排位的方案", () => {

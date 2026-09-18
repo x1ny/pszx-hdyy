@@ -40,6 +40,7 @@ export const segmentFields = {
   status: activitySegment.status,
   memberEnabled: activitySegment.memberEnabled,
   seatingEnabled: activitySegment.seatingEnabled,
+  hideSeatDetails: activitySegment.hideSeatDetails,
   createdAt: activitySegment.createdAt,
   updatedAt: activitySegment.updatedAt,
 };
@@ -60,6 +61,7 @@ export type SegmentRow = {
   status: SegmentSnapshot["status"];
   memberEnabled: boolean;
   seatingEnabled: boolean;
+  hideSeatDetails: boolean;
 };
 
 export const toSnapshot = (row: SegmentRow): SegmentSnapshot => ({
@@ -76,6 +78,7 @@ export const toSnapshot = (row: SegmentRow): SegmentSnapshot => ({
   status: row.status,
   memberEnabled: row.memberEnabled,
   seatingEnabled: row.seatingEnabled,
+  hideSeatDetails: row.hideSeatDetails,
 });
 
 /**

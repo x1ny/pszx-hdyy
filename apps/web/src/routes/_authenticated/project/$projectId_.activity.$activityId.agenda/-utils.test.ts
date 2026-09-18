@@ -43,6 +43,7 @@ const segment = (
     status: "active",
     memberEnabled: false,
     seatingEnabled: false,
+    hideSeatDetails: false,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     ...overrides,

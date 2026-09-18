@@ -1,0 +1,1 @@
+ALTER TABLE "activity_segment" ADD COLUMN "hide_seat_details" boolean DEFAULT false NOT NULL;
