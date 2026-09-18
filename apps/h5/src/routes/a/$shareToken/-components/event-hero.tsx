@@ -48,7 +48,7 @@ export function EventHero({
           aria-hidden
           className="absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-black/15 to-transparent"
         />
-        {/* 头图顶部是浅色的，所以身份条用磨砂浅底 + 深字，不用深底白字。
+        {/* 头图可能明暗不一，所以身份条用磨砂浅底 + 深字，确保在不同头图上可读。
             这里显示的姓名同时是重号时的唯一补救：共用一个手机号的两个人里
             只有第一位能看到自己的行程，另一位至少能一眼看出名字不是自己。 */}
         <div className="absolute top-3 right-4 flex items-center gap-1.5 rounded-full border border-white/60 bg-white/55 py-1 pr-3 pl-2.5 backdrop-blur-md">
