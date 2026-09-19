@@ -204,14 +204,16 @@ describe("formatAssignedSeatSections —— 排位分区展示", () => {
     { externalId: "section-b1", name: "B1" },
     { externalId: "section-b2", name: "B2" },
     { externalId: "section-b3", name: "B3" },
+    { externalId: "section-b2-copy", name: "B2" },
   ];
 
-  test("按方案顺序显示已分配座位所属分区，并忽略重复座位", () => {
+  test("按方案顺序显示已分配座位所属分区，并忽略重复座位和重复分区", () => {
     expect(
       formatAssignedSeatSections(sections, [
         "section-b3",
         "section-b2",
         "section-b2",
+        "section-b2-copy",
       ]),
     ).toBe("B2、B3");
   });

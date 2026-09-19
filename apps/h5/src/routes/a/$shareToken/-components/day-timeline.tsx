@@ -34,22 +34,18 @@ const TRIP_ICON: Record<Trip["transportMode"], IconName> = {
   other: "navigation",
 };
 
-/**
- * 分区名有时会和座位号相同（例如分区 B1 里的具体座位也叫 B1）。
- * 显示具体座位时只保留一份；隐藏具体座位时必须保留分区名。
- */
-export function visibleSeatSection(
-  section: string | null,
-  seat: string | null,
-  hideSeatDetails: boolean,
-) {
-  if (!section || hideSeatDetails || !seat) return section;
+/** 分区名称只显示一份；具体座位号即使同名也不参与这里的去重。 */
+export function uniqueSeatSection(section: string | null) {
+  if (!section) return section;
 
-  const seatLabels = new Set(seat.split("、").map((label) => label.trim()));
-  const names = section
-    .split("、")
-    .map((name) => name.trim())
-    .filter((name) => name && !seatLabels.has(name));
+  const names = [
+    ...new Set(
+      section
+        .split("、")
+        .map((name) => name.trim())
+        .filter(Boolean),
+    ),
+  ];
   return names.length > 0 ? names.join("、") : null;
 }
 
@@ -214,17 +210,9 @@ function AgendaRow({
   onOpenSeatMap: (item: AgendaItem) => void;
   onOpenOrganizationSeatMap: (item: AgendaItem) => void;
 }) {
-  const sectionLabel = visibleSeatSection(
-    item.section,
-    item.seat,
-    item.hideSeatDetails,
-  );
+  const sectionLabel = uniqueSeatSection(item.section);
   const organizationSectionLabel = item.organizationSeat
-    ? visibleSeatSection(
-        item.organizationSeat.section,
-        item.organizationSeat.seat,
-        item.hideSeatDetails,
-      )
+    ? uniqueSeatSection(item.organizationSeat.section)
     : null;
 
   return (

@@ -60,10 +60,19 @@ export const formatAssignedSeatSections = (
   const assignedSectionIds = new Set(
     seatZoneExternalIds.filter((id): id is string => Boolean(id)),
   );
-  const names = sections.flatMap((section) => {
+  const names = [];
+  const seenNames = new Set<string>();
+  for (const section of sections) {
     const name = section.name.trim();
-    return assignedSectionIds.has(section.externalId) && name ? [name] : [];
-  });
+    if (
+      assignedSectionIds.has(section.externalId) &&
+      name &&
+      !seenNames.has(name)
+    ) {
+      seenNames.add(name);
+      names.push(name);
+    }
+  }
   return names.length > 0 ? names.join("、") : null;
 };
 
