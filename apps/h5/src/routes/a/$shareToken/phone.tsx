@@ -87,8 +87,6 @@ function PhonePage() {
           请输入手机号码登陆
         </h1>
         <p className="mt-1.5 text-body text-ink-3">
-          输入主办方发送给你的查看密钥
-          <br />
           即可查看你的专属行程
         </p>
 
@@ -120,8 +118,8 @@ function PhonePage() {
                 setMobile(event.target.value.replace(/\D/g, ""));
                 setFailure("");
               }}
-              placeholder="请输入专属密钥"
-              aria-label="专属密钥"
+              placeholder="请输入手机号码"
+              aria-label="手机号码"
               aria-invalid={Boolean(failure)}
               autoComplete="off"
               className={cn(
