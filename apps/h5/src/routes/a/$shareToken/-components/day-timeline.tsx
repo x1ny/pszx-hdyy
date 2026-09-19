@@ -35,6 +35,25 @@ const TRIP_ICON: Record<Trip["transportMode"], IconName> = {
 };
 
 /**
+ * 分区名有时会和座位号相同（例如分区 B1 里的具体座位也叫 B1）。
+ * 显示具体座位时只保留一份；隐藏具体座位时必须保留分区名。
+ */
+export function visibleSeatSection(
+  section: string | null,
+  seat: string | null,
+  hideSeatDetails: boolean,
+) {
+  if (!section || hideSeatDetails || !seat) return section;
+
+  const seatLabels = new Set(seat.split("、").map((label) => label.trim()));
+  const names = section
+    .split("、")
+    .map((name) => name.trim())
+    .filter((name) => name && !seatLabels.has(name));
+  return names.length > 0 ? names.join("、") : null;
+}
+
+/**
  * 一天的行程时间轴：**议程和交通混在同一条轴上，按时间先后排**。
  *
  * 上一版把它们分成「我的议程」和「行程信息」两个页签，代价是嘉宾要在两个列表
@@ -195,6 +214,19 @@ function AgendaRow({
   onOpenSeatMap: (item: AgendaItem) => void;
   onOpenOrganizationSeatMap: (item: AgendaItem) => void;
 }) {
+  const sectionLabel = visibleSeatSection(
+    item.section,
+    item.seat,
+    item.hideSeatDetails,
+  );
+  const organizationSectionLabel = item.organizationSeat
+    ? visibleSeatSection(
+        item.organizationSeat.section,
+        item.organizationSeat.seat,
+        item.hideSeatDetails,
+      )
+    : null;
+
   return (
     <Row index={index} isLast={isLast}>
       <TimeRail
@@ -229,7 +261,7 @@ function AgendaRow({
           <div className="mt-1.5 flex items-center gap-2.5">
             <PillTag variant="outline">
               <span>{item.zone}</span>
-              {item.section && <span>{item.section}</span>}
+              {sectionLabel && <span>{sectionLabel}</span>}
               {!item.hideSeatDetails && (
                 <span className="tabular-nums">{item.seat}</span>
               )}
@@ -283,8 +315,8 @@ function AgendaRow({
           <div className="mt-1.5 flex items-center gap-2.5">
             <PillTag variant="outline">
               <span>{item.organizationSeat.zone}</span>
-              {item.organizationSeat.section && (
-                <span>{item.organizationSeat.section}</span>
+              {organizationSectionLabel && (
+                <span>{organizationSectionLabel}</span>
               )}
               {!item.hideSeatDetails && (
                 <span className="tabular-nums">
