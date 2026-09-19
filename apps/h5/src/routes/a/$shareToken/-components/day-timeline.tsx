@@ -34,9 +34,18 @@ const TRIP_ICON: Record<Trip["transportMode"], IconName> = {
   other: "navigation",
 };
 
-/** 分区名称只显示一份；具体座位号即使同名也不参与这里的去重。 */
-export function uniqueSeatSection(section: string | null) {
-  if (!section) return section;
+/**
+ * 分区名称只显示一份。
+ *
+ * 显示具体座位时，如果座位范围已经包含分区前缀（如分区 B1、座位 B1–B16），
+ * 不再单独重复渲染 B1；隐藏具体座位时仍必须保留 B1 作为定位提示。
+ */
+export function visibleSeatSection(
+  section: string | null,
+  seat: string | null,
+  hideSeatDetails: boolean,
+) {
+  if (!section) return null;
 
   const names = [
     ...new Set(
@@ -46,7 +55,25 @@ export function uniqueSeatSection(section: string | null) {
         .filter(Boolean),
     ),
   ];
-  return names.length > 0 ? names.join("、") : null;
+  if (names.length === 0 || hideSeatDetails || !seat) {
+    return names.length > 0 ? names.join("、") : null;
+  }
+
+  const seatLabels = seat
+    .split("、")
+    .map((label) => label.replace(/\s+/g, "").trim())
+    .filter(Boolean);
+  const remainingNames = names.filter((name) => {
+    const compactName = name.replace(/\s+/g, "");
+    return !seatLabels.some(
+      (label) =>
+        label === compactName ||
+        label.startsWith(`${compactName}-`) ||
+        label.startsWith(`${compactName}–`) ||
+        label.startsWith(`${compactName}·`),
+    );
+  });
+  return remainingNames.length > 0 ? remainingNames.join("、") : null;
 }
 
 /**
@@ -210,9 +237,17 @@ function AgendaRow({
   onOpenSeatMap: (item: AgendaItem) => void;
   onOpenOrganizationSeatMap: (item: AgendaItem) => void;
 }) {
-  const sectionLabel = uniqueSeatSection(item.section);
+  const sectionLabel = visibleSeatSection(
+    item.section,
+    item.seat,
+    item.hideSeatDetails,
+  );
   const organizationSectionLabel = item.organizationSeat
-    ? uniqueSeatSection(item.organizationSeat.section)
+    ? visibleSeatSection(
+        item.organizationSeat.section,
+        item.organizationSeat.seat,
+        item.hideSeatDetails,
+      )
     : null;
 
   return (

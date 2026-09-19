@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AgendaItem } from "../-queries";
-import { type DayEntry, DayTimeline } from "./day-timeline";
+import { type DayEntry, DayTimeline, visibleSeatSection } from "./day-timeline";
 
 const agendaEntry = (hideEndTimeInH5: boolean): DayEntry => ({
   kind: "agenda",
@@ -39,5 +39,20 @@ describe("H5 议程结束时间展示", () => {
 
   test("环节配置隐藏时不展示结束时间", () => {
     expect(renderAgenda(true)).not.toContain(">10:30<");
+  });
+});
+
+describe("H5 排位分区展示", () => {
+  test("具体座位范围已包含分区前缀时不重复显示分区", () => {
+    expect(visibleSeatSection("B1", "B1–B16", false)).toBeNull();
+    expect(visibleSeatSection("B1", "B1、B16", false)).toBeNull();
+  });
+
+  test("隐藏具体座位号时仍显示分区名", () => {
+    expect(visibleSeatSection("B1", "B1–B16", true)).toBe("B1");
+  });
+
+  test("座位范围不含分区前缀时保留分区名", () => {
+    expect(visibleSeatSection("B1", "A1–A16", false)).toBe("B1");
   });
 });
