@@ -84,7 +84,7 @@ function PhonePage() {
           <Icon name="lock-keyhole" size={24} />
         </span>
         <h1 className="mt-4 font-bold text-[1.0625rem] text-ink-1 leading-6">
-          请输入专属密钥
+          请输入手机号码登陆
         </h1>
         <p className="mt-1.5 text-body text-ink-3">
           输入主办方发送给你的查看密钥
